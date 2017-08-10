@@ -1,0 +1,3 @@
+[submodule "external/bitset"]
+	path = external/bitset
+	url = https://github.com/zpooky/bitset.git
