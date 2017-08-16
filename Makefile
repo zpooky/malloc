@@ -4,7 +4,7 @@
 CC = g++
 CC_FLAGS = -enable-frame-pointers -std=c++17
 HEADER_DIRS = -Iexternal
-LIBS =
+LIBS = -lpthread
 
 # File names
 EXEC = main

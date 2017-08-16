@@ -1,4 +1,3 @@
-#include <atomic>
 #include <cassert>
 #include <cstdio>
 #include <iostream>
@@ -7,7 +6,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "bitset/Bitset.h"
 #include <unistd.h> //sbrk
 
 #include "main.h"
@@ -30,9 +28,7 @@ struct State {
   std::size_t brk_alloc;
 
   State() noexcept //
-      : brk_lock{},
-        brk_position{nullptr},
-        brk_alloc{0} {
+      : brk_lock{}, brk_position{nullptr}, brk_alloc{0} {
   }
 };
 
@@ -72,18 +68,19 @@ static void return_free(const std::pair<void *, size_t> &free) noexcept {
 
 } // namespace internal
 
-static void *alloc(size_t sz, size_t align) noexcept {
+static std::tuple<void *, std::size_t> alloc(std::size_t sz,
+                                             std::size_t align) noexcept {
   auto free = internal::find_free(sz, align);
   if (std::get<0>(free) == nullptr) {
     free = internal::new_free(sz, align);
     if (std::get<0>(free) == nullptr) {
-      return nullptr;
+      // return nullptr;
     }
   }
   // TODO
   void *result = 0;
   internal::return_free(free);
-  return result;
+  // return result;
 }
 
 } // namespace global
@@ -93,6 +90,10 @@ namespace {
 void *allign(void *, std::uint32_t alignment) {
   assert(alignment % 2 == 0);
   return nullptr;
+}
+
+std::size_t round_even(std::size_t sz) noexcept {
+  return sz;
 }
 
 // enum class BlockSize : uint8_t {
@@ -112,7 +113,20 @@ void *allign(void *, std::uint32_t alignment) {
  *===========================================================
  */
 namespace local {
-static thread_local Pools pool;
+static thread_local Pools pools;
+
+static Pool &pool_for(Pools &pools, std::size_t sz) noexcept {
+}
+
+static std::tuple<void *, std::size_t> alloc(std::size_t sz) noexcept {
+  return global::alloc(sz, 8);
+}
+
+static void *reserve(void *const) noexcept {
+}
+
+static void *next(void *const) noexcept {
+}
 
 } // namespace local
 
@@ -123,9 +137,41 @@ static thread_local Pools pool;
  */
 
 void *sp_malloc(std::size_t sz) {
-  // std::size_t allocSz = round_even(sz);
-  // Pool& pool = pool_for(local::pool, allocSz);
-  return nullptr;
+  std::size_t allocSz = round_even(sz);
+  local::Pool &pool = pool_for(local::pools, allocSz);
+
+  void *start = pool.start.load();
+  if (start) {
+    std::shared_lock<std::shared_mutex> lock(pool.lock);
+  start:
+    void *result = local::reserve(start);
+    if (result) {
+      return result;
+    } else {
+      void *const next = local::next(start);
+      if (next) {
+        start = next;
+        goto start;
+      } else {
+      }
+    }
+  } else {
+    // only TL allowed to malloc meaning no alloc contention
+    auto mem = local::alloc(sz);
+    if (std::get<0>(mem)) {
+      void *const initialized = init(std::get<0>(mem), std::get<1>(mem));
+      void *const result = local::reserve(initialized);
+      if (pool.start.compare_exchange_strong(start, initialized)) {
+        return result;
+      } else {
+        // somehow we failed to cas
+        assert(false);
+      }
+    } else {
+      // out of memory
+      return nullptr;
+    }
+  }
 }
 
 void sp_free(void *) {
@@ -133,4 +179,7 @@ void sp_free(void *) {
 
 int main() {
   // init();
+  printf("size NodeHeader:%lu\n", sizeof(NodeHeader));
+  printf("size ReadWriteLock:%lu\n", sizeof(sp::ReadWriteLock));
+  printf("alignof ReadWriteLock:%lu\n", alignof(sp::ReadWriteLock));
 }

@@ -1,10 +1,14 @@
 #ifndef _SP_MAIN_H
 #define _SP_MAIN_H
 
+#include "ReadWriteLock.h"
 #include "bitset/Bitset.h"
+
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <mutex>
+#include <shared_mutex>
 
 #define SP_MALLOC_PAGE_SIZE std::size_t(4 * 1024)
 #define SP_MALLOC_CACHE_LINE_SIZE 64
@@ -15,13 +19,18 @@ namespace {
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) NodeHeader { //
   std::atomic<std::uintptr_t> next;
-  std::size_t size;
+  std::size_t extenSize;
+  std::size_t nodeSize;
+
+  NodeHeader(std::size_t p_extenSz, std::size_t p_nodeSz) noexcept //
+      : extenSize(p_extenSz), nodeSize(p_nodeSz) {
+  }
 };
 
-static_assert(sizeof(NodeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(NodeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(sizeof(NodeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Header { //
+struct alignas(SP_MALLOC_CACHE_LINE_SIZE) ExtentHeader { //
   // const uint8_t block_size;
   // fill out bitset so it occopies the whole cache_line
   // bitset
@@ -39,56 +48,58 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Header { //
   // page_size(4k) - header_size(64B) = 4032
   // 4032 / 504 = 8Byte
   sp::con::Bitset<512, std::uint64_t> reserved;
-  Header() //
+
+  ExtentHeader() noexcept //
       : reserved(false) {
   }
 };
 
-static_assert(sizeof(Header) == SP_MALLOC_CACHE_LINE_SIZE, "");
-static_assert(alignof(Header) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(sizeof(ExtentHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(alignof(ExtentHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-using byte = uint8_t;
-
-struct Byte8Pool {
-  Header h;
-  byte data[SP_MALLOC_PAGE_SIZE - sizeof(h)];
-  Byte8Pool() noexcept //
-      : h{} {
-  }
-}; //
-
-static_assert(sizeof(Byte8Pool) == SP_MALLOC_PAGE_SIZE, "");
-static_assert(alignof(Byte8Pool) == SP_MALLOC_CACHE_LINE_SIZE, "");
-
-static void init(void *const raw) {
+static void *init(void *const raw, std::size_t size) noexcept {
+  uintptr_t start = reinterpret_cast<uintptr_t>(raw);
   // TODO assert alinement of raw
-  new (raw) NodeHeader;
+  NodeHeader *first = reinterpret_cast<NodeHeader *>(start);
+  new (first) NodeHeader(size, size);
+
+  uintptr_t ptr = start + sizeof(NodeHeader);
+  ExtentHeader *second = reinterpret_cast<ExtentHeader *>(ptr);
+  new (second) ExtentHeader;
+  return raw;
 }
 
 } // namespace
 
 namespace local {
-struct ReadWriteLock { //
-};
+/*Pool*/
 struct Pool { //
   std::atomic<void *> start;
-  ReadWriteLock lock;
+  // sp::ReadWriteLock lock;
+  std::shared_mutex lock;
+
   Pool() //
-      : start{nullptr},
-        lock{} {
+      : start{nullptr}, lock{} {
   }
+
   Pool(const Pool &) = delete;
   Pool(Pool &&) = delete;
+
   Pool &operator=(const Pool &) = delete;
   Pool &operator=(Pool &&) = delete;
 };
+
+/*Pools*/
 struct Pools { //
   std::array<Pool, 7> buckets;
+
   Pools() //
       : buckets{} {
   }
+
   Pools(const Pools &) = delete;
   Pools(Pools &&) = delete;
+
   Pools &operator=(const Pools &) = delete;
   Pools &operator=(Pools &&) = delete;
 };
