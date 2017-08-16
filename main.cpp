@@ -122,10 +122,19 @@ static std::tuple<void *, std::size_t> alloc(std::size_t sz) noexcept {
   return global::alloc(sz, 8);
 }
 
-static void *reserve(void *const) noexcept {
+static void *reserve(void *const start) noexcept {
+  const auto node = reinterpret_cast<NodeHeader *>(start);
+
+  uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
+  uintptr_t headerPtr = startPtr + sizeof(NodeHeader);
+  auto extent = reinterpret_cast<ExtentHeader *>(headerPtr);
+  //TODO find first but limit it to header->extSize;
+  // header->reserved.swap_first()
 }
 
-static void *next(void *const) noexcept {
+static void *next(void *const start) noexcept {
+  auto header = reinterpret_cast<NodeHeader *>(start);
+  return header->next.load();
 }
 
 } // namespace local
@@ -136,7 +145,7 @@ static void *next(void *const) noexcept {
  *===========================================================
  */
 
-void *sp_malloc(std::size_t sz) {
+void *sp_malloc(std::size_t sz) noexcept {
   std::size_t allocSz = round_even(sz);
   local::Pool &pool = pool_for(local::pools, allocSz);
 
@@ -153,6 +162,7 @@ void *sp_malloc(std::size_t sz) {
         start = next;
         goto start;
       } else {
+        // TODO upgrade to exclusive lock, either extend extent or allocate new extent
       }
     }
   } else {

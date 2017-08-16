@@ -18,12 +18,12 @@
 namespace {
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) NodeHeader { //
-  std::atomic<std::uintptr_t> next;
+  std::atomic<void *> next;
   std::size_t extenSize;
   std::size_t nodeSize;
 
   NodeHeader(std::size_t p_extenSz, std::size_t p_nodeSz) noexcept //
-      : extenSize(p_extenSz), nodeSize(p_nodeSz) {
+      : next{nullptr}, extenSize(p_extenSz), nodeSize(p_nodeSz) {
   }
 };
 
