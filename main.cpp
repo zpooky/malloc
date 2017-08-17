@@ -28,9 +28,7 @@ struct State {
   std::size_t brk_alloc;
 
   State() noexcept //
-      : brk_lock{},
-        brk_position{nullptr},
-        brk_alloc{0} {
+      : brk_lock{}, brk_position{nullptr}, brk_alloc{0} {
   }
 };
 
@@ -164,29 +162,11 @@ static void * //
   std::size_t extentIdxs = 0;
 
   NodeHeader *nHdr = node_header(raw);
-  new (nHdr) NodeHeader(nodeSz, extentIdxs);
+  new (nHdr) NodeHeader(nodeSz, bucket, extentIdxs);
 
   ExtentHeader *eHdr = extent_header(raw);
   new (eHdr) ExtentHeader;
   return raw;
-}
-
-static void *pointer_at(void *const start, std::size_t index) noexcept {
-  // TODO
-  return nullptr;
-}
-
-static void *reserve(void *const start) noexcept {
-  NodeHeader *nHdr = node_header(start);
-  ExtentHeader *eHdr = extent_header(start);
-
-  // TODO find first but limit it to header->extSize;
-  //, nodeHeader->extentSize
-  const size_t index = eHdr->reserved.swap_first(true);
-  if (index != eHdr->reserved.npos) {
-    return pointer_at(start, index);
-  }
-  return nullptr;
 }
 
 static void *next_node(void *const start) noexcept {
@@ -194,8 +174,82 @@ static void *next_node(void *const start) noexcept {
   return header->next.load();
 }
 
+/*start - exten start*/
+static void *pointer_at(void *start, std::size_t index) noexcept {
+  // Pool[Extent[Node[nodeHDR,extHDR],Node[nodeHDR]...]...]
+  // The first NodeHeader in the extent contains data while intermediate
+  // NodeHeader does not containt this data.
+  NodeHeader *nH = node_header(start);
+  size_t hdrSz(sizeof(NodeHeader) + sizeof(ExtentHeader));
+  size_t buckets = nH->size;
+node_start:
+  const size_t dataSz(nH->rawNodeSize - hdrSz);
+
+  size_t nodeBuckets = std::min(dataSz / nH->bucket, buckets);
+  if (index < nodeBuckets) {
+    // the index is in range of current node
+    uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
+    uintptr_t data_start = startPtr + hdrSz;
+
+    return reinterpret_cast<void *>(data_start + (index * nH->bucket));
+  } else {
+    // the index is out of range go to next node or extent
+
+    void *next = next_node(start);
+    if (next) {
+      start = next;
+    } else {
+      // allocate more space
+      // TODO
+      // 1. Check if extent can be expanded or
+      // 2. Add new extent
+    }
+
+    index = index - nodeBuckets;
+    buckets = buckets - nodeBuckets;
+    if (buckets > 0) {
+      // the same extent but a new node
+      hdrSz = sizeof(NodeHeader);
+      goto node_start;
+    } else {
+      // out of bound
+      return nullptr;
+    }
+  }
+}
+
+/*start - exten start*/
 static void *next_extent(void *const start) noexcept {
-  // TODO
+  NodeHeader *nH = node_header(start);
+  size_t hdrSz(sizeof(NodeHeader) + sizeof(ExtentHeader));
+  size_t buckets = nH->size;
+node_start:
+  const size_t dataSz(nH->rawNodeSize - hdrSz);
+
+  size_t nodeBuckets = std::min(dataSz / nH->bucket, buckets);
+  buckets = buckets - nodeBuckets;
+
+  // void *next = next_node(start);
+  // TODO fixit
+
+  if (buckets > 0) {
+    hdrSz = sizeof(NodeHeader);
+    goto node_start;
+  } else {
+  }
+
+  return nullptr;
+}
+
+static void *reserve(void *const start) noexcept {
+  NodeHeader *nHdr = node_header(start);
+  ExtentHeader *eHdr = extent_header(start);
+
+  // TODO find first but limit it to header->size;
+  const size_t index = eHdr->reserved.swap_first(true /*,header->size*/);
+  if (index != eHdr->reserved.npos) {
+    return pointer_at(start, index);
+  }
   return nullptr;
 }
 
