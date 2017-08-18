@@ -8,20 +8,20 @@
 #include <atomic>
 #include <cstdint>
 
-// #if __GNUC__ < 7
-// #include <mutex>
-//
-// namespace std {
-// template <typename T>
-// using shared_lock = unique_lock<T>;
-// using shared_mutex = mutex;
-// }
-// #else
+#if __GNUC__ < 7
+#include <mutex>
+
+namespace std {
+template <typename T>
+using shared_lock = unique_lock<T>;
+using shared_mutex = mutex;
+}
+#else
 
 // #include <mutex>
 #include <shared_mutex>
 
-// #endif
+#endif
 
 #define SP_MALLOC_PAGE_SIZE std::size_t(4 * 1024)
 #define SP_MALLOC_CACHE_LINE_SIZE 64
@@ -30,20 +30,36 @@
 
 namespace {
 
+enum class NodeHeaderType { //
+  HEAD,
+  INTERMEDIATE
+};
+
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) NodeHeader { //
+  const NodeHeaderType type;
+  // next node
   std::atomic<void *> next;
-  // number of buckets available
-  std::size_t size;
   // size of what is reserved(a bucket)
   const std::size_t bucket;
   // size of the node include the header itself
   // rawNodeSize = sizeof(Node[NodeHDR,...])
   const std::size_t rawNodeSize;
+  // union {
+  //   struct {
+  // number of buckets available
+  std::size_t size;
+  // } head;
+  // struct {
+  // } intermediate;
+  // };
 
   NodeHeader(std::size_t p_extenSz, std::size_t p_bucket,
              std::size_t p_nodeSz) noexcept //
-      : next{nullptr}, size(p_extenSz), bucket(p_bucket),
-        rawNodeSize(p_nodeSz) {
+      : type(NodeHeaderType::HEAD),
+        next{nullptr},
+        bucket(p_bucket),
+        rawNodeSize(p_nodeSz),
+        size(p_extenSz) {
   }
 };
 
@@ -88,7 +104,8 @@ struct Pool { //
   // std::mutex lock;
 
   Pool() //
-      : start{nullptr}, lock{} {
+      : start{nullptr},
+        lock{} {
   }
 
   Pool(const Pool &) = delete;

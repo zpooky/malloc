@@ -28,7 +28,9 @@ struct State {
   std::size_t brk_alloc;
 
   State() noexcept //
-      : brk_lock{}, brk_position{nullptr}, brk_alloc{0} {
+      : brk_lock{},
+        brk_position{nullptr},
+        brk_alloc{0} {
   }
 };
 
@@ -174,7 +176,11 @@ static void *next_node(void *const start) noexcept {
   return header->next.load();
 }
 
-/*start - exten start*/
+/*
+ * @param start - extent start
+ * @param index -
+ * @desc  -
+ */
 static void *pointer_at(void *start, std::size_t index) noexcept {
   // Pool[Extent[Node[nodeHDR,extHDR],Node[nodeHDR]...]...]
   // The first NodeHeader in the extent contains data while intermediate
@@ -196,18 +202,15 @@ node_start:
     // the index is out of range go to next node or extent
 
     void *next = next_node(start);
-    if (next) {
-      start = next;
-    } else {
-      // allocate more space
-      // TODO
-      // 1. Check if extent can be expanded or
-      // 2. Add new extent
-    }
-
     index = index - nodeBuckets;
     buckets = buckets - nodeBuckets;
+
     if (buckets > 0) {
+      assert(next != nullptr);
+      NodeHeader *iNHdr = node_header(next);
+      assert(iNHdr->type == NodeHeaderType::INTERMEDIATE);
+
+      start = next;
       // the same extent but a new node
       hdrSz = sizeof(NodeHeader);
       goto node_start;
@@ -218,8 +221,11 @@ node_start:
   }
 }
 
-/*start - exten start*/
-static void *next_extent(void *const start) noexcept {
+/*
+ * @start - extent start
+ * desc  - Used by malloc & free
+ */
+static void *next_extent(void *start) noexcept {
   NodeHeader *nH = node_header(start);
   size_t hdrSz(sizeof(NodeHeader) + sizeof(ExtentHeader));
   size_t buckets = nH->size;
@@ -229,18 +235,37 @@ node_start:
   size_t nodeBuckets = std::min(dataSz / nH->bucket, buckets);
   buckets = buckets - nodeBuckets;
 
-  // void *next = next_node(start);
-  // TODO fixit
+  void *const next = next_node(start);
 
   if (buckets > 0) {
     hdrSz = sizeof(NodeHeader);
+
+    assert(next != nullptr);
+    NodeHeader *iNHdr = node_header(next);
+    assert(iNHdr->type == NodeHeaderType::INTERMEDIATE);
+
+    start = next;
+
     goto node_start;
   } else {
-  }
+    if (next) {
+      NodeHeader *iNHdr = node_header(next);
+      if (iNHdr->type == NodeHeaderType::INTERMEDIATE) {
+        // We get here because a concurrent expand of this extent is going on by
+        // the allocating thread.
 
-  return nullptr;
+        // TODO will this work?
+        goto node_start;
+      }
+    }
+    return next;
+  }
 }
 
+/*
+ * @start - extent start
+ * desc  - Used by malloc
+ */
 static void *reserve(void *const start) noexcept {
   NodeHeader *nHdr = node_header(start);
   ExtentHeader *eHdr = extent_header(start);
@@ -291,6 +316,7 @@ void *sp_malloc(std::size_t sz) noexcept {
       void *initialized =
           local::init(std::get<0>(mem), bucket, std::get<1>(mem));
       void *const result = local::reserve(initialized);
+      // TODO a fence here
       if (pool.start.compare_exchange_strong(start, initialized)) {
         return result;
       } else {
