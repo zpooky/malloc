@@ -22,6 +22,9 @@ public:
   void exclusive_unlock() noexcept;
 };
 
+//TODO SharedLock increment shared count if exclusivebit is 0
+//TODO EagerExclusiveLock swap exclusivebit to 1 and wait until shared 0
+//TODO LazyExclusiveLock wap exclusivebut to 1 if shared is 0 otherwise retry
 class ExclusiveLock { //
 private:
   ReadWriteLock &m_lock;

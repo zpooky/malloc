@@ -28,9 +28,7 @@ struct State {
   std::size_t brk_alloc;
 
   State() noexcept //
-      : brk_lock{},
-        brk_position{nullptr},
-        brk_alloc{0} {
+      : brk_lock{}, brk_position{nullptr}, brk_alloc{0} {
   }
 };
 
@@ -331,6 +329,11 @@ void *sp_malloc(std::size_t sz) noexcept {
 }
 
 void sp_free(void *) {
+  // TDOO a initial std::thread_atomic_fence_acquire(); required
+  // the allocating thread is required to atomuc_release it before the free
+  // thread can see it and there fore only the first initial aquire fence.
+  // Because any _aquire fence since it can be another thread that performs the
+  // free than the one allocating it
 }
 
 int main() {
