@@ -1,7 +1,7 @@
 #ifndef _SP_MAIN_H
 #define _SP_MAIN_H
 
-// #include "ReadWriteLock.h"
+#include "ReadWriteLock.h"
 #include "bitset/Bitset.h"
 
 #include <array>
@@ -55,11 +55,8 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) NodeHeader { //
 
   NodeHeader(std::size_t p_extenSz, std::size_t p_bucket,
              std::size_t p_nodeSz) noexcept //
-      : type(NodeHeaderType::HEAD),
-        next{nullptr},
-        bucket(p_bucket),
-        rawNodeSize(p_nodeSz),
-        size(p_extenSz) {
+      : type(NodeHeaderType::HEAD), next{nullptr}, bucket(p_bucket),
+        rawNodeSize(p_nodeSz), size(p_extenSz) {
   }
 };
 
@@ -93,8 +90,24 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) ExtentHeader { //
 static_assert(sizeof(ExtentHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(ExtentHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
+struct alignas(SP_MALLOC_CACHE_LINE_SIZE) FreeHeader { //
+  std::atomic<void *> next;
+  std::size_t size;
+  FreeHeader(std::size_t sz, void *nxt) noexcept //
+      : next(nxt), size(sz) {
+  }
+};
+
+static_assert(sizeof(FreeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(alignof(FreeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
+
 } // namespace
 
+/*
+ *===========================================================
+ *=======LOCAL===============================================
+ *===========================================================
+ */
 namespace local {
 /*Pool*/
 struct Pool { //
@@ -103,9 +116,8 @@ struct Pool { //
   std::shared_mutex lock;
   // std::mutex lock;
 
-  Pool() //
-      : start{nullptr},
-        lock{} {
+  Pool() noexcept //
+      : start{nullptr}, lock{} {
   }
 
   Pool(const Pool &) = delete;
@@ -116,18 +128,30 @@ struct Pool { //
 };
 
 /*Pools*/
-struct Pools { //
+struct PoolsRAII { //
   std::array<Pool, 64> buckets;
 
-  Pools() //
+  PoolsRAII() noexcept //
       : buckets{} {
+    std::atomic_thread_fence(std::memory_order_release);
   }
+};
+
+class Pools { //
+private:
+  PoolsRAII *pools;
+
+public:
+  Pools() noexcept;
+  ~Pools() noexcept;
 
   Pools(const Pools &) = delete;
   Pools(Pools &&) = delete;
 
   Pools &operator=(const Pools &) = delete;
   Pools &operator=(Pools &&) = delete;
+
+  auto &buckets() noexcept;
 };
 
 } // namespace local

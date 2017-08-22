@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 
+// TODO tryLock
 namespace sp {
 class ReadWriteLock { //
 private:
@@ -14,29 +15,57 @@ public:
   ~ReadWriteLock();
 
 public:
+  // Shared lock increment shared count if exclusive bit is 0
   void shared_lock() noexcept;
   void shared_unlock() noexcept;
 
 public:
-  void exclusive_lock() noexcept;
+  // Eager exclusive lock swap exclusive bit to 1 and wait until shared is 0
+  void eager_exclusive_lock() noexcept;
+
+public:
+  // Lazy exclusive lock swap exclusive bit to 1 if shared is 0 otherwise retry
+  void lazy_exclusive_lock() noexcept;
+
+public:
+  bool try_exclusive_lock() noexcept;
+
+public:
   void exclusive_unlock() noexcept;
 };
 
-//TODO SharedLock increment shared count if exclusivebit is 0
-//TODO EagerExclusiveLock swap exclusivebit to 1 and wait until shared 0
-//TODO LazyExclusiveLock wap exclusivebut to 1 if shared is 0 otherwise retry
-class ExclusiveLock { //
+class EagerExclusiveLock { //
 private:
-  ReadWriteLock &m_lock;
+  ReadWriteLock *m_lock;
 
 public:
-  explicit ExclusiveLock(ReadWriteLock &);
-  ~ExclusiveLock();
+  explicit EagerExclusiveLock(ReadWriteLock &);
+  ~EagerExclusiveLock();
+};
+
+class LazyExclusiveLock { //
+private:
+  ReadWriteLock *m_lock;
+
+public:
+  explicit LazyExclusiveLock(ReadWriteLock &);
+  ~LazyExclusiveLock();
+};
+
+class TryExclusiveLock { //
+private:
+  ReadWriteLock *m_lock;
+
+public:
+  TryExclusiveLock(ReadWriteLock &);
+  ~TryExclusiveLock();
+
+  operator bool() const;
 };
 
 class SharedLock { //
 private:
-  ReadWriteLock &m_lock;
+  ReadWriteLock *m_lock;
 
 public:
   explicit SharedLock(ReadWriteLock &);
