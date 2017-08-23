@@ -1,12 +1,8 @@
-#ifndef _SP_MAIN_H
-#define _SP_MAIN_H
+#ifndef SP_MALLOC_SHARED_H
+#define SP_MALLOC_SHARED_H
 
-#include "ReadWriteLock.h"
-#include "bitset/Bitset.h"
-
-#include <array>
 #include <atomic>
-#include <cstdint>
+#include <bitset/Bitset.h>
 
 #if __GNUC__ < 7
 #include <mutex>
@@ -28,15 +24,20 @@ using shared_mutex = mutex;
 
 #define SP_ALLOC_INITIAL_ALLOC std::size_t(SP_MALLOC_PAGE_SIZE)
 
-namespace {
+/*
+ *===========================================================
+ *========HEADER=============================================
+ *===========================================================
+ */
+namespace header {
 
-enum class NodeHeaderType { //
+enum class NodeType { //
   HEAD,
   INTERMEDIATE
 };
 
-struct alignas(SP_MALLOC_CACHE_LINE_SIZE) NodeHeader { //
-  const NodeHeaderType type;
+struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
+  const NodeType type;
   // next node
   std::atomic<void *> next;
   // size of what is reserved(a bucket)
@@ -53,17 +54,17 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) NodeHeader { //
   // } intermediate;
   // };
 
-  NodeHeader(std::size_t p_extenSz, std::size_t p_bucket,
-             std::size_t p_nodeSz) noexcept //
-      : type(NodeHeaderType::HEAD), next{nullptr}, bucket(p_bucket),
+  Node(std::size_t p_extenSz, std::size_t p_bucket,
+       std::size_t p_nodeSz) noexcept //
+      : type(NodeType::HEAD), next{nullptr}, bucket(p_bucket),
         rawNodeSize(p_nodeSz), size(p_extenSz) {
   }
 };
 
-static_assert(alignof(NodeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
-static_assert(sizeof(NodeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-struct alignas(SP_MALLOC_CACHE_LINE_SIZE) ExtentHeader { //
+struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
   // const uint8_t block_size;
   // fill out bitset so it occopies the whole cache_line
   // bitset
@@ -82,26 +83,48 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) ExtentHeader { //
   // 4032 / 504 = 8Byte
   sp::Bitset<512, std::uint64_t> reserved;
 
-  ExtentHeader() noexcept //
+  Extent() noexcept //
       : reserved(false) {
   }
 };
 
-static_assert(sizeof(ExtentHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
-static_assert(alignof(ExtentHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-struct alignas(SP_MALLOC_CACHE_LINE_SIZE) FreeHeader { //
+struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
   std::atomic<void *> next;
   std::size_t size;
-  FreeHeader(std::size_t sz, void *nxt) noexcept //
+  Free(std::size_t sz, void *nxt) noexcept //
       : next(nxt), size(sz) {
   }
 };
 
-static_assert(sizeof(FreeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
-static_assert(alignof(FreeHeader) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-} // namespace
+/*init*/
+void *init_free(void *const head, std::size_t length,
+                void *const next) noexcept;
+void *init_extent(void *const raw, std::size_t bucket,
+                  std::size_t nodeSz) noexcept;
+
+/*cast*/
+Free *free(void *const start);
+Node *node(void *const start) noexcept;
+Extent *extent(void *const start) noexcept;
+}
+
+/*
+ *===========================================================
+ *========UTIL===============================================
+ *===========================================================
+ */
+namespace util {
+void *align_pointer(void *const start, std::uint32_t alignment) noexcept;
+std::size_t round_even(std::size_t v) noexcept;
+void *ptr_math(void *const ptr, std::int64_t add) noexcept;
+ptrdiff_t ptr_diff(void *const first, void *const second) noexcept;
+}
 
 /*
  *===========================================================
@@ -116,9 +139,7 @@ struct Pool { //
   std::shared_mutex lock;
   // std::mutex lock;
 
-  Pool() noexcept //
-      : start{nullptr}, lock{} {
-  }
+  Pool() noexcept;
 
   Pool(const Pool &) = delete;
   Pool(Pool &&) = delete;
@@ -131,10 +152,7 @@ struct Pool { //
 struct PoolsRAII { //
   std::array<Pool, 64> buckets;
 
-  PoolsRAII() noexcept //
-      : buckets{} {
-    std::atomic_thread_fence(std::memory_order_release);
-  }
+  PoolsRAII() noexcept;
 };
 
 class Pools { //
@@ -151,7 +169,7 @@ public:
   Pools &operator=(const Pools &) = delete;
   Pools &operator=(Pools &&) = delete;
 
-  auto &buckets() noexcept;
+  Pool &operator[](std::size_t) noexcept;
 };
 
 } // namespace local
