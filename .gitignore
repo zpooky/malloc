@@ -40,3 +40,4 @@ GRTAGS
 GTAGS
 main
 tmp.*
+compile_commands.json
