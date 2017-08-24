@@ -7,7 +7,6 @@
 
 #include <unistd.h> //sbrk
 
-
 namespace {
 struct State {
   // brk
@@ -32,21 +31,22 @@ struct State {
 
 static State state;
 
-std::tuple<void *, size_t> find_free(size_t size) noexcept {
-  sp::SharedLock guard(state.free_lock);
-  ++size;//dummy
-  // retry:
-  //   // TODO relaxed?
-  //   void *head = state.free_list.load(std::memory_order_acquire);
-  //   if (head) {
-  //     header::Free *header = header::free(head);
-  //     if (header->size >= size) {
-  //     }
-  //   }
-  return std::make_tuple(nullptr, 0);
+header::Free *find_free(size_t size) noexcept {
+  sp::EagerExclusiveLock guard(state.free_lock);
+  void *head = state.free_list.load(std::memory_order_relaxed);
+retry:
+  if (head) {
+    header::Free *header = header::free(head);
+    if (header->size < size) {
+      head = header->next.load(std::memory_order_relaxed);
+      goto retry;
+    }
+    // free_deque()
+  }
+  return nullptr;
 }
 
-std::tuple<void *, size_t> alloc_free(size_t atLeast) noexcept {
+header::Free *alloc_free(size_t atLeast) noexcept {
   void *res = nullptr;
   {
     std::lock_guard<std::mutex> guard(state.brk_lock);
@@ -62,27 +62,26 @@ std::tuple<void *, size_t> alloc_free(size_t atLeast) noexcept {
     res = ::sbrk(allocSz);
     if (res != (void *)-1) {
       state.brk_alloc = state.brk_alloc + allocSz;
-      return std::make_pair(res, allocSz);
+      return header::init_free(res, allocSz, nullptr);
     }
   }
 
-  return std::make_tuple(nullptr, 0);
+  return nullptr;
 }
 
-void return_free(void *const ptr, size_t length) noexcept {
-  if (length > 0) {
+void return_free(header::Free *free) noexcept {
+  if (free) {
     sp::SharedLock guard(state.free_lock);
     void *next = state.free_list.load(std::memory_order_acquire);
   retry:
-    void *const free = header::init_free(ptr, length, next);
     if (!state.free_list.compare_exchange_strong(next, free)) {
       goto retry;
     }
   }
 }
 
-void return_free(const std::tuple<void *, size_t> &free) noexcept {
-  return return_free(std::get<0>(free), std::get<1>(free));
+void return_free(void *const ptr, size_t length) noexcept {
+  return return_free(header::init_free(ptr, length, nullptr));
 }
 
 } // namespace
@@ -97,19 +96,18 @@ namespace global {
 // TODO change so it should be number of pages instead of a specific
 // length+alignment
 std::tuple<void *, std::size_t> alloc(std::size_t p_length) noexcept {
-  auto free = find_free(p_length);
-  void *const empty = nullptr;
-  if (std::get<0>(free) == empty) {
+  header::Free *free = find_free(p_length);
+  if (free == nullptr) {
     free = alloc_free(p_length);
-    if (std::get<0>(free) == empty) {
-      return std::make_tuple(empty, std::size_t(0));
+    if (free == nullptr) {
+      return std::make_tuple(nullptr, std::size_t(0));
     }
   }
 
-  void *const unalign_ptr = std::get<0>(free);
+  void *const unalign_ptr = reinterpret_cast<void *>(free);
   void *const align_ptr = util::align_pointer(unalign_ptr, 8);
   ptrdiff_t unalign_length = util::ptr_diff(align_ptr, unalign_ptr);
-  std::size_t align_length = std::get<1>(free) - unalign_length;
+  std::size_t align_length = free->size - unalign_length;
 
   if (align_length > p_length) {
     if (align_ptr != unalign_ptr) {
@@ -123,7 +121,7 @@ std::tuple<void *, std::size_t> alloc(std::size_t p_length) noexcept {
 
   return_free(free);
   assert(false);
-  return std::make_tuple(empty, std::size_t(0));
+  return std::make_tuple(nullptr, std::size_t(0));
 } // alloc()
 
 bool free(void *const) noexcept {

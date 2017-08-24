@@ -9,15 +9,15 @@
  */
 namespace header {
 
-void * //
-    init_free(void *const head, std::size_t length, void *const next) noexcept {
+Free *init_free(void *const head, std::size_t length,
+                void *const next) noexcept {
   assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
   assert(length >= sizeof(Free));
   return new (head) Free(length, next);
 }
 
-void *init_extent(void *const raw, std::size_t bucket,
-                  std::size_t nodeSz) noexcept {
+Extent *init_extent(void *const raw, std::size_t bucket,
+                    std::size_t nodeSz) noexcept {
   // TODO calc based on bucket and nodeSz
   std::size_t extentIdxs = 0;
 
@@ -25,8 +25,8 @@ void *init_extent(void *const raw, std::size_t bucket,
   new (nHdr) Node(nodeSz, bucket, extentIdxs);
 
   Extent *eHdr = extent(raw);
-  new (eHdr) Extent;
-  return raw;
+
+  return new (eHdr) Extent;
 } // init()
 
 Free *free(void *const start) {

@@ -103,9 +103,9 @@ static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
 /*init*/
-void *init_free(void *const head, std::size_t length,
+Free *init_free(void *const head, std::size_t length,
                 void *const next) noexcept;
-void *init_extent(void *const raw, std::size_t bucket,
+Extent *init_extent(void *const raw, std::size_t bucket,
                   std::size_t nodeSz) noexcept;
 
 /*cast*/
