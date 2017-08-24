@@ -41,6 +41,8 @@ private:
 public:
   explicit EagerExclusiveLock(ReadWriteLock &);
   ~EagerExclusiveLock();
+
+  operator bool() const;
 };
 
 class LazyExclusiveLock { //
@@ -50,6 +52,8 @@ private:
 public:
   explicit LazyExclusiveLock(ReadWriteLock &);
   ~LazyExclusiveLock();
+
+  operator bool() const;
 };
 
 class TryExclusiveLock { //
@@ -59,6 +63,7 @@ private:
 public:
   TryExclusiveLock(ReadWriteLock &);
   ~TryExclusiveLock();
+
 
   operator bool() const;
 };
@@ -70,6 +75,8 @@ private:
 public:
   explicit SharedLock(ReadWriteLock &);
   ~SharedLock();
+
+  operator bool() const;
 };
 }
 

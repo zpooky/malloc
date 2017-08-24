@@ -18,13 +18,12 @@ struct State {
 
   // free
   // {{{
-  std::atomic<void *> free_list;
-  sp::ReadWriteLock free_lock;
+  header::Free free;
   // }}}
 
   State() noexcept                                       //
       : brk_lock{}, brk_position{nullptr}, brk_alloc{0}, //
-        free_list{nullptr}, free_lock{} {
+        free{0, nullptr} {
     std::atomic_thread_fence(std::memory_order_release);
   }
 };
@@ -32,17 +31,25 @@ struct State {
 static State state;
 
 header::Free *find_free(size_t size) noexcept {
-  sp::EagerExclusiveLock guard(state.free_lock);
-  void *head = state.free_list.load(std::memory_order_relaxed);
-retry:
-  if (head) {
-    header::Free *header = header::free(head);
-    if (header->size < size) {
-      head = header->next.load(std::memory_order_relaxed);
-      goto retry;
+  header::Free *head = &state.free;
+retry : {
+  // lock access to next
+  // TODO TrySharedLock
+  sp::SharedLock guard(head->next_lock);
+  if (guard) {
+    header::Free *current = head->next.load(std::memory_order_relaxed);
+    if (current) {
+      if (current->size < size) {
+        //TRyExcLock
+        head = current;
+        goto retry;
+      }
+      // free_deque()
     }
-    // free_deque()
+  } else {
+    //TODO some other thread has exclusive lock on node
   }
+}
   return nullptr;
 }
 
@@ -71,10 +78,10 @@ header::Free *alloc_free(size_t atLeast) noexcept {
 
 void return_free(header::Free *free) noexcept {
   if (free) {
-    sp::SharedLock guard(state.free_lock);
-    void *next = state.free_list.load(std::memory_order_acquire);
+    sp::SharedLock guard(state.free.next_lock);
+    header::Free *next = state.free.next.load(std::memory_order_acquire);
   retry:
-    if (!state.free_list.compare_exchange_strong(next, free)) {
+    if (!state.free.next.compare_exchange_strong(next, free)) {
       goto retry;
     }
   }

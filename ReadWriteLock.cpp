@@ -122,6 +122,10 @@ EagerExclusiveLock::~EagerExclusiveLock() {
   }
 }
 
+EagerExclusiveLock::operator bool() const {
+  return m_lock != nullptr;
+}
+
 } // namespace sp
 
 /*
@@ -140,6 +144,10 @@ LazyExclusiveLock::~LazyExclusiveLock() {
   } else {
     assert(false);
   }
+}
+
+LazyExclusiveLock::operator bool() const {
+  return m_lock != nullptr;
 }
 
 } // namespace sp
@@ -183,6 +191,10 @@ SharedLock::~SharedLock() {
   } else {
     assert(false);
   }
+}
+
+SharedLock::operator bool() const {
+  return m_lock != nullptr;
 }
 
 } // namespace sp

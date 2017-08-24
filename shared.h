@@ -1,6 +1,7 @@
 #ifndef SP_MALLOC_SHARED_H
 #define SP_MALLOC_SHARED_H
 
+#include "ReadWriteLock.h"
 #include <atomic>
 #include <bitset/Bitset.h>
 
@@ -92,10 +93,12 @@ static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
-  std::atomic<void *> next;
+  sp::ReadWriteLock next_lock;
   std::size_t size;
+  std::atomic<Free *> next;
+
   Free(std::size_t sz, Free *nxt) noexcept //
-      : next(nxt), size(sz) {
+      : next_lock{}, size(sz), next(nxt) {
   }
 };
 
