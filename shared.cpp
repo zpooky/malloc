@@ -10,7 +10,7 @@
 namespace header {
 
 Free *init_free(void *const head, std::size_t length,
-                void *const next) noexcept {
+                header::Free *const next) noexcept {
   assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
   assert(length >= sizeof(Free));
   return new (head) Free(length, next);
@@ -25,7 +25,6 @@ Extent *init_extent(void *const raw, std::size_t bucket,
   new (nHdr) Node(nodeSz, bucket, extentIdxs);
 
   Extent *eHdr = extent(raw);
-
   return new (eHdr) Extent;
 } // init()
 

@@ -94,7 +94,7 @@ static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
   std::atomic<void *> next;
   std::size_t size;
-  Free(std::size_t sz, void *nxt) noexcept //
+  Free(std::size_t sz, Free *nxt) noexcept //
       : next(nxt), size(sz) {
   }
 };
@@ -104,9 +104,9 @@ static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
 /*init*/
 Free *init_free(void *const head, std::size_t length,
-                void *const next) noexcept;
+                Free *const next) noexcept;
 Extent *init_extent(void *const raw, std::size_t bucket,
-                  std::size_t nodeSz) noexcept;
+                    std::size_t nodeSz) noexcept;
 
 /*cast*/
 Free *free(void *const start);
