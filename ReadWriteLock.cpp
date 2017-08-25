@@ -105,6 +105,47 @@ retry:
 } // namespace sp
 
 /*
+ * SharedLock
+ */
+namespace sp {
+SharedLock::SharedLock(ReadWriteLock &p_lock) //
+    : m_lock(&p_lock) {
+  m_lock->shared_lock();
+}
+
+SharedLock::~SharedLock() {
+  if (m_lock) {
+    m_lock->shared_unlock();
+    m_lock = nullptr;
+  } else {
+    assert(false);
+  }
+}
+
+SharedLock::operator bool() const {
+  return m_lock != nullptr;
+}
+}//namespace sp
+
+/*
+ * TrySharedLock
+ */
+namespace sp {
+TrySharedLock::TrySharedLock(ReadWriteLock &p_lock) //
+    : m_lock(&p_lock) {
+      //TODO
+}
+
+TrySharedLock::~TrySharedLock() {
+      //TODO
+}
+
+TrySharedLock::operator bool() const {
+  return m_lock != nullptr;
+}
+
+} // namespace sp
+/*
  * EagerExclusiveLock
  */
 namespace sp {
@@ -163,6 +204,11 @@ TryExclusiveLock::TryExclusiveLock(ReadWriteLock &p_lock) //
   }
 }
 
+TryExclusiveLock::TryExclusiveLock(SharedLock &p_lock) //
+    : m_lock(nullptr) {
+      //TODO
+}
+
 TryExclusiveLock::~TryExclusiveLock() {
   if (m_lock) {
     m_lock->exclusive_unlock();
@@ -171,29 +217,6 @@ TryExclusiveLock::~TryExclusiveLock() {
 }
 
 TryExclusiveLock::operator bool() const {
-  return m_lock != nullptr;
-}
-
-} // namespace sp
-/*
- * SharedLock
- */
-namespace sp {
-SharedLock::SharedLock(ReadWriteLock &p_lock) //
-    : m_lock(&p_lock) {
-  m_lock->shared_lock();
-}
-
-SharedLock::~SharedLock() {
-  if (m_lock) {
-    m_lock->shared_unlock();
-    m_lock = nullptr;
-  } else {
-    assert(false);
-  }
-}
-
-SharedLock::operator bool() const {
   return m_lock != nullptr;
 }
 

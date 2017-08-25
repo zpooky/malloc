@@ -2,6 +2,7 @@
 
 #include "ReadWriteLock.h"
 #include <cassert>
+#include <cstdio>
 #include <mutex>
 #include <tuple>
 
@@ -34,20 +35,21 @@ header::Free *find_free(size_t size) noexcept {
   header::Free *head = &state.free;
 retry : {
   // lock access to next
-  // TODO TrySharedLock
-  sp::SharedLock guard(head->next_lock);
-  if (guard) {
+  sp::TrySharedLock shGuard(head->next_lock);
+  if (shGuard) {
     header::Free *current = head->next.load(std::memory_order_relaxed);
     if (current) {
       if (current->size < size) {
-        //TRyExcLock
-        head = current;
-        goto retry;
+        sp::TryExclusiveLock exGuard(shGuard);
+        if (exGuard) {
+          head = current;
+          goto retry;
+        }
       }
       // free_deque()
     }
   } else {
-    //TODO some other thread has exclusive lock on node
+    // TODO some other thread has exclusive lock on node
   }
 }
   return nullptr;

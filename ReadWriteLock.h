@@ -33,7 +33,38 @@ public:
 public:
   void exclusive_unlock() noexcept;
 };
+/*
+ * SharedLock
+ */
+class SharedLock { //
+private:
+  ReadWriteLock *m_lock;
 
+public:
+  explicit SharedLock(ReadWriteLock &);
+  ~SharedLock();
+
+  operator bool() const;
+};
+
+/*
+ * TrySharedLock
+ */
+class TrySharedLock { //
+private:
+  ReadWriteLock *m_lock;
+
+public:
+  explicit TrySharedLock(ReadWriteLock &);
+  ~TrySharedLock();
+
+  operator bool() const;
+};
+
+
+/*
+ * EagerExclusiveLock
+ */
 class EagerExclusiveLock { //
 private:
   ReadWriteLock *m_lock;
@@ -45,6 +76,9 @@ public:
   operator bool() const;
 };
 
+/*
+ * LazyExclusiveLock
+ */
 class LazyExclusiveLock { //
 private:
   ReadWriteLock *m_lock;
@@ -56,28 +90,22 @@ public:
   operator bool() const;
 };
 
+/*
+ * TryExclusiveLock
+ */
 class TryExclusiveLock { //
 private:
   ReadWriteLock *m_lock;
 
 public:
   TryExclusiveLock(ReadWriteLock &);
+  TryExclusiveLock(SharedLock&);
   ~TryExclusiveLock();
 
 
   operator bool() const;
 };
 
-class SharedLock { //
-private:
-  ReadWriteLock *m_lock;
-
-public:
-  explicit SharedLock(ReadWriteLock &);
-  ~SharedLock();
-
-  operator bool() const;
-};
 }
 
 #endif

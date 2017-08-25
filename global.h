@@ -2,7 +2,6 @@
 #define SP_MALLOC_GLOBAL_H
 
 #include "shared.h"
-#include <cstdio>
 
 /*
  *===========================================================
