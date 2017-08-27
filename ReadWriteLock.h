@@ -41,10 +41,10 @@ private:
   ReadWriteLock *m_lock;
 
 public:
-  explicit SharedLock(ReadWriteLock &);
+  explicit SharedLock(ReadWriteLock &) noexcept;
   ~SharedLock();
 
-  operator bool() const;
+  operator bool() const noexcept;
 };
 
 /*
@@ -55,12 +55,11 @@ private:
   ReadWriteLock *m_lock;
 
 public:
-  explicit TrySharedLock(ReadWriteLock &);
+  explicit TrySharedLock(ReadWriteLock &) noexcept;
   ~TrySharedLock();
 
-  operator bool() const;
+  operator bool() const noexcept;
 };
-
 
 /*
  * EagerExclusiveLock
@@ -70,10 +69,10 @@ private:
   ReadWriteLock *m_lock;
 
 public:
-  explicit EagerExclusiveLock(ReadWriteLock &);
+  explicit EagerExclusiveLock(ReadWriteLock &) noexcept;
   ~EagerExclusiveLock();
 
-  operator bool() const;
+  operator bool() const noexcept;
 };
 
 /*
@@ -84,10 +83,10 @@ private:
   ReadWriteLock *m_lock;
 
 public:
-  explicit LazyExclusiveLock(ReadWriteLock &);
+  explicit LazyExclusiveLock(ReadWriteLock &) noexcept;
   ~LazyExclusiveLock();
 
-  operator bool() const;
+  operator bool() const noexcept;
 };
 
 /*
@@ -98,14 +97,13 @@ private:
   ReadWriteLock *m_lock;
 
 public:
-  TryExclusiveLock(ReadWriteLock &);
-  TryExclusiveLock(SharedLock&);
+  explicit TryExclusiveLock(ReadWriteLock &) noexcept;
+  explicit TryExclusiveLock(SharedLock &) noexcept;
+  explicit TryExclusiveLock(TrySharedLock &) noexcept;
   ~TryExclusiveLock();
 
-
-  operator bool() const;
+  operator bool() const noexcept;
 };
-
 }
 
 #endif

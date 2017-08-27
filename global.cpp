@@ -33,25 +33,39 @@ static State state;
 
 header::Free *find_free(size_t size) noexcept {
   header::Free *head = &state.free;
-retry : {
-  // lock access to next
-  sp::TrySharedLock shGuard(head->next_lock);
-  if (shGuard) {
-    header::Free *current = head->next.load(std::memory_order_relaxed);
-    if (current) {
-      if (current->size < size) {
-        sp::TryExclusiveLock exGuard(shGuard);
-        if (exGuard) {
+retry:
+  // TODO
+  // 1. look next
+  // 2. lock next.next
+  // 3. realease next
+  if (true) {
+    // lock access to next
+    sp::TrySharedLock shGuard(head->next_lock);
+    if (shGuard) {
+      header::Free *current = head->next.load(std::memory_order_relaxed);
+      if (current) {
+        if (size >= current->size) {
+          //matching
+          sp::TryExclusiveLock exGuard(shGuard);
+          if (exGuard) {
+            // free_deque(current)
+            // return current;
+          } else {
+            // TODO some other thread has exclusive lock on node
+          }
+        } else {
+          // Not matching, continue
           head = current;
           goto retry;
         }
+      } else {
+        // Not found any matching Free node
+        return nullptr;
       }
-      // free_deque()
+    } else {
+      // TODO some other thread has exclusive lock on node
     }
-  } else {
-    // TODO some other thread has exclusive lock on node
   }
-}
   return nullptr;
 }
 

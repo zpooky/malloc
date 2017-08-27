@@ -108,7 +108,7 @@ retry:
  * SharedLock
  */
 namespace sp {
-SharedLock::SharedLock(ReadWriteLock &p_lock) //
+SharedLock::SharedLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(&p_lock) {
   m_lock->shared_lock();
 }
@@ -122,25 +122,25 @@ SharedLock::~SharedLock() {
   }
 }
 
-SharedLock::operator bool() const {
+SharedLock::operator bool() const noexcept {
   return m_lock != nullptr;
 }
-}//namespace sp
+} // namespace sp
 
 /*
  * TrySharedLock
  */
 namespace sp {
-TrySharedLock::TrySharedLock(ReadWriteLock &p_lock) //
+TrySharedLock::TrySharedLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(&p_lock) {
-      //TODO
+  // TODO
 }
 
 TrySharedLock::~TrySharedLock() {
-      //TODO
+  // TODO
 }
 
-TrySharedLock::operator bool() const {
+TrySharedLock::operator bool() const noexcept {
   return m_lock != nullptr;
 }
 
@@ -149,7 +149,7 @@ TrySharedLock::operator bool() const {
  * EagerExclusiveLock
  */
 namespace sp {
-EagerExclusiveLock::EagerExclusiveLock(ReadWriteLock &p_lock) //
+EagerExclusiveLock::EagerExclusiveLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(&p_lock) {
   m_lock->eager_exclusive_lock();
 }
@@ -163,7 +163,7 @@ EagerExclusiveLock::~EagerExclusiveLock() {
   }
 }
 
-EagerExclusiveLock::operator bool() const {
+EagerExclusiveLock::operator bool() const noexcept {
   return m_lock != nullptr;
 }
 
@@ -173,7 +173,7 @@ EagerExclusiveLock::operator bool() const {
  * LazyExclusiveLock
  */
 namespace sp {
-LazyExclusiveLock::LazyExclusiveLock(ReadWriteLock &p_lock) //
+LazyExclusiveLock::LazyExclusiveLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(&p_lock) {
   m_lock->lazy_exclusive_lock();
 }
@@ -187,7 +187,7 @@ LazyExclusiveLock::~LazyExclusiveLock() {
   }
 }
 
-LazyExclusiveLock::operator bool() const {
+LazyExclusiveLock::operator bool() const noexcept {
   return m_lock != nullptr;
 }
 
@@ -197,16 +197,20 @@ LazyExclusiveLock::operator bool() const {
  * TryExclusiveLock
  */
 namespace sp {
-TryExclusiveLock::TryExclusiveLock(ReadWriteLock &p_lock) //
+TryExclusiveLock::TryExclusiveLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(nullptr) {
   if (p_lock.try_exclusive_lock()) {
     m_lock = &p_lock;
   }
 }
 
-TryExclusiveLock::TryExclusiveLock(SharedLock &p_lock) //
+TryExclusiveLock::TryExclusiveLock(SharedLock &) noexcept //
     : m_lock(nullptr) {
-      //TODO
+  // TODO
+}
+TryExclusiveLock::TryExclusiveLock(TrySharedLock &) noexcept //
+    : m_lock(nullptr) {
+  // TODO
 }
 
 TryExclusiveLock::~TryExclusiveLock() {
@@ -216,7 +220,7 @@ TryExclusiveLock::~TryExclusiveLock() {
   }
 }
 
-TryExclusiveLock::operator bool() const {
+TryExclusiveLock::operator bool() const noexcept {
   return m_lock != nullptr;
 }
 
