@@ -31,27 +31,33 @@ struct State {
 
 static State state;
 
+void free_deque(header::Free &head) noexcept {
+}
+
 header::Free *find_free(size_t size) noexcept {
   header::Free *head = &state.free;
 retry:
-  // TODO
-  // 1. look next
-  // 2. lock next.next
-  // 3. realease next
-  if (true) {
+  if(true) {
     // lock access to next
     sp::TrySharedLock shGuard(head->next_lock);
     if (shGuard) {
       header::Free *current = head->next.load(std::memory_order_relaxed);
       if (current) {
         if (size >= current->size) {
-          //matching
-          sp::TryExclusiveLock exGuard(shGuard);
-          if (exGuard) {
-            // free_deque(current)
-            // return current;
+          // matching
+          sp::TryPrepareLock preGuard(shGuard);
+          if (preGuard) {
+            sp::TryExclusiveLock exGuard(preGuard);
+            if (exGuard) {
+              free_deque(*current);
+              return current;
+            } else {
+              assert(false);
+            }
           } else {
-            // TODO some other thread has exclusive lock on node
+            // Some other thread got here first, continue
+            head = current;
+            goto retry;
           }
         } else {
           // Not matching, continue

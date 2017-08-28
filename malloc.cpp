@@ -255,6 +255,7 @@ void *sp_malloc(std::size_t sz) noexcept {
       return nullptr;
     }
   }
+  return nullptr;
 } // sp_malloc()
 
 void sp_free(void *const dealloc) noexcept {
