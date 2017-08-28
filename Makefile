@@ -2,7 +2,7 @@
 #http://www.puxan.com/web/howto-write-generic-makefiles/
 # Declaration of variables
 CC = g++
-CC_FLAGS = -enable-frame-pointers -std=c++17 -ggdb
+CC_FLAGS = -enable-frame-pointers -std=c++17 -ggdb -Wall -Wextra -Wpedantic
 HEADER_DIRS = -Iexternal
 LIBS = -lpthread
 # File names

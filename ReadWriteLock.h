@@ -4,34 +4,34 @@
 #include <atomic>
 #include <cstdint>
 
-// TODO tryLock
 namespace sp {
 class ReadWriteLock { //
 private:
   std::atomic<std::uint64_t> m_state;
 
 public:
-  ReadWriteLock();
-  ~ReadWriteLock();
+  ReadWriteLock() noexcept;
+  ~ReadWriteLock() noexcept;
 
 public:
   // Shared lock increment shared count if exclusive bit is 0
   void shared_lock() noexcept;
+  bool try_shared_lock() noexcept;
   void shared_unlock() noexcept;
 
 public:
   // Eager exclusive lock swap exclusive bit to 1 and wait until shared is 0
   void eager_exclusive_lock() noexcept;
-
-public:
   // Lazy exclusive lock swap exclusive bit to 1 if shared is 0 otherwise retry
   void lazy_exclusive_lock() noexcept;
-
-public:
-  bool try_exclusive_lock() noexcept;
-
-public:
+  bool try_exclusive_lock(bool prepare_unset = false,
+                          int8_t shared_dec = 0) noexcept;
   void exclusive_unlock() noexcept;
+
+public:
+  // void prepare_lock() noexcept;
+  bool try_prepare_lock(int8_t shared_dec = 0) noexcept;
+  void prepare_unlock() noexcept;
 };
 /*
  * SharedLock
@@ -42,7 +42,7 @@ private:
 
 public:
   explicit SharedLock(ReadWriteLock &) noexcept;
-  ~SharedLock();
+  ~SharedLock() noexcept;
 
   operator bool() const noexcept;
 };
@@ -51,13 +51,29 @@ public:
  * TrySharedLock
  */
 class TrySharedLock { //
-private:
+  // TODO encapsulation
+public:
   ReadWriteLock *m_lock;
 
 public:
   explicit TrySharedLock(ReadWriteLock &) noexcept;
-  ~TrySharedLock();
+  ~TrySharedLock() noexcept;
 
+  operator bool() const noexcept;
+};
+
+/*
+ * TryPrepareLock
+ */
+class TryPrepareLock {
+  // TODO encapsulation
+public:
+  ReadWriteLock *m_lock;
+
+public:
+  explicit TryPrepareLock(ReadWriteLock &) noexcept;
+  explicit TryPrepareLock(TrySharedLock &) noexcept;
+  ~TryPrepareLock() noexcept;
   operator bool() const noexcept;
 };
 
@@ -70,7 +86,7 @@ private:
 
 public:
   explicit EagerExclusiveLock(ReadWriteLock &) noexcept;
-  ~EagerExclusiveLock();
+  ~EagerExclusiveLock() noexcept;
 
   operator bool() const noexcept;
 };
@@ -98,9 +114,9 @@ private:
 
 public:
   explicit TryExclusiveLock(ReadWriteLock &) noexcept;
-  explicit TryExclusiveLock(SharedLock &) noexcept;
   explicit TryExclusiveLock(TrySharedLock &) noexcept;
-  ~TryExclusiveLock();
+  explicit TryExclusiveLock(TryPrepareLock &) noexcept;
+  ~TryExclusiveLock() noexcept;
 
   operator bool() const noexcept;
 };
