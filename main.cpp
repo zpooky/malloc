@@ -13,5 +13,5 @@ int main() {
     global::dealloc(ptr, sz);
   }
   // init();
-  printf("test");
+  printf("test\n");
 }

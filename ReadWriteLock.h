@@ -32,6 +32,11 @@ public:
   // void prepare_lock() noexcept;
   bool try_prepare_lock(int8_t shared_dec = 0) noexcept;
   void prepare_unlock() noexcept;
+
+public:
+  uint64_t shared_locks() const noexcept;
+  bool has_prepare_lock() const noexcept;
+  bool has_exclusive_lock() const noexcept;
 };
 /*
  * SharedLock

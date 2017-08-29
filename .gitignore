@@ -42,3 +42,4 @@ main
 tmp.*
 compile_commands.json
 main.exe.stackdump
+thetest
