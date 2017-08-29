@@ -31,32 +31,43 @@ struct State {
 
 static State state;
 
-void free_deque(header::Free &head) noexcept {
+void free_deque(header::Free &head, header::Free &target) noexcept {
+  head.next.store(target.next.load());
+  target.next.store(nullptr);
 }
 
 header::Free *find_free(size_t size) noexcept {
+start:
   header::Free *head = &state.free;
 retry:
-  if(true) {
-    // lock access to next
+  if (true) {
     sp::TrySharedLock shGuard(head->next_lock);
     if (shGuard) {
       header::Free *current = head->next.load(std::memory_order_relaxed);
       if (current) {
-        if (size >= current->size) {
+        if (size <= current->size) {
           // matching
           sp::TryPrepareLock preGuard(shGuard);
           if (preGuard) {
-            sp::TryExclusiveLock exGuard(preGuard);
-            if (exGuard) {
-              free_deque(*current);
-              return current;
+            sp::TryExclusiveLock headGuard(current->next_lock);
+            if (headGuard) {
+              sp::TryExclusiveLock exGuard(preGuard);
+              if (exGuard) {
+                free_deque(*head, *current);
+                return current;
+              } else {
+                assert(false);
+              }
             } else {
-              assert(false);
+              // Could not lock current->next
+              head = current;
+              assert(false); // TODO just for test
+              goto retry;
             }
           } else {
             // Some other thread got here first, continue
             head = current;
+            assert(false); // TODO just for test
             goto retry;
           }
         } else {
@@ -69,7 +80,8 @@ retry:
         return nullptr;
       }
     } else {
-      // TODO some other thread has exclusive lock on node
+      // TODO some other thread has exclusive lock on node, restart?
+      goto start;
     }
   }
   return nullptr;
@@ -83,7 +95,8 @@ header::Free *alloc_free(size_t atLeast) noexcept {
     //   state.brk_position = ::sbrk(0);
     // }
     // TODO some algorithm to determine optimal alloc size
-    std::size_t allocSz = std::max(state.brk_alloc, SP_ALLOC_INITIAL_ALLOC);
+    std::size_t allocSz(0);
+    allocSz = std::max(state.brk_alloc, SP_ALLOC_INITIAL_ALLOC);
     allocSz = std::max(atLeast, allocSz);
     // TODO check size wrap around
 
@@ -124,12 +137,12 @@ namespace global {
 
 // TODO change so it should be number of pages instead of a specific
 // length+alignment
-std::tuple<void *, std::size_t> alloc(std::size_t p_length) noexcept {
+void *alloc(std::size_t p_length) noexcept {
   header::Free *free = find_free(p_length);
   if (free == nullptr) {
     free = alloc_free(p_length);
     if (free == nullptr) {
-      return std::make_tuple(nullptr, std::size_t(0));
+      return nullptr;
     }
   }
 
@@ -138,20 +151,23 @@ std::tuple<void *, std::size_t> alloc(std::size_t p_length) noexcept {
   ptrdiff_t unalign_length = util::ptr_diff(align_ptr, unalign_ptr);
   std::size_t align_length = free->size - unalign_length;
 
-  if (align_length > p_length) {
+  if (align_length >= p_length) {
     if (align_ptr != unalign_ptr) {
       return_free(unalign_ptr, unalign_length);
       assert(false);
     }
 
     return_free(util::ptr_math(align_ptr, +p_length), align_length - p_length);
-    return std::make_tuple(align_ptr, p_length);
+    return align_ptr;
   }
 
   return_free(free);
   assert(false);
-  return std::make_tuple(nullptr, std::size_t(0));
+  return nullptr;
 } // alloc()
+
+void dealloc(void *, std::size_t) noexcept {
+}
 
 bool free(void *const) noexcept {
   // TODO
@@ -161,13 +177,12 @@ bool free(void *const) noexcept {
 local::PoolsRAII *alloc_pool() noexcept {
   using PoolType = local::PoolsRAII;
   static_assert(sizeof(PoolType) <= SP_MALLOC_PAGE_SIZE, "");
-  auto result = alloc(SP_MALLOC_PAGE_SIZE);
+  void *result = alloc(SP_MALLOC_PAGE_SIZE);
 
-  void *start = std::get<0>(result);
-  if (start == nullptr) {
+  if (result == nullptr) {
     assert(false);
   }
-  return new (start) PoolType;
+  return new (result) PoolType;
 } // alloc_pool()
 
 void release_pool(local::PoolsRAII *) noexcept {

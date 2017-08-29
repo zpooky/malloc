@@ -11,9 +11,12 @@ namespace header {
 
 Free *init_free(void *const head, std::size_t length,
                 header::Free *const next) noexcept {
-  assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
-  assert(length >= sizeof(Free));
-  return new (head) Free(length, next);
+  if (length > 0) {
+    assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
+    assert(length >= sizeof(Free));
+    return new (head) Free(length, next);
+  }
+  return nullptr;
 }
 
 Extent *init_extent(void *const raw, std::size_t bucket,
@@ -59,8 +62,8 @@ void *align_pointer(void *const start, std::uint32_t alignment) noexcept {
   assert(alignment >= 8);
   assert(alignment % 8 == 0);
   uintptr_t ptr = reinterpret_cast<uintptr_t>(start);
-  ptr = ptr + alignment - 1;
-  ptr = ptr & alignment;
+  uintptr_t diff = ptr + alignment - 1;
+  ptr += diff & alignment;
   return reinterpret_cast<void *>(ptr);
 }
 

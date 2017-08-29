@@ -18,15 +18,15 @@ bool is_shared(std::uint64_t cmp) noexcept {
   return std::uint64_t(cmp & SP_RW_SHARED_MASK) > 0;
 }
 
-uint64_t add_shared(uint64_t shared, int8_t amount) noexcept {
-  shared = shared >> 2;
-  shared = shared + amount;
-  shared = shared << 2;
-  return shared;
+uint64_t get_shared(uint64_t shared) noexcept {
+  return shared >> (2 * 8);
 }
 
-uint64_t get_shared(uint64_t shared) noexcept {
-  return shared >> 2;
+uint64_t add_shared(uint64_t shared, int8_t amount) noexcept {
+  shared = get_shared(shared);
+  shared = shared + amount;
+  shared = shared << (2 * 8);
+  return shared;
 }
 }
 
@@ -57,16 +57,16 @@ bool ReadWriteLock::try_shared_lock() noexcept {
   constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
 retry:
   if (!is_exclusive(cmp)) {
-    uint64_t shared = cmp & shared_mask;
-    shared = add_shared(shared, int8_t(1));
+    const uint64_t shared = cmp & shared_mask;
+    const uint64_t new_shared = add_shared(shared, int8_t(1));
 
     const uint64_t prepare(cmp & prep_mask);
     const uint64_t exclusive(0x00);
 
-    cmp = shared | prepare | exclusive;
-    const uint64_t value = shared | prepare | exclusive;
+    // cmp = shared | prepare | exclusive;
+    const uint64_t try_share = new_shared | prepare | exclusive;
 
-    if (!m_state.compare_exchange_weak(cmp, value)) {
+    if (!m_state.compare_exchange_weak(cmp, try_share)) {
       goto retry;
     }
     return true;
@@ -86,16 +86,16 @@ retry:
   assert(!is_exclusive(cmp));
   assert(is_shared(cmp));
   // 1. Decrement shared
-  uint64_t shared = cmp & shared_mask;
-  add_shared(shared, int8_t(-1));
+  const uint64_t shared = cmp & shared_mask;
+  const uint64_t new_shared = add_shared(shared, int8_t(-1));
   // 2. Prepare unaltered
   const uint64_t prepare = cmp & prep_mask;
   // 3. Zero out exclusive bit
   const uint64_t exclusive = cmp & ex_mask;
   // 4. Build state
-  const uint64_t value = shared | prepare | exclusive;
+  const uint64_t try_unshare = new_shared | prepare | exclusive;
 
-  if (!m_state.compare_exchange_weak(cmp, value)) {
+  if (!m_state.compare_exchange_weak(cmp, try_unshare)) {
     goto retry;
   }
 }
@@ -105,14 +105,14 @@ void ReadWriteLock::eager_exclusive_lock() noexcept {
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
 retry:
   // Shared
-  uint64_t shared = cmp & shared_mask;
+  const uint64_t shared = cmp & shared_mask;
   // Prepare
-  const uint64_t prepare(0);
+  const uint64_t prepare = 0x00;
   //
   cmp = shared | prepare | uint64_t(0x00);
-  const uint64_t ex_locked = cmp | uint64_t(0x01);
+  const uint64_t try_exclusive = cmp | uint64_t(0x01);
 
-  if (!m_state.compare_exchange_weak(cmp, ex_locked)) {
+  if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
     goto retry;
   }
 
@@ -121,15 +121,15 @@ retry:
 }
 
 void ReadWriteLock::lazy_exclusive_lock() noexcept {
-retry:
   const uint64_t shared(0x00);
   const uint64_t prepare(0x00);
   const uint64_t exclusive(0x00);
+retry:
   uint64_t cmp = shared | prepare | exclusive;
 
-  uint64_t value = shared | prepare | uint64_t(0x01);
+  const uint64_t try_exclusive = shared | prepare | uint64_t(0x01);
 
-  if (!m_state.compare_exchange_weak(cmp, value)) {
+  if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
     goto retry;
   }
 }
@@ -150,9 +150,9 @@ retry:
     shared = add_shared(shared, -shared_dec);
 
     const uint64_t prepare(0x00);
-    const uint64_t try_lock = shared | prepare | uint64_t(0x01);
+    const uint64_t try_exclusive = shared | prepare | uint64_t(0x01);
 
-    if (!m_state.compare_exchange_weak(cmp, try_lock)) {
+    if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
       goto retry;
     }
     return true;
@@ -169,9 +169,9 @@ retry:
   assert(is_exclusive(cmp));
   const uint64_t shared(cmp & shared_mask);
   const uint64_t prepare(cmp & prep_mask);
-  const uint64_t try_unlock = shared | prepare | uint64_t(0x00);
+  const uint64_t try_unexclusive = shared | prepare | uint64_t(0x00);
 
-  if (!m_state.compare_exchange_weak(cmp, try_unlock)) {
+  if (!m_state.compare_exchange_weak(cmp, try_unexclusive)) {
     goto retry;
   }
 }
@@ -191,7 +191,9 @@ retry:
     const uint64_t prepare(0x00);
     const uint64_t exclusive(0x00);
 
-    const uint64_t try_prepare = shared | uint64_t(0x0100) | exclusive;
+    const uint64_t new_prepare(0x01 << (1 * 8));
+
+    const uint64_t try_prepare = shared | new_prepare | exclusive;
 
     cmp = shared | prepare | exclusive;
 
@@ -205,17 +207,20 @@ retry:
 void ReadWriteLock::prepare_unlock() noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
+  constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
+  constexpr uint64_t ex_mask = SP_RW_EXCLUSIVE_MASK;
 retry:
   assert(is_prepare(cmp));
+  assert(!is_exclusive(cmp));
   const uint64_t shared(cmp & shared_mask);
-  const uint64_t prepare(0x0100);
-  const uint64_t exclusive(0x00);
+  const uint64_t prepare(cmp & prep_mask);
+  const uint64_t exclusive(cmp & ex_mask);
 
   cmp = shared | prepare | exclusive;
 
-  const uint64_t try_unlock = shared | uint64_t(0x00) | exclusive;
+  const uint64_t try_unprepare = shared | uint64_t(0x00) | exclusive;
 
-  if (!m_state.compare_exchange_weak(cmp, try_unlock)) {
+  if (!m_state.compare_exchange_weak(cmp, try_unprepare)) {
     goto retry;
   }
 }

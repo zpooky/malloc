@@ -1,6 +1,4 @@
 #include <cassert>
-#include <cstdio>
-#include <iostream>
 #include <mutex>
 #include <tuple>
 
@@ -37,7 +35,12 @@ static local::Pool &pool_for(local::Pools &pools, std::size_t sz) noexcept {
 } // pool_for()
 
 static std::tuple<void *, std::size_t> alloc(std::size_t sz) noexcept {
-  return global::alloc(sz);
+  // TODO
+  auto ret = global::alloc(sz);
+  if (ret) {
+    return std::make_tuple(ret, sz);
+  }
+  return std::make_tuple(nullptr, 0);
 } // alloc()
 
 /*
@@ -268,8 +271,3 @@ void sp_free(void *const dealloc) noexcept {
     assert(false);
   }
 } // sp_free()
-
-int main() {
-  // init();
-  printf("size NodeHeader:%lu\n", sizeof(header::Node));
-}
