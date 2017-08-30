@@ -2,8 +2,9 @@
 # Declaration of variables
 CXX = g++
 # using -std=gnu++17 because gtest uses functions only presisent in the gun dialect of c++
-CXXFLAGS = -enable-frame-pointers -std=gnu++17 -Wall -Wextra
+CXXFLAGS = -enable-frame-pointers -std=gnu++17 -Wall -Wextra -ggdb
 PROJECT_ROOT = ..
+GTEST_ROOT = $(PROJECT_ROOT)/external/googletest/googletest
 HEADER_DIRS = -I$(GTEST_ROOT)/include -I$(PROJECT_ROOT)
 LDLIBS = -L$(GTEST_ROOT)/make -lgtest_main -lpthread -L$(PROJECT_ROOT) -lsut
 
@@ -12,10 +13,10 @@ EXEC = thetest
 SOURCES = $(wildcard *.cpp)
 OBJECTS = $(SOURCES:.cpp=.o)
 
-.PHONY: test all clean gtest
+.PHONY: test all clean gtest sut
 
 # all {{{
-all: $(EXEC)
+all: sut $(EXEC)
 # }}}
 #
 # $(EXEC) {{{
@@ -35,7 +36,6 @@ clean:
 # }}}
 
 # gtest {{{
-GTEST_ROOT = $(PROJECT_ROOT)/external/googletest/googletest
 LIBGTEST_ROOT = $(GTEST_ROOT)/make
 gtest:
 	$(MAKE) -C $(GTEST_ROOT)/make all
@@ -48,6 +48,6 @@ sut:
 # }}}
 
 # test {{{
-test: sut all
+test: all
 	./$(EXEC)
 # }}}

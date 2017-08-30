@@ -1,8 +1,8 @@
 #include "ReadWriteLock.h"
 #include <cassert>
 
-#define SP_RW_PREPARE_MASK uint64_t(0xFF)
-#define SP_RW_EXCLUSIVE_MASK uint64_t(0xFF00)
+#define SP_RW_PREPARE_MASK uint64_t(0xFF00)
+#define SP_RW_EXCLUSIVE_MASK uint64_t(0xFF)
 #define SP_RW_SHARED_MASK ~uint64_t(SP_RW_PREPARE_MASK | SP_RW_EXCLUSIVE_MASK)
 
 namespace {
@@ -138,19 +138,25 @@ bool ReadWriteLock::try_exclusive_lock(bool prepare_unset,
                                        int8_t shared_dec) noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
+  constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
 retry:
   if (prepare_unset) {
     assert(is_prepare(cmp));
   }
 
-  if (!is_exclusive(cmp) && (!is_prepare(cmp) || prepare_unset)) {
-    uint64_t shared(cmp & shared_mask);
-    // assert no overflow?
-    assert((get_shared(shared) - shared_dec) <= get_shared(shared));
-    shared = add_shared(shared, -shared_dec);
+  const uint64_t shared(cmp & shared_mask);
+  // assert no overflow?
+  assert((get_shared(shared) - shared_dec) <= get_shared(shared));
+  const uint64_t new_shared = add_shared(shared, -shared_dec);
 
-    const uint64_t prepare(0x00);
-    const uint64_t try_exclusive = shared | prepare | uint64_t(0x01);
+  const uint64_t prepare(cmp & prep_mask);
+  const uint64_t new_prepare = prepare_unset ? 0x00 : prepare;
+
+  if (!has_shared(new_shared) && !is_exclusive(cmp) &&
+      !is_prepare(new_prepare)) {
+
+    const uint64_t try_exclusive = new_shared | new_prepare | uint64_t(0x01);
+    cmp = shared | prepare | uint64_t(0x00);
 
     if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
       goto retry;

@@ -41,5 +41,6 @@ GTAGS
 main
 tmp.*
 compile_commands.json
-main.exe.stackdump
+*.stackdump
 thetest
+.clang_complete
