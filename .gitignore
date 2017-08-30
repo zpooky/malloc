@@ -44,3 +44,5 @@ compile_commands.json
 *.stackdump
 thetest
 .clang_complete
+perf.data
+perf.data.old

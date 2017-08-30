@@ -15,7 +15,7 @@ Free *init_free(void *const head, std::size_t length,
   if (length > 0) {
     assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
     assert(length >= sizeof(Free));
-    memset(head, 0, length);
+    // memset(head, 0, length);
     return new (head) Free(length, next);
   }
   return nullptr;
@@ -30,7 +30,7 @@ Extent *init_extent(void *const raw, std::size_t bucket,
   new (nHdr) Node(length, bucket, extentIdxs);
 
   Extent *eHdr = extent(raw);
-  memset(raw, 0, length);
+  // memset(raw, 0, length);
   return new (eHdr) Extent;
 } // init()
 
