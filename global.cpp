@@ -31,9 +31,14 @@ struct State {
 
 static State state;
 
-void free_deque(header::Free &head, header::Free &target) noexcept {
+void free_dequeue(header::Free &head, header::Free &target) noexcept {
   head.next.store(target.next.load());
   target.next.store(nullptr);
+}
+
+void free_enqueue(header::Free &head, header::Free &target) {
+  target.next.store(head.next.load());
+  head.next.store(&target);
 }
 
 header::Free *find_free(size_t size) noexcept {
@@ -53,7 +58,7 @@ retry:
             if (headGuard) {
               sp::TryExclusiveLock exGuard(preGuard);
               if (exGuard) {
-                free_deque(*head, *current);
+                free_dequeue(*head, *current);
                 return current;
               } else {
                 assert(false);
@@ -111,13 +116,40 @@ header::Free *alloc_free(size_t atLeast) noexcept {
   return nullptr;
 }
 
-void return_free(header::Free *free) noexcept {
-  if (free) {
-    sp::SharedLock guard(state.free.next_lock);
-    header::Free *next = state.free.next.load(std::memory_order_acquire);
+void return_free(header::Free *const toReturn) noexcept {
+  if (toReturn) {
+  start:
+    header::Free *head = &state.free;
   retry:
-    if (!state.free.next.compare_exchange_strong(next, free)) {
-      goto retry;
+    if (true) {
+      sp::TrySharedLock curShGuard(head->next_lock);
+      if (curShGuard) {
+
+        header::Free *current = head->next.load(std::memory_order_relaxed);
+        if (current) {
+
+          // matching
+          sp::TryPrepareLock curPreGuard(curShGuard);
+          if (curPreGuard) {
+
+            sp::TryExclusiveLock headGuard(current->next_lock);
+            if (headGuard) {
+
+              sp::TryExclusiveLock curExGuard(curPreGuard);
+              if (curExGuard) {
+
+                free_enqueue(*current, *toReturn);
+                return;
+              } /*Current Exclusve Guard*/ else {
+                head = current->next.load(std::memory_order_relaxed);
+                goto retry;
+              }
+            } /*Next Exclusive Guard*/
+          }   /*Current Prepare Guard*/
+        }
+      } /*Current Share Guard*/ else {
+        goto start;
+      }
     }
   }
 }
@@ -166,7 +198,8 @@ void *alloc(std::size_t p_length) noexcept {
   return nullptr;
 } // alloc()
 
-void dealloc(void *, std::size_t) noexcept {
+void dealloc(void *const start, std::size_t length) noexcept {
+  return return_free(start, length);
 }
 
 bool free(void *const) noexcept {

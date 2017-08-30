@@ -12,7 +12,7 @@ namespace header {
 
 Free *init_free(void *const head, std::size_t length,
                 header::Free *const next) noexcept {
-  if (length > 0) {
+  if (head && length > 0) {
     assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
     assert(length >= sizeof(Free));
     // memset(head, 0, length);
