@@ -8,7 +8,7 @@
 #include <vector>
 
 template <typename Function>
-void time(const char *msg, Function f) {
+static void time(const char *msg, Function f) {
   auto t1 = std::chrono::high_resolution_clock::now();
   f();
   auto t2 = std::chrono::high_resolution_clock::now();
@@ -18,11 +18,32 @@ void time(const char *msg, Function f) {
       << "ms" << std::endl;
 }
 
+template <typename T>
+static bool in_range(T &b, T &e) {
+  uintptr_t strtB = reinterpret_cast<uintptr_t>(std::get<0>(b));
+  std::size_t lenB = std::get<1>(b);
+
+  uintptr_t strtE = reinterpret_cast<uintptr_t>(std::get<0>(e));
+  std::size_t lenE = std::get<1>(e);
+
+  return (strtB >= strtE && strtB < (strtE + lenE)) ||
+         (strtE >= strtB && strtE < (strtB + lenB));
+}
+
 template <typename C>
-void check_overlap(C &ptrs) {
+static void check_overlap(C &ptrs) {
   std::sort(ptrs.begin(), ptrs.end());
   auto current = ptrs.begin();
   while (current != ptrs.end()) {
+    auto it = current;
+    while (it++ != ptrs.end()) {
+      if (in_range(*current, *it)) {
+        printf("    current[%p, %zu]\n\t it[%p, %zu]\n",     //
+               std::get<0>(*current), std::get<1>(*current), //
+               std::get<0>(*it), std::get<1>(*it));
+        assert(false);
+      }
+    }
     // printf("%p\n", std::get<0>(*current));
     current++;
   }
@@ -47,7 +68,9 @@ int main() {
     }
   });
   printf("total: %zu\n", alloc);
-  check_overlap(ptrs);
+  time("check_overlap", [&]() { //
+    check_overlap(ptrs);
+  });
 
   time("dealloc", [&]() {
     for (auto &l : ptrs) {

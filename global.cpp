@@ -146,7 +146,8 @@ void return_free(header::Free *const toReturn) noexcept {
                 free_enqueue(*current, *toReturn);
                 return;
               } /*Current Exclusive Guard*/ else {
-                head = current;//TODO we need to retain a shared head->next lock when we continue
+                head = current; // TODO we need to retain a shared head->next
+                                // lock when we continue
                 goto retry;
               }
             } /*Next Exclusive Guard*/ else {
