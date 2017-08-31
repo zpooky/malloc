@@ -72,6 +72,9 @@ int main() {
     check_overlap(ptrs);
   });
 
+  printf("free: %zu\n", test::watch_free().size());
+  // assert(test::watch_free().size() == 0);
+
   time("dealloc", [&]() {
     for (auto &l : ptrs) {
       //   printf("alloc: %zu\n", std::get<1>(l));
@@ -80,6 +83,7 @@ int main() {
       global::dealloc(ptr, len);
     }
   });
+  printf("free: %zu\n", test::watch_free().size());
 
   time("alloc2", [&]() {
     int i = 0;
@@ -90,6 +94,7 @@ int main() {
       global::dealloc(ptr, sz);
     }
   });
+  printf("free: %zu\n", test::watch_free().size());
   // }
   printf("done\n");
 }

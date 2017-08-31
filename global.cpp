@@ -175,6 +175,24 @@ void return_free(void *const ptr, size_t length) noexcept {
 
 } // namespace
 
+#ifdef SP_TEST
+namespace test { //
+std::vector<std::tuple<void *, std::size_t>> watch_free() {
+  std::vector<std::tuple<void *, std::size_t>> result;
+  header::Free *head = &state.free;
+start:
+  if (head) {
+    result.emplace_back(head, head->size);
+    head = head->next.load(std::memory_order_acquire);
+    goto start;
+  }
+
+  return result;
+}
+
+} // namespace test
+#endif
+
 /*
  *===========================================================
  *=======GLOBAL==============================================
