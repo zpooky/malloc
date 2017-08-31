@@ -61,6 +61,7 @@ retry:
                 free_dequeue(*head, *current);
                 return current;
               } else {
+                // bug
                 assert(false);
               }
             } else {
@@ -92,8 +93,7 @@ retry:
   return nullptr;
 }
 
-header::Free *alloc_free(size_t atLeast) noexcept {
-  void *res = nullptr;
+header::Free *alloc_free(const size_t atLeast) noexcept {
   {
     std::lock_guard<std::mutex> guard(state.brk_lock);
     // if (state.brk_position == nullptr) {
@@ -103,13 +103,18 @@ header::Free *alloc_free(size_t atLeast) noexcept {
     std::size_t allocSz(0);
     allocSz = std::max(state.brk_alloc, SP_ALLOC_INITIAL_ALLOC);
     allocSz = std::max(atLeast, allocSz);
-    // TODO check size wrap around
+  // TODO check size wrap around
 
-    // void *newPos = state.brk_position + allocSz;
-    res = ::sbrk(allocSz);
+  // void *newPos = state.brk_position + allocSz;
+  retry:
+    void *const res = ::sbrk(allocSz);
     if (res != (void *)-1) {
       state.brk_alloc = state.brk_alloc + allocSz;
       return header::init_free(res, allocSz, nullptr);
+    } else if (allocSz > atLeast) {
+      allocSz = allocSz / 2;
+      allocSz = std::max(allocSz, atLeast);
+      goto retry;
     }
   }
 
@@ -117,6 +122,7 @@ header::Free *alloc_free(size_t atLeast) noexcept {
 }
 
 void return_free(header::Free *const toReturn) noexcept {
+  // [head]->[current]->...
   if (toReturn) {
   start:
     header::Free *head = &state.free;
@@ -125,12 +131,11 @@ void return_free(header::Free *const toReturn) noexcept {
       sp::TrySharedLock curShGuard(head->next_lock);
       if (curShGuard) {
 
-        header::Free *current = head->next.load(std::memory_order_relaxed);
-        if (current) {
+        sp::TryPrepareLock curPreGuard(curShGuard);
+        if (curPreGuard) {
 
-          // matching
-          sp::TryPrepareLock curPreGuard(curShGuard);
-          if (curPreGuard) {
+          header::Free *current = head->next.load(std::memory_order_relaxed);
+          if (current) {
 
             sp::TryExclusiveLock headGuard(current->next_lock);
             if (headGuard) {
@@ -140,17 +145,26 @@ void return_free(header::Free *const toReturn) noexcept {
 
                 free_enqueue(*current, *toReturn);
                 return;
-              } /*Current Exclusve Guard*/ else {
-                head = current->next.load(std::memory_order_relaxed);
+              } /*Current Exclusive Guard*/ else {
+                head = current;//TODO we need to retain a shared head->next lock when we continue
                 goto retry;
               }
-            } /*Next Exclusive Guard*/
-          }   /*Current Prepare Guard*/
+            } /*Next Exclusive Guard*/ else {
+              // bug - if prepare a exclusive should always succeed?
+              assert(false);
+            }
+          } /*current*/ else {
+            free_enqueue(*head, *toReturn);
+            return;
+          }
+        } /*Current Prepare Guard*/ else {
+          assert(false); // TODO
         }
       } /*Current Share Guard*/ else {
         goto start;
       }
     }
+    assert(false); // leak memory here
   }
 }
 

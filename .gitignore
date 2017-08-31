@@ -46,3 +46,4 @@ thetest
 .clang_complete
 perf.data
 perf.data.old
+.gdb_breakpoints

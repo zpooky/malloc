@@ -23,7 +23,7 @@ void check_overlap(C &ptrs) {
   std::sort(ptrs.begin(), ptrs.end());
   auto current = ptrs.begin();
   while (current != ptrs.end()) {
-    printf("%p\n", std::get<0>(*current));
+    // printf("%p\n", std::get<0>(*current));
     current++;
   }
 }
@@ -31,6 +31,7 @@ void check_overlap(C &ptrs) {
 int main() {
   srand(0);
   std::vector<std::tuple<void *, std::size_t>> ptrs;
+  std::size_t alloc(0);
 
   // while (true) {
   time("alloc", [&]() {
@@ -38,11 +39,14 @@ int main() {
     while (i++ < 10000) {
       std::size_t sz(((rand() % 100) + 1) * 4096);
       // std::size_t sz(i * 4096);
+      // printf("%zu\n", sz);
       void *ptr = global::alloc(sz);
       assert(ptr);
+      alloc += sz;
       ptrs.emplace_back(ptr, sz);
     }
   });
+  printf("total: %zu\n", alloc);
   check_overlap(ptrs);
 
   time("dealloc", [&]() {
