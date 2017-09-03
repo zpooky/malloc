@@ -118,7 +118,7 @@ PoolsRAII::PoolsRAII() noexcept //
 
 // class Pools {{{
 Pools::Pools() noexcept //
-    : pools{nullptr} {
+    : pools{nullptr}, reclaimed{false} {
   pools = global::alloc_pool();
 }
 

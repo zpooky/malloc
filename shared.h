@@ -161,6 +161,8 @@ struct PoolsRAII { //
 class Pools { //
 private:
   PoolsRAII *pools;
+  //no thread holds this instance but all memeory is not reclaimed
+  std::atomic<bool> reclaimed;
 
 public:
   Pools() noexcept;
