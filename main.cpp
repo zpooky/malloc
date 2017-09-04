@@ -54,6 +54,8 @@ int main() {
   std::vector<std::tuple<void *, std::size_t>> ptrs;
   std::size_t alloc(0);
 
+  printf("free: %zu\n", test::watch_free().size());
+
   // while (true) {
   time("alloc", [&]() {
     int i = 0;

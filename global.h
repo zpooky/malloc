@@ -30,6 +30,7 @@ void release_pool(local::PoolsRAII *) noexcept;
 #ifdef SP_TEST
 namespace test { //
 std::vector<std::tuple<void *, std::size_t>> watch_free();
+void clear_free();
 }
 #endif
 

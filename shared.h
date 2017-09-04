@@ -102,6 +102,8 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
   }
 };
 
+void debug_print_free(Free *const head);
+
 static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 

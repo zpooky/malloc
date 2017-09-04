@@ -1,17 +1,49 @@
 #include "ReadWriteLock.h"
 #include <cassert>
+#include <utility>
 
 #define SP_RW_PREPARE_MASK uint64_t(0xFF00)
 #define SP_RW_EXCLUSIVE_MASK uint64_t(0xFF)
 #define SP_RW_SHARED_MASK ~uint64_t(SP_RW_PREPARE_MASK | SP_RW_EXCLUSIVE_MASK)
+
+// #define SP_DEBUG_RW
+#ifdef SP_DEBUG_RW
+#include <algorithm>
+#include <stdio.h>
+#include <string.h>
+template <typename T, std::size_t SIZE>
+static void internal_print_state(T state, char (&hexed)[SIZE]) {
+  char *arr = (char *)&state;
+  const std::size_t hex_cap = SIZE - 1;
+  memset(hexed, 0, SIZE);
+
+  std::size_t hex_length = 0;
+  std::size_t i = 0;
+  while (i < sizeof(state) && hex_length < hex_cap) {
+    char buff[128];
+    std::size_t buffLength = sprintf(buff, "%02x", arr[i++]);
+    memcpy(hexed + hex_length, buff, buffLength);
+
+    hex_length += buffLength;
+  }
+}
+#endif
 
 namespace {
 bool is_exclusive(std::uint64_t cmp) noexcept {
   return std::uint64_t(cmp & SP_RW_EXCLUSIVE_MASK) > 0;
 }
 
+uint8_t get_exclusive(std::uint64_t state) noexcept {
+  return uint8_t(state & 0xFF);
+}
+
 bool is_prepare(std::uint64_t cmp) noexcept {
   return std::uint64_t(cmp & SP_RW_PREPARE_MASK) > 0;
+}
+
+uint8_t get_prepare(std::uint64_t state) noexcept {
+  return uint8_t((state >> 8) & 0xFF);
 }
 
 bool has_shared(std::uint64_t cmp) noexcept {
@@ -29,6 +61,46 @@ uint64_t add_shared(uint64_t shared, int8_t amount) noexcept {
   return shared;
 }
 } // namespace
+static void print_state(const char *ctx, const sp::ReadWriteLock *lock) {
+#ifdef SP_DEBUG_RW
+  const char *C[]{
+      "\e[91m", "\e[92m", "\e[95m"
+      // , "\e[32m", " \e[31m", "\e[36m", "\e[90m"
+  };
+  //
+
+  uint64_t state = lock->m_state.load(std::memory_order_acquire);
+
+  void *const t = (void *)lock;
+  char cshared[sizeof(uint64_t) * 4];
+  char cprepare[sizeof(uint64_t) * 4];
+  char cex[sizeof(uint64_t) * 4];
+
+  internal_print_state(get_shared(state), cshared);
+  internal_print_state(get_prepare(state), cprepare);
+  internal_print_state(get_exclusive(state), cex);
+
+  char context[35];
+  memset(context, ' ', sizeof(context));
+  context[sizeof(context) - 1] = 0;
+
+  size_t ctx_len = std::max(int64_t(0), int64_t(strlen(ctx) - 1));
+  size_t length = std::min(sizeof(context), ctx_len);
+
+  memcpy(context, ctx, length);
+
+  uintptr_t p = reinterpret_cast<uintptr_t>(lock);
+  // printf("s%lu,%d,%d",get_shared(state))
+  printf("%s"
+         "[%p]:"
+         "s[\e[95m%s\e[0m]"
+         "pre[\e[92m%s\e[0m]"
+         "ex[\e[93m%s\e[0m]\n",
+         ctx,                     //
+         /*C[p % sizeof(C)],*/ t, //
+         cshared, cprepare, cex);
+#endif
+}
 
 /*
  * ReadWriteLock
@@ -250,7 +322,9 @@ bool ReadWriteLock::has_exclusive_lock() const noexcept {
 namespace sp {
 SharedLock::SharedLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(&p_lock) {
+  print_state("shared_lock_before", &p_lock);
   m_lock->shared_lock();
+  print_state("shared_lock_after", &p_lock);
 }
 
 SharedLock::~SharedLock() noexcept {
@@ -273,20 +347,30 @@ SharedLock::operator bool() const noexcept {
 namespace sp {
 TrySharedLock::TrySharedLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(nullptr) {
+  print_state("try_shared_lock_before", &p_lock);
   if (p_lock.try_shared_lock()) {
     m_lock = &p_lock;
+    print_state("try_shared_lock_after[sucess]", &p_lock);
+  } else {
+    print_state("try_shared_lock_after[fail]", &p_lock);
   }
 }
 
 TrySharedLock::~TrySharedLock() noexcept {
   if (m_lock) {
+    print_state("try_shared_unlock_before", m_lock);
     m_lock->shared_unlock();
+    print_state("try_shared_unlock_after", m_lock);
     m_lock = nullptr;
   }
 }
 
 TrySharedLock::operator bool() const noexcept {
   return m_lock != nullptr;
+}
+
+void TrySharedLock::swap(TrySharedLock &o) noexcept {
+  std::swap(m_lock, o.m_lock);
 }
 
 } // namespace sp
@@ -297,19 +381,27 @@ TrySharedLock::operator bool() const noexcept {
 namespace sp {
 TryPrepareLock::TryPrepareLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(nullptr) {
+  print_state("try_prepare_lock_before[RW]", &p_lock);
   if (p_lock.try_prepare_lock()) {
+    print_state("try_prepare_lock_after[sucess][RW]", &p_lock);
     m_lock = &p_lock;
+  } else {
+    print_state("try_prepare_lock_after[fail][RW]", &p_lock);
   }
 }
 
 TryPrepareLock::TryPrepareLock(TrySharedLock &p_lock) noexcept //
     : m_lock(nullptr) {
   if (p_lock) {
+    print_state("try_prepare_lock_before[TS]", p_lock.m_lock);
     // Decrement shared count and set prepare flag
     int8_t shared_dec = 1;
     if (p_lock.m_lock->try_prepare_lock(shared_dec)) {
+      print_state("try_prepare_lock_after[success][TS]", p_lock.m_lock);
       m_lock = p_lock.m_lock;
       p_lock.m_lock = nullptr;
+    } else {
+      print_state("try_prepare_lock_after[fail][TS]", p_lock.m_lock);
     }
   } else {
     assert(false);
@@ -318,7 +410,9 @@ TryPrepareLock::TryPrepareLock(TrySharedLock &p_lock) noexcept //
 
 TryPrepareLock::~TryPrepareLock() noexcept {
   if (m_lock) {
+    print_state("try_prepare_unlock_before", m_lock);
     m_lock->prepare_unlock();
+    print_state("try_prepare_unlock_after", m_lock);
     m_lock = nullptr;
   }
 }
@@ -381,14 +475,20 @@ LazyExclusiveLock::operator bool() const noexcept {
 namespace sp {
 TryExclusiveLock::TryExclusiveLock(ReadWriteLock &p_lock) noexcept //
     : m_lock{nullptr} {
+  print_state("try_exclusive_lock_before[RW]", &p_lock);
   if (p_lock.try_exclusive_lock()) {
+    print_state("try_exclusive_lock_after[success][RW]", &p_lock);
     m_lock = &p_lock;
+  } else {
+    print_state("try_exclusive_lock_after[fail][RW]", &p_lock);
   }
 }
 
 TryExclusiveLock::TryExclusiveLock(TrySharedLock &p_lock) noexcept //
     : m_lock{nullptr} {
+  print_state("try_exclusive_lock_before[TS]", p_lock.m_lock);
   if (p_lock) {
+    print_state("try_exclusive_lock_after[success][TS]", p_lock.m_lock);
     // Decrement shared and set exclusive flag
     bool prepare_unset = false;
     int8_t shared_dec = 1;
@@ -403,7 +503,9 @@ TryExclusiveLock::TryExclusiveLock(TrySharedLock &p_lock) noexcept //
 
 TryExclusiveLock::TryExclusiveLock(TryPrepareLock &p_lock) noexcept //
     : m_lock{nullptr} {
+  print_state("try_exclusive_lock_before[TP]", p_lock.m_lock);
   if (p_lock) {
+    print_state("try_exclusive_lock_after[success][TP]", p_lock.m_lock);
     // Unset prepare flag and set exclusive flag
     bool prepare_unset = true;
     if (p_lock.m_lock->try_exclusive_lock(prepare_unset)) {
@@ -417,7 +519,9 @@ TryExclusiveLock::TryExclusiveLock(TryPrepareLock &p_lock) noexcept //
 
 TryExclusiveLock::~TryExclusiveLock() noexcept {
   if (m_lock) {
+    print_state("try_exclusive_unlock_before", m_lock);
     m_lock->exclusive_unlock();
+    print_state("try_exclusive_unlock_after", m_lock);
     m_lock = nullptr;
   }
 }

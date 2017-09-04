@@ -7,9 +7,10 @@
 namespace sp {
 class ReadWriteLock { //
 private:
+public:
+  // TODO encapsulation
   std::atomic<std::uint64_t> m_state;
 
-public:
   ReadWriteLock() noexcept;
   ~ReadWriteLock() noexcept;
 
@@ -65,6 +66,7 @@ public:
   ~TrySharedLock() noexcept;
 
   operator bool() const noexcept;
+  void swap(TrySharedLock &) noexcept;
 };
 
 /*

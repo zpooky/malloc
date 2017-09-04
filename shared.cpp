@@ -10,6 +10,17 @@
  */
 namespace header {
 
+void debug_print_free(Free *const head) {
+  if (head) {
+
+    void *t = reinterpret_cast<void *>(head);
+    printf("free[%p,%zu]", t, head->size);
+    debug_print_free(head->next.load());
+  } else {
+    printf("\n");
+  }
+}
+
 Free *init_free(void *const head, std::size_t length,
                 header::Free *const next) noexcept {
   if (head && length > 0) {

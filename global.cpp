@@ -32,13 +32,15 @@ struct State {
 static State state;
 
 void free_dequeue(header::Free &head, header::Free &target) noexcept {
+  assert(&head != &target);
   head.next.store(target.next.load());
   target.next.store(nullptr);
 }
 
-void free_enqueue(header::Free &head, header::Free &target) {
-  target.next.store(head.next.load());
-  head.next.store(&target);
+void free_enqueue(header::Free *const head, header::Free *const target) {
+  assert(head != target);
+  target->next.store(head->next.load());
+  head->next.store(target);
 }
 
 header::Free *find_free(size_t size) noexcept {
@@ -94,6 +96,9 @@ retry:
 }
 
 header::Free *alloc_free(const size_t atLeast) noexcept {
+#ifdef SP_MALLOC_TEST_NO_ALLOC
+  assert(false);
+#endif
   {
     std::lock_guard<std::mutex> guard(state.brk_lock);
     // if (state.brk_position == nullptr) {
@@ -122,47 +127,58 @@ header::Free *alloc_free(const size_t atLeast) noexcept {
 }
 
 void return_free(header::Free *const toReturn) noexcept {
-  // [head]->[current]->...
+  // [Head]->[Current]->[Next]
   if (toReturn) {
   start:
     header::Free *head = &state.free;
+    sp::TrySharedLock cur_shared_guard(head->next_lock);
+    if (!cur_shared_guard) {
+      //...
+      goto start;
+    }
   retry:
     if (true) {
-      sp::TrySharedLock curShGuard(head->next_lock);
-      if (curShGuard) {
+      // [Current:SHARED][Next:-]
 
-        sp::TryPrepareLock curPreGuard(curShGuard);
-        if (curPreGuard) {
+      sp::TryPrepareLock cur_pre_guard(cur_shared_guard);
+      if (cur_pre_guard) {
+        // [Current:PREPARE][Next:-]
 
-          header::Free *current = head->next.load(std::memory_order_relaxed);
-          if (current) {
+        header::Free * const current = head->next.load(std::memory_order_relaxed);
+        if (current) {
 
-            sp::TryExclusiveLock headGuard(current->next_lock);
-            if (headGuard) {
+          sp::TryExclusiveLock next_exc_guard(current->next_lock);
+          if (next_exc_guard) {
+            // [Current:PREPARE][Next:EXCLUSIVE]
 
-              sp::TryExclusiveLock curExGuard(curPreGuard);
-              if (curExGuard) {
+            sp::TryExclusiveLock cur_exc_guard(cur_pre_guard);
+            if (cur_exc_guard) {
+              // [Current:EXCLUSIVE][Next:EXCLUSIVE]
 
-                free_enqueue(*current, *toReturn);
-                return;
-              } /*Current Exclusive Guard*/ else {
-                head = current; // TODO we need to retain a shared head->next
-                                // lock when we continue
-                goto retry;
-              }
-            } /*Next Exclusive Guard*/ else {
-              // bug - if prepare a exclusive should always succeed?
+              free_enqueue(current, toReturn);
+              return;
+            } /*Current Exclusive Guard*/ else {
+              // bug - if PREPARE then a exclusive should always succeed?
               assert(false);
             }
-          } /*current*/ else {
-            free_enqueue(*head, *toReturn);
-            return;
+          } /*Next Exclusive Guard*/ else {
+            sp::TrySharedLock next_shared_guard(current->next_lock);
+            if (next_shared_guard) {
+              cur_shared_guard.swap(next_shared_guard);
+              head = current;
+              goto retry;
+            } else {
+              //...?
+              goto start;
+            }
           }
-        } /*Current Prepare Guard*/ else {
-          assert(false); // TODO
+        } /*current*/ else {
+          // current == nullptr
+          free_enqueue(head, toReturn);
+          return;
         }
-      } /*Current Share Guard*/ else {
-        goto start;
+      } /*Current Prepare Guard*/ else {
+        assert(false); // TODO
       }
     }
     assert(false); // leak memory here
@@ -170,7 +186,8 @@ void return_free(header::Free *const toReturn) noexcept {
 }
 
 void return_free(void *const ptr, size_t length) noexcept {
-  return return_free(header::init_free(ptr, length, nullptr));
+  header::Free *const toReturn = header::init_free(ptr, length, nullptr);
+  return return_free(toReturn);
 }
 
 } // namespace
@@ -179,15 +196,20 @@ void return_free(void *const ptr, size_t length) noexcept {
 namespace test { //
 std::vector<std::tuple<void *, std::size_t>> watch_free() {
   std::vector<std::tuple<void *, std::size_t>> result;
-  header::Free *head = &state.free;
+  header::Free *head = state.free.next.load();
+  std::size_t i = 0;
 start:
   if (head) {
     result.emplace_back(head, head->size);
     head = head->next.load(std::memory_order_acquire);
+    // printf("%zu-%p,%zu\n", ++i, reinterpret_cast<void *>(head), head->size);
     goto start;
   }
 
   return result;
+}
+void clear_free() {
+  state.free.next.store(nullptr);
 }
 
 } // namespace test
