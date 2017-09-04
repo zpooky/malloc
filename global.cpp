@@ -97,7 +97,7 @@ retry:
 
 header::Free *alloc_free(const size_t atLeast) noexcept {
 #ifdef SP_MALLOC_TEST_NO_ALLOC
-  assert(false);
+  exit(1);
 #endif
   {
     std::lock_guard<std::mutex> guard(state.brk_lock);
@@ -144,7 +144,8 @@ void return_free(header::Free *const toReturn) noexcept {
       if (cur_pre_guard) {
         // [Current:PREPARE][Next:-]
 
-        header::Free * const current = head->next.load(std::memory_order_relaxed);
+        header::Free *const current =
+            head->next.load(std::memory_order_relaxed);
         if (current) {
 
           sp::TryExclusiveLock next_exc_guard(current->next_lock);

@@ -14,11 +14,12 @@ static_assert(64 == alignof(dummy), "");
 static bool in_range(void *const base, size_t length, void *const e,
                      size_t e_length) {
   uintptr_t in = reinterpret_cast<uintptr_t>(e);
+  uintptr_t inEnd = in + e_length;
 
   uintptr_t rangeStart = reinterpret_cast<uintptr_t>(base);
   uintptr_t rangeEnd = rangeStart + length;
 
-  return (in >= rangeStart && in < rangeEnd) && in + length <= rangeEnd;
+  return (in >= rangeStart && in < rangeEnd) && (inEnd <= rangeEnd);
 }
 
 template <typename T>
@@ -35,7 +36,8 @@ static bool in_range(T &b, T &e) {
 
 template <typename Points>
 static void assert_no_overlap(Points &ptrs) {
-  std::sort(ptrs.begin(), ptrs.end());
+  // std::sort(ptrs.begin(), ptrs.end());
+  printf("assert_no_overlap: %zu\n", ptrs.size());
   auto current = ptrs.begin();
   while (current != ptrs.end()) {
     auto it = current;
@@ -53,26 +55,50 @@ static void assert_no_overlap(Points &ptrs) {
 }
 
 template <size_t SIZE>
-static void dummy_dealloc_setup(uint8_t (&range)[SIZE], size_t sz) {
+static void dummy_dealloc_setup(uint8_t (*range)[SIZE], size_t bucketSz) {
   size_t offset = 0;
   size_t i = 0;
-  for (; offset < SIZE; offset = ++i * sz) {
-    ASSERT_TRUE(offset + sz <= SIZE);
-    void *const start = reinterpret_cast<void *>(range + offset);
+  for (; offset < SIZE; offset = ++i * bucketSz) {
+    ASSERT_TRUE(offset + bucketSz <= SIZE);
+    void *const start = (void *)(reinterpret_cast<uintptr_t>(range) + offset);
     // printf("dealloc[%p,%zu]\n", start, sz);
-    global::dealloc(start, sz);
+    global::dealloc(start, bucketSz);
   }
   printf("dummy_dealloc_setup: %zu\n", i);
 }
 
 template <size_t SIZE>
-static void assert_dummy_dealloc(uint8_t (&range)[SIZE], size_t sz) {
+static void dummy_dealloc_random_setup(uint8_t (*range)[SIZE],
+                                       size_t bucketSz) {
+  std::vector<void *> points;
+  size_t offset = 0;
+  size_t i = 0;
+  for (; offset < SIZE; offset = ++i * bucketSz) {
+    ASSERT_TRUE(offset + bucketSz <= SIZE);
+    void *const start = (void *)(reinterpret_cast<uintptr_t>(range) + offset);
+    points.push_back(start);
+  }
+  std::random_shuffle(points.begin(), points.end());
+  for (auto &start : points) {
+    global::dealloc(start, bucketSz);
+  }
+}
+
+template <size_t SIZE>
+static void assert_dummy_dealloc(uint8_t (*range)[SIZE], size_t bucketSz) {
   auto free = test::watch_free();
-  ASSERT_EQ(SIZE / sz, free.size());
+  ASSERT_EQ(SIZE / bucketSz, free.size());
   for (auto &current : free) {
-    if (!in_range(&range, sizeof(range), std::get<0>(current), sz)) {
-      printf("range[%p,%zu]", &range, sizeof(range));
-      printf("current[%p,%zu]\n", std::get<0>(current), std::get<1>(current));
+    void *const cptr = std::get<0>(current);
+    size_t csz = std::get<1>(current);
+    ASSERT_EQ(csz, bucketSz);
+    if (!in_range(range, SIZE, cptr, csz)) {
+      uintptr_t rangeStartPtr = reinterpret_cast<uintptr_t>(range);
+      void *const rangeStart = reinterpret_cast<void *>(rangeStartPtr);
+      void *const rangeEnd = reinterpret_cast<void *>(rangeStartPtr + SIZE);
+
+      printf("range[%p-%p]", rangeStart, rangeEnd);
+      printf("current[%p,%zu]\n", cptr, csz);
       ASSERT_TRUE(false);
     }
   }
@@ -80,12 +106,25 @@ static void assert_dummy_dealloc(uint8_t (&range)[SIZE], size_t sz) {
 }
 
 template <size_t SIZE>
-static void assert_dummy_alloc(uint8_t (&range)[SIZE], size_t sz) {
-  for (size_t i = 0; i < SIZE; i += sz) {
-    void *const current = global::alloc(sz);
-    if (!in_range(&range, sizeof(range), current, sz)) {
-      printf("range[%p,%zu]", &range, sizeof(range));
-      printf("current[%p,%zu]\n", current, sz);
+static void assert_dummy_alloc(uint8_t (*range)[SIZE], size_t bucketSz) {
+  for (size_t i = 0; i < SIZE; i += bucketSz) {
+    void *const current = global::alloc(bucketSz);
+    if (!in_range(range, SIZE, current, bucketSz)) {
+      uintptr_t rangeStartPtr = reinterpret_cast<uintptr_t>(range);
+      void *const rangeStart = reinterpret_cast<void *>(rangeStartPtr);
+      void *const rangeEnd = reinterpret_cast<void *>(rangeStartPtr + SIZE);
+
+      printf("range[%p-%p]", rangeStart, rangeEnd);
+      printf("current[%p,%zu]\n", current, bucketSz);
+      printf("rangeStart=%p\n", rangeStart);
+      printf("rangeEnd=%p\n", rangeEnd);
+      printf("curStart=%p\n", current);
+      void *curEnd = (void *)(reinterpret_cast<uintptr_t>(current) + bucketSz);
+      printf("curEnd=%p\n", curEnd);
+      printf("rangeStart > curStart and curStart < rangeEnd and curEnd <= "
+             "rangeEnd\n");
+      printf("%p > %p and %p < %p and %p <= %p\n", rangeStart, current, current,
+             rangeEnd, curEnd, rangeEnd);
       ASSERT_TRUE(false);
     }
   }
@@ -96,53 +135,75 @@ static void assert_dummy_alloc(uint8_t (&range)[SIZE], size_t sz) {
 class GlobalTest : public testing::TestWithParam<size_t> {
 public:
   virtual void SetUp() {
-    ASSERT_EQ(size_t(0), test::watch_free().size());
+    // ASSERT_EQ(size_t(0), test::watch_free().size());
   }
   virtual void TearDown() {
-    ASSERT_EQ(size_t(0), test::watch_free().size());
+    // ASSERT_EQ(size_t(0), test::watch_free().size());
   }
 };
 
 /*Setup Parameters*/
 INSTANTIATE_TEST_CASE_P(Default, GlobalTest,
-                        ::testing::Values(64, 128, 256, 512, 1024, 2048, 4096,
-                                          8192, 16384));
+                        ::testing::Values(64 //
+                                          ,
+                                          128, 256, 512, 1024, 2048, 4096, 8192,
+                                          16384 //
+                                          ));
 /*Test*/
 TEST_P(GlobalTest, dealloc_alloc_symmetric) {
+  ASSERT_EQ(size_t(0), test::watch_free().size());
   const size_t sz = GetParam();
 
   const size_t SIZE = 1024;
   alignas(64) uint8_t range[SIZE * 64];
-  dummy_dealloc_setup(range, sz);
+  dummy_dealloc_setup(&range, sz);
 
-  assert_dummy_dealloc(range, sz);
+  assert_dummy_dealloc(&range, sz);
 
-  assert_dummy_alloc(range, sz);
+  assert_dummy_alloc(&range, sz);
+  ASSERT_EQ(size_t(0), test::watch_free().size());
 }
 
-// TEST_P(GlobalTest, dealloc_doubling_alloc) {
-//   const size_t sz = GetParam();
-//
-//   const size_t SIZE = 1024;
-//   alignas(64) uint8_t range[SIZE * 64];
-//   dummy_dealloc_setup(range, sz);
-//
-//   assert_dummy_dealloc(range, sz);
-//
-//   assert_dummy_alloc(range, sz * 2);
-// }
-//
-// TEST_P(GlobalTest, dealloc_half_alloc) {
-//   const size_t sz = GetParam();
-//
-//   const size_t SIZE = 1024;
-//   alignas(64) uint8_t range[SIZE * 64];
-//   dummy_dealloc_setup(range, sz);
-//
-//   assert_dummy_dealloc(range, sz);
-//
-//   assert_dummy_alloc(range, sz / 2);
-// }
+TEST_P(GlobalTest, dealloc_doubling_alloc) {
+  ASSERT_EQ(size_t(0), test::watch_free().size());
+  const size_t sz = GetParam();
 
-// TODO random
+  const size_t SIZE = 1024;
+  alignas(64) uint8_t range[SIZE * 64];
+  dummy_dealloc_setup(&range, sz);
+
+  assert_dummy_dealloc(&range, sz);
+
+  assert_dummy_alloc(&range, sz * 2);
+  ASSERT_EQ(size_t(0), test::watch_free().size());
+}
+
+TEST_P(GlobalTest, dealloc_half_alloc) {
+  ASSERT_EQ(size_t(0), test::watch_free().size());
+  const size_t sz = GetParam();
+
+  const size_t SIZE = 1024;
+  alignas(64) uint8_t range[SIZE * 64];
+  dummy_dealloc_setup(&range, sz);
+
+  assert_dummy_dealloc(&range, sz);
+
+  assert_dummy_alloc(&range, sz / 2);
+  ASSERT_EQ(size_t(0), test::watch_free().size());
+}
+
+TEST_P(GlobalTest, dealloc_random_alloc) {
+  ASSERT_EQ(size_t(0), test::watch_free().size());
+  const size_t sz = GetParam();
+
+  const size_t SIZE = 1024;
+  alignas(64) uint8_t range[SIZE * 64];
+  dummy_dealloc_random_setup(&range, sz);
+
+  assert_dummy_dealloc(&range, sz);
+
+  assert_dummy_alloc(&range, sz);
+  ASSERT_EQ(size_t(0), test::watch_free().size());
+}
+
 // TODO threaded
