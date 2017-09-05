@@ -96,21 +96,18 @@ retry:
 }
 
 header::Free *alloc_free(const size_t atLeast) noexcept {
-#ifdef SP_MALLOC_TEST_NO_ALLOC
-  exit(1);
-#endif
+  // #ifdef SP_MALLOC_TEST_NO_ALLOC
+  assert(false);
+  exit(123);
+  // #endif
+
   {
     std::lock_guard<std::mutex> guard(state.brk_lock);
-    // if (state.brk_position == nullptr) {
-    //   state.brk_position = ::sbrk(0);
-    // }
     // TODO some algorithm to determine optimal alloc size
     std::size_t allocSz(0);
     allocSz = std::max(state.brk_alloc, SP_ALLOC_INITIAL_ALLOC);
     allocSz = std::max(atLeast, allocSz);
   // TODO check size wrap around
-
-  // void *newPos = state.brk_position + allocSz;
   retry:
     void *const res = ::sbrk(allocSz);
     if (res != (void *)-1) {
@@ -187,8 +184,12 @@ void return_free(header::Free *const toReturn) noexcept {
 }
 
 void return_free(void *const ptr, size_t length) noexcept {
+  // assert(ptr != nullptr);
   header::Free *const toReturn = header::init_free(ptr, length, nullptr);
-  return return_free(toReturn);
+  if (toReturn) {
+    assert(ptr == toReturn);
+    return return_free(toReturn);
+  }
 }
 
 } // namespace
@@ -198,7 +199,6 @@ namespace test { //
 std::vector<std::tuple<void *, std::size_t>> watch_free() {
   std::vector<std::tuple<void *, std::size_t>> result;
   header::Free *head = state.free.next.load();
-  std::size_t i = 0;
 start:
   if (head) {
     result.emplace_back(head, head->size);
@@ -211,6 +211,14 @@ start:
 }
 void clear_free() {
   state.free.next.store(nullptr);
+}
+
+void print_free() {
+  header::Free *head = state.free.next.load();
+  if (head) {
+    printf("cmpar: ");
+    header::debug_print_free(head);
+  }
 }
 
 } // namespace test
@@ -245,7 +253,9 @@ void *alloc(std::size_t p_length) noexcept {
       assert(false);
     }
 
-    return_free(util::ptr_math(align_ptr, +p_length), align_length - p_length);
+    void *const retFree = util::ptr_math(align_ptr, +p_length);
+    const size_t retLength = align_length - p_length;
+    return_free(retFree, retLength);
     return align_ptr;
   }
 

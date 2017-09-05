@@ -2,8 +2,8 @@
 #http://www.puxan.com/web/howto-write-generic-makefiles/
 # Declaration of variables
 CXX = g++
-CXXFLAGS = -enable-frame-pointers -std=c++17 -Wall -Wextra -Wpedantic -ggdb
-CXXFLAGS_DEBUG = $(CXXFLAGS) -ggdb
+CXXFLAGS = -enable-frame-pointers -std=c++17 -Wall -Wextra -Wpedantic -ggdb -fno-strict-aliasing
+
 HEADER_DIRS = -Iexternal
 LDLIBS = -lpthread
 PREFIX = /usr/local

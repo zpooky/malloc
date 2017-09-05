@@ -25,13 +25,15 @@ bool free(void *const) noexcept;
 /*Alloc ThreadLocal headers*/
 local::PoolsRAII *alloc_pool() noexcept;
 void release_pool(local::PoolsRAII *) noexcept;
-}
+
+} // namespace global
 
 #ifdef SP_TEST
-namespace test { //
+namespace test {
 std::vector<std::tuple<void *, std::size_t>> watch_free();
 void clear_free();
-}
+void print_free();
+} // namespace test
 #endif
 
 #endif

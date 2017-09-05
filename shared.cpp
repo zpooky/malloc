@@ -14,7 +14,7 @@ void debug_print_free(Free *const head) {
   if (head) {
 
     void *t = reinterpret_cast<void *>(head);
-    printf("free[%p,%zu]", t, head->size);
+    printf("[%p,%zu]", t, head->size);
     debug_print_free(head->next.load());
   } else {
     printf("\n");
@@ -26,14 +26,18 @@ Free *init_free(void *const head, std::size_t length,
   if (head && length > 0) {
     assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
     assert(length >= sizeof(Free));
-    // memset(head, 0, length);
-    return new (head) Free(length, next);
+    memset(head, 0, length); // TODO only debug
+
+    Free *const result = new (head) Free(length, next);
+    assert(reinterpret_cast<Free *>(result) == head);
+    return result;
   }
   return nullptr;
 }
 
 Extent *init_extent(void *const raw, std::size_t bucket,
                     std::size_t length) noexcept {
+  assert(raw != nullptr);
   // TODO calc based on bucket and nodeSz
   std::size_t extentIdxs = 0;
 
@@ -43,21 +47,24 @@ Extent *init_extent(void *const raw, std::size_t bucket,
   Extent *eHdr = extent(raw);
   // memset(raw, 0, length);
   return new (eHdr) Extent;
-} // init()
+} // init_extent()
 
 Free *free(void *const start) {
+  assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % alignof(Free) == 0);
   return reinterpret_cast<Free *>(start);
 }
 
 Node *node(void *const start) noexcept {
+  assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % alignof(Node) == 0);
   return reinterpret_cast<Node *>(start);
 } // node_header()
 
 Extent *extent(void *const start) noexcept {
+  assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   uintptr_t headerPtr = startPtr + sizeof(Node);
   assert(headerPtr % alignof(Extent) == 0);
@@ -73,6 +80,7 @@ Extent *extent(void *const start) noexcept {
 namespace util {
 
 void *align_pointer(void *const start, std::uint32_t alignment) noexcept {
+  assert(start != nullptr);
   assert(alignment >= 8);
   assert(alignment % 8 == 0);
   uintptr_t ptr = reinterpret_cast<uintptr_t>(start);
@@ -96,11 +104,14 @@ std::size_t round_even(std::size_t v) noexcept {
 }
 
 void *ptr_math(void *const ptr, std::int64_t add) noexcept {
+  assert(ptr != nullptr);
   uintptr_t start = reinterpret_cast<uintptr_t>(ptr);
   return reinterpret_cast<void *>(start + add);
 }
 
 ptrdiff_t ptr_diff(void *const first, void *const second) noexcept {
+  assert(first != nullptr);
+  assert(first != nullptr);
   uintptr_t firstPtr = reinterpret_cast<uintptr_t>(first);
   uintptr_t secondPtr = reinterpret_cast<uintptr_t>(second);
   return firstPtr - secondPtr;
