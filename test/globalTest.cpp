@@ -1,6 +1,8 @@
+#include "Barrier.h"
 #include "gtest/gtest.h"
 #include <global.h>
 #include <stdint.h>
+#include <thread>
 
 /*Gtest*/
 static size_t free_entries(global::State &state) {
@@ -256,31 +258,37 @@ TEST_P(GlobalTest, dealloc_half_alloc) {
  * ===================THREAD=======================
  * ================================================
  */
-// TEST_P(GlobalTest, threaded_dealloc_alloc_symmetric) {
-//   const size_t sz = GetParam();
-//
-//   const size_t SIZE = 1024 * 64;
-//   // alignas(64) uint8_t range[SIZE];
-//   uint8_t *const range = (uint8_t *)aligned_alloc(64, SIZE * 2);
-//   memset(range, 0, SIZE * 2);
-//
-//   dummy_dealloc_setup(range, SIZE, sz);
-//   for (size_t i(SIZE); i < SIZE * 2; ++i) {
-//     ASSERT_EQ(range[i], uint8_t(0));
-//   }
-//
-//   assert_dummy_dealloc(range, SIZE);
-//   for (size_t i(SIZE); i < SIZE * 2; ++i) {
-//     ASSERT_EQ(range[i], uint8_t(0));
-//   }
-//
-//   assert_dummy_alloc(range, SIZE, sz);
-//   for (size_t i(SIZE); i < SIZE * 2; ++i) {
-//     ASSERT_EQ(range[i], uint8_t(0));
-//   }
-//
-//   free(range);
-// }
+TEST_P(GlobalTest, threaded_dealloc_alloc_symmetric) {
+  const size_t sz = GetParam();
+
+  const size_t thCnt = 2;
+  const size_t SIZE = 1024 * 64;
+  const size_t RANGE_SIZE = SIZE * thCnt;
+
+  uint8_t *const range = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
+  memset(range, 0, RANGE_SIZE);
+
+  std::vector<std::thread> ts;
+  sp::Barrier b(thCnt);
+  for (size_t i(0); i < thCnt; ++i) {
+    global::State &statex = state;
+    ts.emplace_back([i, &b, &statex, sz, &range] {
+      b.await();
+
+      dummy_dealloc_setup(statex, range + (i * SIZE), SIZE, sz);
+
+      assert_dummy_dealloc(statex, range, RANGE_SIZE);
+
+      assert_dummy_alloc(statex, range, RANGE_SIZE, sz);
+
+      free(range);
+    });
+  }
+
+  for (auto &t : ts) {
+    t.join();
+  }
+}
 
 // TODO threaded
 // TODO shuffle inc size dealloc
