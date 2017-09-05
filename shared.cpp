@@ -21,6 +21,18 @@ void debug_print_free(Free *const head) {
   }
 }
 
+bool is_consecutive(const Free &head, const Free &tail) noexcept {
+  uintptr_t head_base = reinterpret_cast<uintptr_t>(&head);
+  uintptr_t head_end = head_base + head.size;
+  uintptr_t tail_base = reinterpret_cast<uintptr_t>(&tail);
+  return head_end == tail_base;
+}
+
+void coalesce(Free &head, const Free &tail) noexcept {
+  assert(is_consecutive(head, tail));
+  head.size += tail.size;
+}
+
 Free *init_free(void *const head, std::size_t length,
                 header::Free *const next) noexcept {
   if (head && length > 0) {
@@ -49,7 +61,7 @@ Extent *init_extent(void *const raw, std::size_t bucket,
   return new (eHdr) Extent;
 } // init_extent()
 
-Free *free(void *const start) {
+Free *free(void *const start) noexcept {
   assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % alignof(Free) == 0);

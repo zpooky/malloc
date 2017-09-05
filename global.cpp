@@ -37,10 +37,18 @@ void free_dequeue(header::Free &head, header::Free &target) noexcept {
   target.next.store(nullptr);
 }
 
-void free_enqueue(header::Free *const head, header::Free *const target) {
+void free_enqueue(header::Free *const head,
+                  header::Free *const target) noexcept {
+  assert(head != nullptr);
+  assert(target != nullptr);
   assert(head != target);
-  target->next.store(head->next.load());
-  head->next.store(target);
+
+  if (header::is_consecutive(*head, *target)) {
+    header::coalesce(*head, *target);
+  } else {
+    target->next.store(head->next.load());
+    head->next.store(target);
+  }
 }
 
 header::Free *find_free(size_t size) noexcept {
@@ -56,6 +64,7 @@ retry:
           // matching
           sp::TryPrepareLock preGuard(shGuard);
           if (preGuard) {
+            // TODO maybe TryPrepare(current->next_lock) is enough here
             sp::TryExclusiveLock headGuard(current->next_lock);
             if (headGuard) {
               sp::TryExclusiveLock exGuard(preGuard);
@@ -143,35 +152,47 @@ void return_free(header::Free *const toReturn) noexcept {
 
         header::Free *const current =
             head->next.load(std::memory_order_relaxed);
-        if (current) {
+        if (current) { //<--------------------
+          /*
+           *
+           */
+          if (toReturn > current) {
 
-          sp::TryExclusiveLock next_exc_guard(current->next_lock);
-          if (next_exc_guard) {
-            // [Current:PREPARE][Next:EXCLUSIVE]
+            // TODO TryPrepare guard is probably enough here
+            sp::TryExclusiveLock next_exc_guard(current->next_lock);
+            if (next_exc_guard) {
+              // [Current:PREPARE][Next:EXCLUSIVE]
 
-            sp::TryExclusiveLock cur_exc_guard(cur_pre_guard);
-            if (cur_exc_guard) {
-              // [Current:EXCLUSIVE][Next:EXCLUSIVE]
+              sp::TryExclusiveLock cur_exc_guard(cur_pre_guard);
+              if (cur_exc_guard) {
+                // [Current:EXCLUSIVE][Next:EXCLUSIVE]
 
-              free_enqueue(current, toReturn);
-              return;
-            } /*Current Exclusive Guard*/ else {
-              // bug - if PREPARE then a exclusive should always succeed?
-              assert(false);
-            }
-          } /*Next Exclusive Guard*/ else {
-            sp::TrySharedLock next_shared_guard(current->next_lock);
-            if (next_shared_guard) {
-              cur_shared_guard.swap(next_shared_guard);
-              head = current;
-              goto retry;
-            } else {
-              //...?
+                free_enqueue(current, toReturn);
+                return;
+              } /*Current Exclusive Guard*/ else {
+                // bug - if PREPARE then a exclusive should always succeed?
+                assert(false);
+              }
+            } /*Next Exclusive Guard*/ else {
+              //...???
               goto start;
             }
           }
+          /*
+           *
+           */
+          sp::TrySharedLock next_shared_guard(current->next_lock);
+          if (next_shared_guard) {
+            cur_shared_guard.swap(next_shared_guard);
+            head = current;
+            goto retry;
+          } else {
+            //...?
+            goto start;
+          }
+          //<---------------------------
         } /*current*/ else {
-          // current == nullptr
+          // current is null
           free_enqueue(head, toReturn);
           return;
         }

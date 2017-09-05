@@ -103,6 +103,8 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
 };
 
 void debug_print_free(Free *const head);
+bool is_consecutive(const Free &, const Free &) noexcept;
+void coalesce(Free &, const Free &) noexcept;
 
 static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
@@ -114,7 +116,7 @@ Extent *init_extent(void *const raw, std::size_t bucket,
                     std::size_t nodeSz) noexcept;
 
 /*cast*/
-Free *free(void *const start);
+Free *free(void *const start) noexcept;
 Node *node(void *const start) noexcept;
 Extent *extent(void *const start) noexcept;
 }
@@ -163,7 +165,7 @@ struct PoolsRAII { //
 class Pools { //
 private:
   PoolsRAII *pools;
-  //no thread holds this instance but all memeory is not reclaimed
+  // no thread holds this instance but all memeory is not reclaimed
   std::atomic<bool> reclaimed;
 
 public:
