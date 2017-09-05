@@ -54,7 +54,7 @@ int main() {
   std::vector<std::tuple<void *, std::size_t>> ptrs;
   std::size_t alloc(0);
 
-  printf("free: %zu\n", test::watch_free().size());
+  printf("free: %zu\n", test::watch_free(nullptr).size());
 
   // while (true) {
   time("alloc", [&]() {
@@ -74,7 +74,7 @@ int main() {
     check_overlap(ptrs);
   });
 
-  printf("free: %zu\n", test::watch_free().size());
+  printf("free: %zu\n", test::watch_free(nullptr).size());
   // assert(test::watch_free().size() == 0);
 
   time("dealloc", [&]() {
@@ -85,7 +85,7 @@ int main() {
       global::dealloc(ptr, len);
     }
   });
-  printf("free: %zu\n", test::watch_free().size());
+  printf("free: %zu\n", test::watch_free(nullptr).size());
 
   time("alloc2", [&]() {
     int i = 0;
@@ -96,7 +96,7 @@ int main() {
       global::dealloc(ptr, sz);
     }
   });
-  printf("free: %zu\n", test::watch_free().size());
+  printf("free: %zu\n", test::watch_free(nullptr).size());
   // }
   printf("done\n");
 }

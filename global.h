@@ -15,6 +15,31 @@
  *===========================================================
  */
 namespace global {
+struct State {
+  // brk
+  // {{{
+  std::mutex brk_lock;
+  void *brk_position; // not used for now
+  std::size_t brk_alloc;
+  // }}}
+
+  // free
+  // {{{
+  header::Free free;
+  // }}}
+
+  State() noexcept                                       //
+      : brk_lock{}, brk_position{nullptr}, brk_alloc{0}, //
+        free{0, nullptr} {
+    std::atomic_thread_fence(std::memory_order_release);
+  }
+};
+namespace internal {
+void *alloc(State &, std::size_t) noexcept;
+void dealloc(State &state, void *const start, std::size_t length) noexcept;
+
+} // namespace internal
+
 /*raw block alloc*/
 void *alloc(std::size_t) noexcept;
 void dealloc(void *, std::size_t) noexcept;
@@ -30,9 +55,9 @@ void release_pool(local::PoolsRAII *) noexcept;
 
 #ifdef SP_TEST
 namespace test {
-std::vector<std::tuple<void *, std::size_t>> watch_free();
-void clear_free();
-void print_free();
+std::vector<std::tuple<void *, std::size_t>> watch_free(global::State *);
+void clear_free(global::State *);
+void print_free(global::State *);
 } // namespace test
 #endif
 

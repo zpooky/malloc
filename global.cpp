@@ -9,27 +9,8 @@
 #include <unistd.h> //sbrk
 
 namespace {
-struct State {
-  // brk
-  // {{{
-  std::mutex brk_lock;
-  void *brk_position; // not used for now
-  std::size_t brk_alloc;
-  // }}}
 
-  // free
-  // {{{
-  header::Free free;
-  // }}}
-
-  State() noexcept                                       //
-      : brk_lock{}, brk_position{nullptr}, brk_alloc{0}, //
-        free{0, nullptr} {
-    std::atomic_thread_fence(std::memory_order_release);
-  }
-};
-
-static State state;
+static global::State internal_state;
 
 void free_dequeue(header::Free &head, header::Free &target) noexcept {
   assert(&head != &target);
@@ -51,7 +32,7 @@ void free_enqueue(header::Free *const head,
   }
 }
 
-header::Free *find_free(size_t size) noexcept {
+header::Free *find_free(global::State &state, size_t size) noexcept {
 start:
   header::Free *head = &state.free;
 retry:
@@ -104,7 +85,7 @@ retry:
   return nullptr;
 }
 
-header::Free *alloc_free(const size_t atLeast) noexcept {
+header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
   // #ifdef SP_MALLOC_TEST_NO_ALLOC
   assert(false);
   exit(123);
@@ -132,7 +113,7 @@ header::Free *alloc_free(const size_t atLeast) noexcept {
   return nullptr;
 }
 
-void return_free(header::Free *const toReturn) noexcept {
+void return_free(global::State &state, header::Free *const toReturn) noexcept {
   // [Head]->[Current]->[Next]
   if (toReturn) {
   start:
@@ -204,12 +185,13 @@ void return_free(header::Free *const toReturn) noexcept {
   }
 }
 
-void return_free(void *const ptr, size_t length) noexcept {
+void return_free(global::State &state, void *const ptr,
+                 size_t length) noexcept {
   // assert(ptr != nullptr);
   header::Free *const toReturn = header::init_free(ptr, length, nullptr);
   if (toReturn) {
     assert(ptr == toReturn);
-    return return_free(toReturn);
+    return return_free(state, toReturn);
   }
 }
 
@@ -217,9 +199,12 @@ void return_free(void *const ptr, size_t length) noexcept {
 
 #ifdef SP_TEST
 namespace test { //
-std::vector<std::tuple<void *, std::size_t>> watch_free() {
+std::vector<std::tuple<void *, std::size_t>> watch_free(global::State *state) {
+  if (state == nullptr) {
+    state = &internal_state;
+  }
   std::vector<std::tuple<void *, std::size_t>> result;
-  header::Free *head = state.free.next.load();
+  header::Free *head = state->free.next.load();
 start:
   if (head) {
     result.emplace_back(head, head->size);
@@ -230,12 +215,18 @@ start:
 
   return result;
 }
-void clear_free() {
-  state.free.next.store(nullptr);
+void clear_free(global::State *state) {
+  if (state == nullptr) {
+    state = &internal_state;
+  }
+  state->free.next.store(nullptr);
 }
 
-void print_free() {
-  header::Free *head = state.free.next.load();
+void print_free(global::State *state) {
+  if (state == nullptr) {
+    state = &internal_state;
+  }
+  header::Free *head = state->free.next.load();
   if (head) {
     printf("cmpar: ");
     header::debug_print_free(head);
@@ -251,13 +242,12 @@ void print_free() {
  *===========================================================
  */
 namespace global {
+namespace internal {
 
-// TODO change so it should be number of pages instead of a specific
-// length+alignment
-void *alloc(std::size_t p_length) noexcept {
-  header::Free *free = find_free(p_length);
+void *alloc(State &state, std::size_t p_length) noexcept {
+  header::Free *free = find_free(state, p_length);
   if (free == nullptr) {
-    free = alloc_free(p_length);
+    free = alloc_free(state, p_length);
     if (free == nullptr) {
       return nullptr;
     }
@@ -270,23 +260,35 @@ void *alloc(std::size_t p_length) noexcept {
 
   if (align_length >= p_length) {
     if (align_ptr != unalign_ptr) {
-      return_free(unalign_ptr, unalign_length);
+      return_free(state, unalign_ptr, unalign_length);
       assert(false);
     }
 
     void *const retFree = util::ptr_math(align_ptr, +p_length);
     const size_t retLength = align_length - p_length;
-    return_free(retFree, retLength);
+    return_free(state, retFree, retLength);
     return align_ptr;
   }
 
-  return_free(free);
+  return_free(state, free);
   assert(false);
   return nullptr;
+}
+
+void dealloc(State &state, void *const start, std::size_t length) noexcept {
+  return return_free(state, start, length);
+}
+
+} // namespace internal
+
+// TODO change so it should be number of pages instead of a specific
+// length+alignment
+void *alloc(std::size_t p_length) noexcept {
+  return internal::alloc(internal_state, p_length);
 } // alloc()
 
 void dealloc(void *const start, std::size_t length) noexcept {
-  return return_free(start, length);
+  return internal::dealloc(internal_state, start, length);
 }
 
 bool free(void *const) noexcept {
