@@ -644,16 +644,18 @@ TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepare) {
   exclusive_test(thCnt, threaded_TrySharedTryPrepare);
 }
 
-static void *threaded_TrySharedTryPrepareTryExclusive(void *a) {
+static void *threaded_TrySharedTryPrepareEagerExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
   size_t i = 0;
   while (i < arg->it) {
     sp::TrySharedLock shared_guard(arg->lock);
     if (shared_guard) {
+
       sp::TryPrepareLock prep_guard(shared_guard);
       if (prep_guard) {
-        sp::TryExclusiveLock ex_guard(prep_guard);
+
+        sp::EagerExclusiveLock ex_guard(prep_guard);
         if (ex_guard) {
           arg->toUpdate++;
           i++;
@@ -664,11 +666,10 @@ static void *threaded_TrySharedTryPrepareTryExclusive(void *a) {
   return nullptr;
 }
 
-TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepareTryExclusive) {
+TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepareEagerExclusive) {
   const size_t thCnt = GetParam();
-  exclusive_test(thCnt, threaded_TrySharedTryPrepareTryExclusive);
+  exclusive_test(thCnt, threaded_TrySharedTryPrepareEagerExclusive);
 }
-
 
 // TEST(ReadWriteLockTest, threaded_combination){
 // }

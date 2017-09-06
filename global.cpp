@@ -114,76 +114,70 @@ header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
 }
 
 void return_free(global::State &state, header::Free *const toReturn) noexcept {
-  // [Head]->[Current]->[Next]
-  if (toReturn) {
-  start:
-    header::Free *head = &state.free;
-    sp::TrySharedLock cur_shared_guard(head->next_lock);
-    if (!cur_shared_guard) {
-      //...
-      goto start;
-    }
-  retry:
-    if (true) {
-      // [Current:SHARED][Next:-]
+// [Head]->[Current]->[Next]
+start:
+  header::Free *head = &state.free;
+  sp::TrySharedLock cur_shared_guard(head->next_lock);
+  if (!cur_shared_guard) {
+    //...
+    goto start;
+  }
+retry:
+  if (true) {
+    // [Current:SHARED][Next:-]
 
-      sp::TryPrepareLock cur_pre_guard(cur_shared_guard);
-      if (cur_pre_guard) {
-        // [Current:PREPARE][Next:-]
+    sp::TryPrepareLock cur_pre_guard(cur_shared_guard);
+    if (cur_pre_guard) {
+      // [Current:PREPARE][Next:-]
 
-        header::Free *const current =
-            head->next.load(std::memory_order_relaxed);
-        if (current) { //<--------------------
-          /*
-           *
-           */
-          if (toReturn > current) {
+      header::Free *const cur = head->next.load(std::memory_order_relaxed);
+      if (cur) { //<--------------------
+        if (toReturn > cur) {
 
-            // TODO TryPrepare guard is probably enough here
-            sp::TryExclusiveLock next_exc_guard(current->next_lock);
-            if (next_exc_guard) {
-              // [Current:PREPARE][Next:EXCLUSIVE]
+          // TODO TryPrepare guard is probably enough here
+          sp::TryExclusiveLock next_exc_guard(cur->next_lock);
+          if (next_exc_guard) {
+            // [Current:PREPARE][Next:EXCLUSIVE]
 
-              sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
-              if (cur_exc_guard) {
-                // [Current:EXCLUSIVE][Next:EXCLUSIVE]
+            sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
+            if (cur_exc_guard) {
+              // [Current:EXCLUSIVE][Next:EXCLUSIVE]
 
-                free_enqueue(current, toReturn);
-                return;
-              } /*Current Exclusive Guard*/ else {
-                // bug - if PREPARE then a exclusive should always succeed?
-                assert(false); // TODO fails
-              }
-            } /*Next Exclusive Guard*/ else {
-              //...???
-              goto start;
+              free_enqueue(cur, toReturn);
+              return;
+            } /*Current Exclusive Guard*/ else {
+              // bug - if PREPARE then a exclusive should always succeed?
+              assert(false); // TODO fails
             }
-          }
-          /*
-           *
-           */
-          sp::TrySharedLock next_shared_guard(current->next_lock);
-          if (next_shared_guard) {
-            cur_shared_guard.swap(next_shared_guard);
-            head = current;
-            goto retry;
-          } else {
-            //...?
+          } /*Next Exclusive Guard*/ else {
+            //...???
             goto start;
           }
-          //<---------------------------
-        } /*current*/ else {
-          // current is null
-          free_enqueue(head, toReturn);
-          return;
         }
-      } /*Current Prepare Guard*/ else {
-        // assert(false); // TODO fails
-        goto start;
+        /*
+         *
+         */
+        sp::TrySharedLock next_shared_guard(cur->next_lock);
+        if (next_shared_guard) {
+          cur_shared_guard.swap(next_shared_guard);
+          head = cur;
+          goto retry;
+        } else {
+          //...?
+          goto start;
+        }
+        //<---------------------------
+      } /*current*/ else {
+        // current is null
+        free_enqueue(head, toReturn);
+        return;
       }
+    } /*Current Prepare Guard*/ else {
+      // assert(false); // TODO fails
+      goto start;
     }
-    assert(false); // leak memory here
   }
+  assert(false); // leak memory here
 }
 
 void return_free(global::State &state, void *const ptr,
