@@ -154,7 +154,7 @@ retry:
   assert(has_shared(cmp));
   // 1. Decrement shared
   const uint64_t shared = cmp & shared_mask;
-  const uint64_t new_shared = add_shared(shared, int8_t(-1));
+  const uint64_t new_shared = add_shared(shared, -int8_t(1));
   // 2. Prepare unaltered
   const uint64_t prepare = cmp & prep_mask;
   // 3. Zero out exclusive bit
@@ -167,17 +167,23 @@ retry:
   }
 }
 
-void ReadWriteLock::eager_exclusive_lock() noexcept {
+void ReadWriteLock::eager_exclusive_lock(bool unsetPrepare) noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
+  constexpr uint64_t prepare_mask = SP_RW_PREPARE_MASK;
 retry:
+  if (unsetPrepare) {
+    assert(is_prepare(cmp));
+  }
   // Shared
   const uint64_t shared = cmp & shared_mask;
   // Prepare
-  const uint64_t prepare = 0x00;
+  const uint64_t prepare = unsetPrepare ? (0x01 << (1 * 8)) : 0x00;
   //
   cmp = shared | prepare | uint64_t(0x00);
-  const uint64_t try_exclusive = cmp | uint64_t(0x01);
+
+  const uint64_t new_prepare(0x00);
+  const uint64_t try_exclusive = shared | new_prepare | uint64_t(0x01);
 
   if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
     goto retry;
@@ -201,29 +207,30 @@ retry:
   }
 }
 
-bool ReadWriteLock::try_exclusive_lock(bool prepare_unset,
-                                       int8_t shared_dec) noexcept {
+bool ReadWriteLock::try_exclusive_lock(bool preUnset, int8_t shaDec) noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
   constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
 retry:
-  if (prepare_unset) {
+  if (preUnset) {
     assert(is_prepare(cmp));
   }
 
   const uint64_t shared(cmp & shared_mask);
   // assert no overflow?
-  assert((get_shared(shared) - shared_dec) <= get_shared(shared));
-  const uint64_t new_shared = add_shared(shared, -shared_dec);
+  assert((get_shared(shared) - shaDec) <= get_shared(shared));
+  const uint64_t new_shared = add_shared(shared, -shaDec);
 
   const uint64_t prepare(cmp & prep_mask);
-  const uint64_t new_prepare = prepare_unset ? 0x00 : prepare;
+  const uint64_t new_prepare = preUnset ? 0x00 : prepare;
 
-  if (!has_shared(new_shared) && !is_exclusive(cmp) &&
-      !is_prepare(new_prepare)) {
+  bool hasShared = has_shared(new_shared);
+  bool isExclusive = is_exclusive(cmp);
+  bool isPrepare = is_prepare(new_prepare);
+  if (!hasShared && !isExclusive && !isPrepare) {
 
-    const uint64_t try_exclusive = new_shared | new_prepare | uint64_t(0x01);
     cmp = shared | prepare | uint64_t(0x00);
+    const uint64_t try_exclusive = new_shared | new_prepare | uint64_t(0x01);
 
     if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
       goto retry;
@@ -425,12 +432,19 @@ EagerExclusiveLock::EagerExclusiveLock(ReadWriteLock &p_lock) noexcept //
   m_lock->eager_exclusive_lock();
 }
 
+EagerExclusiveLock::EagerExclusiveLock(TryPrepareLock &p_lock) noexcept //
+    : m_lock(nullptr) {
+  if (p_lock) {
+    p_lock.m_lock->eager_exclusive_lock(true);
+    m_lock = p_lock.m_lock;
+    p_lock.m_lock = nullptr;
+  }
+}
+
 EagerExclusiveLock::~EagerExclusiveLock() noexcept {
   if (m_lock) {
     m_lock->exclusive_unlock();
     m_lock = nullptr;
-  } else {
-    assert(false);
   }
 }
 

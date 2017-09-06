@@ -325,26 +325,26 @@ struct ThreadAllocArg {
 void *perform_work(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
-  arg->b->await();
-
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
-  printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  arg->b->await();
   dummy_dealloc_setup(*arg->state, sub, arg->sz);
 
   assert_dummy_dealloc(*arg->state, arg->range);
 
   assert_dummy_alloc(*arg->state, arg->range, arg->sz);
-  return 0;
+  return nullptr;
 }
 
 TEST_P(GlobalTest, threaded_dealloc_alloc_symmetric) {
   const size_t sz = GetParam();
 
-  const size_t thCnt = 2;
-  const size_t SIZE = 1024 * 64;
+  const size_t thCnt = 4;
+  const size_t SIZE = 1024 * 128;
   const size_t RANGE_SIZE = SIZE * thCnt;
 
   uint8_t *const startR = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
+  ASSERT_FALSE(startR == nullptr);
   memset(startR, 0, RANGE_SIZE);
   Range range(startR, RANGE_SIZE);
 

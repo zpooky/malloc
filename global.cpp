@@ -144,7 +144,7 @@ void return_free(global::State &state, header::Free *const toReturn) noexcept {
             if (next_exc_guard) {
               // [Current:PREPARE][Next:EXCLUSIVE]
 
-              sp::TryExclusiveLock cur_exc_guard(cur_pre_guard);
+              sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
               if (cur_exc_guard) {
                 // [Current:EXCLUSIVE][Next:EXCLUSIVE]
 
@@ -152,7 +152,7 @@ void return_free(global::State &state, header::Free *const toReturn) noexcept {
                 return;
               } /*Current Exclusive Guard*/ else {
                 // bug - if PREPARE then a exclusive should always succeed?
-                assert(false);
+                assert(false); // TODO fails
               }
             } /*Next Exclusive Guard*/ else {
               //...???
@@ -178,7 +178,7 @@ void return_free(global::State &state, header::Free *const toReturn) noexcept {
           return;
         }
       } /*Current Prepare Guard*/ else {
-        assert(false); // TODO
+        assert(false); // TODO fails
       }
     }
     assert(false); // leak memory here

@@ -22,7 +22,7 @@ public:
 
 public:
   // Eager exclusive lock swap exclusive bit to 1 and wait until shared is 0
-  void eager_exclusive_lock() noexcept;
+  void eager_exclusive_lock(bool unsetPrepare = false) noexcept;
   // Lazy exclusive lock swap exclusive bit to 1 if shared is 0 otherwise retry
   void lazy_exclusive_lock() noexcept;
   bool try_exclusive_lock(bool prepare_unset = false,
@@ -93,6 +93,7 @@ private:
 
 public:
   explicit EagerExclusiveLock(ReadWriteLock &) noexcept;
+  explicit EagerExclusiveLock(TryPrepareLock &) noexcept;
   ~EagerExclusiveLock() noexcept;
 
   operator bool() const noexcept;
