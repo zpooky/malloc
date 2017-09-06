@@ -1,6 +1,8 @@
+#include "Barrier.h"
 #include "ReadWriteLock.h"
 #include "gtest/gtest.h"
 #include <list>
+#include <pthread.h>
 
 using namespace sp;
 
@@ -433,3 +435,240 @@ TEST(ReadWriteLockTest, test_shared_prepare_exclusive) {
   }
   assert_acq(lock);
 }
+/*
+ * ================================================
+ * ===================THREAD=======================
+ * ================================================
+ */
+struct ThreadedTestArg {
+  sp::Barrier *b;
+  sp::ReadWriteLock lock;
+  size_t it;
+  size_t toUpdate;
+};
+
+class ReadWriteLockThreadTest : public ::testing::TestWithParam<std::size_t> {};
+INSTANTIATE_TEST_CASE_P(PreFill, ReadWriteLockThreadTest,
+                        ::testing::Range(size_t(1), size_t(5)));
+
+static void exclusive_test(size_t thCnt, void *(*worker)(void *)) {
+  constexpr size_t thUpdate = 1024;
+  const size_t final_update = thCnt * thUpdate;
+
+  sp::Barrier b(thCnt);
+  ReadWriteLock lock;
+
+  pthread_t *ts = new pthread_t[thCnt];
+  ThreadedTestArg arg;
+  arg.b = &b;
+  arg.it = thUpdate;
+  arg.toUpdate = 0;
+
+  for (size_t i(0); i < thCnt; ++i) {
+    ts[i] = 0;
+    int res = pthread_create(&ts[i], nullptr, worker, &arg);
+    ASSERT_EQ(0, res);
+    ASSERT_FALSE(ts[i] == 0);
+  }
+
+  for (size_t i(0); i < thCnt; ++i) {
+    int res = pthread_join(ts[i], nullptr);
+    ASSERT_EQ(0, res);
+  }
+  ASSERT_EQ(arg.toUpdate, final_update);
+
+  delete[] ts;
+}
+
+static void *threaded_EagerExclusive(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+    sp::EagerExclusiveLock guard(arg->lock);
+    if (guard) {
+      arg->toUpdate++;
+      i++;
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_EagerExclusive) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_EagerExclusive);
+}
+
+static void *threaded_TryPrepareEagerExclusive(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+    sp::TryPrepareLock pre_guard(arg->lock);
+    if (pre_guard) {
+      sp::EagerExclusiveLock ex_guard(pre_guard);
+      if (ex_guard) {
+        arg->toUpdate++;
+        i++;
+      }
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_TryPrepareEagerExclusive) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_TryPrepareEagerExclusive);
+}
+
+static void *threaded_LazyExclusive(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+    sp::LazyExclusiveLock guard(arg->lock);
+    if (guard) {
+      arg->toUpdate++;
+      i++;
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_LazyExclusive) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_LazyExclusive);
+}
+
+static void *threaded_TryExclusive(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+    sp::TryExclusiveLock guard(arg->lock);
+    if (guard) {
+      arg->toUpdate++;
+      i++;
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_TryExclusive) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_TryExclusive);
+}
+
+// static void *threaded_TrySharedTryExclusive(void *a) {
+//   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+//   arg->b->await();
+//   size_t i = 0;
+//   while (i < arg->it) {
+//     sp::TrySharedLock shared_guard(arg->lock);
+//     if (shared_guard) {
+//       sp::TryExclusiveLock ex_guard(shared_guard);
+//       if (ex_guard) {
+//         arg->toUpdate++;
+//         i++;
+//       }
+//     }
+//   }
+//   return nullptr;
+// }
+//
+// TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryExclusive) {
+//   const size_t thCnt = GetParam();
+//   exclusive_test(thCnt, threaded_TrySharedTryExclusive);
+// }
+
+static void *threaded_TryPrepareTryExclusive(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+    sp::TryPrepareLock prep_guard(arg->lock);
+    if (prep_guard) {
+      sp::TryExclusiveLock ex_guard(prep_guard);
+      if (ex_guard) {
+        arg->toUpdate++;
+        i++;
+      }
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_TryPrepareTryExclusive) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_TryPrepareTryExclusive);
+}
+
+static void *threaded_TryPrepare(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+    sp::TryPrepareLock prep_guard(arg->lock);
+    if (prep_guard) {
+      arg->toUpdate++;
+      i++;
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_TryPrepare) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_TryPrepare);
+}
+
+static void *threaded_TrySharedTryPrepare(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+    sp::TrySharedLock shared_guard(arg->lock);
+    if (shared_guard) {
+      sp::TryPrepareLock prep_guard(shared_guard);
+      if (prep_guard) {
+        arg->toUpdate++;
+        i++;
+      }
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepare) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_TrySharedTryPrepare);
+}
+
+static void *threaded_TrySharedTryPrepareTryExclusive(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+    sp::TrySharedLock shared_guard(arg->lock);
+    if (shared_guard) {
+      sp::TryPrepareLock prep_guard(shared_guard);
+      if (prep_guard) {
+        sp::TryExclusiveLock ex_guard(prep_guard);
+        if (ex_guard) {
+          arg->toUpdate++;
+          i++;
+        }
+      }
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepareTryExclusive) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_TrySharedTryPrepareTryExclusive);
+}
+
+
+// TEST(ReadWriteLockTest, threaded_combination){
+// }

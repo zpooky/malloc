@@ -178,7 +178,8 @@ void return_free(global::State &state, header::Free *const toReturn) noexcept {
           return;
         }
       } /*Current Prepare Guard*/ else {
-        assert(false); // TODO fails
+        // assert(false); // TODO fails
+        goto start;
       }
     }
     assert(false); // leak memory here

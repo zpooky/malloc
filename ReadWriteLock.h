@@ -122,7 +122,7 @@ private:
 
 public:
   explicit TryExclusiveLock(ReadWriteLock &) noexcept;
-  explicit TryExclusiveLock(TrySharedLock &) noexcept;
+  // explicit TryExclusiveLock(TrySharedLock &) noexcept;
   explicit TryExclusiveLock(TryPrepareLock &) noexcept;
   ~TryExclusiveLock() noexcept;
 

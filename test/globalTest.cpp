@@ -322,7 +322,7 @@ struct ThreadAllocArg {
   Range range;
 };
 
-void *perform_work(void *argument) {
+static void *perform_work(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);

@@ -493,22 +493,22 @@ TryExclusiveLock::TryExclusiveLock(ReadWriteLock &p_lock) noexcept //
   }
 }
 
-TryExclusiveLock::TryExclusiveLock(TrySharedLock &p_lock) noexcept //
-    : m_lock{nullptr} {
-  print_state("try_exclusive_lock_before[TS]", p_lock.m_lock);
-  if (p_lock) {
-    print_state("try_exclusive_lock_after[success][TS]", p_lock.m_lock);
-    // Decrement shared and set exclusive flag
-    bool prepare_unset = false;
-    int8_t shared_dec = 1;
-    if (p_lock.m_lock->try_exclusive_lock(prepare_unset, shared_dec)) {
-      m_lock = p_lock.m_lock;
-      p_lock.m_lock = nullptr;
-    }
-  } else {
-    assert(false);
-  }
-}
+// TryExclusiveLock::TryExclusiveLock(TrySharedLock &p_lock) noexcept //
+//     : m_lock{nullptr} {
+//   print_state("try_exclusive_lock_before[TS]", p_lock.m_lock);
+//   if (p_lock) {
+//     print_state("try_exclusive_lock_after[success][TS]", p_lock.m_lock);
+//     // Decrement shared and set exclusive flag
+//     bool prepare_unset = false;
+//     int8_t shared_dec = 1;
+//     if (p_lock.m_lock->try_exclusive_lock(prepare_unset, shared_dec)) {
+//       m_lock = p_lock.m_lock;
+//       p_lock.m_lock = nullptr;
+//     }
+//   } else {
+//     assert(false);
+//   }
+// }
 
 TryExclusiveLock::TryExclusiveLock(TryPrepareLock &p_lock) noexcept //
     : m_lock{nullptr} {
