@@ -44,7 +44,7 @@ gtest:
 
 # sut {{{
 sut:
-	$(MAKE) LIB=libsut CXXFLAGS+=-DSP_TEST -C .. staticlib
+	$(MAKE) LIB=libsut CXXFLAGS+=-DSP_TEST -C $(PROJECT_ROOT) staticlib
 # }}}
 
 # test {{{

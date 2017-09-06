@@ -1,6 +1,7 @@
 #include "Barrier.h"
 #include "gtest/gtest.h"
 #include <global.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <thread>
 
@@ -8,6 +9,36 @@
 static size_t free_entries(global::State &state) {
   auto free = test::watch_free(&state);
   return free.size();
+}
+
+struct Range {
+  uint8_t *start;
+  size_t length;
+  Range(uint8_t *ps, size_t pl) //
+      : start(ps), length(pl) {
+  }
+  Range() //
+      : Range(nullptr, 0) {
+  }
+  uint8_t &operator[](size_t idx) {
+    return start[idx];
+  }
+  const uint8_t &operator[](size_t idx) const {
+    return start[idx];
+  }
+
+  uint8_t *raw_offset(size_t off) {
+    assert(off < length);
+    return (uint8_t *)(reinterpret_cast<uintptr_t>(start) + off);
+  }
+};
+Range sub_range(Range &r, size_t ridx, size_t rlength) {
+  size_t offset = (ridx * rlength);
+  if (!(offset < r.length)) {
+    assert(offset < r.length);
+  }
+  uint8_t *start = r.start + offset;
+  return Range(start, rlength);
 }
 
 /*Parametrized Fixture*/
@@ -30,8 +61,21 @@ INSTANTIATE_TEST_CASE_P(Default, GlobalTest,
                         ::testing::Values( //
                             64             //
                             ,
-                            128, 256, 512, 1024, 2048, 4096, 8192, //
-                            16384                                  //
+                            128 //
+                            ,
+                            256 //
+                            ,
+                            512 //
+                            ,
+                            1024 //
+                            ,
+                            2048 //
+                            ,
+                            4096 //
+                            ,
+                            8192 //
+                            ,
+                            16384 //
                             ));
 
 /*Util*/
@@ -83,15 +127,15 @@ static void assert_no_overlap(Points &ptrs) {
   }
 }
 
-static void dummy_dealloc_setup(global::State &state, uint8_t *const range,
-                                size_t rSz, size_t bSz) {
+static void dummy_dealloc_setup(global::State &state, Range &range,
+                                size_t bSz) {
   size_t i = 0;
 // printf("valid: ");
 start:
   size_t offset = i * bSz;
-  if (offset + bSz <= rSz) {
+  if (offset + bSz <= range.length) {
     i++;
-    void *const start = (void *)(reinterpret_cast<uintptr_t>(range) + offset);
+    void *const start = (void *)range.raw_offset(offset);
 
     global::internal::dealloc(state, start, bSz);
 
@@ -103,15 +147,14 @@ start:
   // printf("dummy_dealloc_setup: %zu\n", i);
 }
 
-static void dealloc_rand_setup(global::State &state, uint8_t *const range,
-                               size_t rSz, size_t bSz) {
+static void dealloc_rand_setup(global::State &state, Range &range, size_t bSz) {
   std::vector<void *> points;
   size_t i = 0;
 start:
   size_t offset = i * bSz;
-  if (offset + bSz <= rSz) {
+  if (offset + bSz <= range.length) {
     i++;
-    void *const start = (void *)(reinterpret_cast<uintptr_t>(range) + offset);
+    void *const start = (void *)range.raw_offset(offset);
 
     points.push_back(start);
 
@@ -124,15 +167,14 @@ start:
   }
 }
 
-static void assert_dummy_dealloc(global::State &state, uint8_t *const range,
-                                 size_t rSz) {
+static void assert_dummy_dealloc(global::State &state, Range &range) {
   auto free = test::watch_free(&state);
 
   // 1.
   assert_no_overlap(free);
 
   // 2.
-  ASSERT_EQ(rSz, size_of_free(free));
+  ASSERT_EQ(range.length, size_of_free(free));
   ASSERT_EQ(size_t(1), free.size()); // free pages should be coalesced
 
   // 3.
@@ -140,7 +182,7 @@ static void assert_dummy_dealloc(global::State &state, uint8_t *const range,
     void *const cur_ptr = std::get<0>(current);
     size_t curSz = std::get<1>(current);
 
-    if (!in_range(range, rSz, cur_ptr, curSz)) {
+    if (!in_range(range.start, range.length, cur_ptr, curSz)) {
       // uintptr_t rangeStartPtr = reinterpret_cast<uintptr_t>(range);
       // void *const rangeStart = reinterpret_cast<void *>(rangeStartPtr);
       // void *const rangeEnd = reinterpret_cast<void *>(rangeStartPtr + SIZE);
@@ -152,14 +194,13 @@ static void assert_dummy_dealloc(global::State &state, uint8_t *const range,
   }
 }
 
-static void assert_dummy_alloc(global::State &state, uint8_t *const range,
-                               size_t rSz, size_t bSz) {
-  for (size_t i = 0; i < rSz; i += bSz) {
+static void assert_dummy_alloc(global::State &state, Range &range, size_t bSz) {
+  for (size_t i = 0; i < range.length; i += bSz) {
 
     void *const current = global::internal::alloc(state, bSz);
     ASSERT_FALSE(current == nullptr);
 
-    if (!in_range(range, rSz, current, bSz)) {
+    if (!in_range(range.start, range.length, current, bSz)) {
       // uintptr_t rangeStartPtr = reinterpret_cast<uintptr_t>(range);
       // void *const rangeStart = reinterpret_cast<void *>(rangeStartPtr);
       // void *const rangeEnd = reinterpret_cast<void *>(rangeStartPtr + SIZE);
@@ -188,41 +229,49 @@ TEST_P(GlobalTest, dealloc_alloc_symmetric) {
 
   const size_t SIZE = 1024 * 64;
   // alignas(64) uint8_t range[SIZE];
-  uint8_t *const range = (uint8_t *)aligned_alloc(64, SIZE * 2);
-  memset(range, 0, SIZE * 2);
+  uint8_t *const startR = (uint8_t *)aligned_alloc(64, SIZE * 2);
+  ASSERT_FALSE(startR == nullptr);
+  memset(startR, 0, SIZE * 2);
+  Range range(startR, SIZE);
 
-  dummy_dealloc_setup(state, range, SIZE, sz);
+  dummy_dealloc_setup(state, range, sz);
   for (size_t i(SIZE); i < SIZE * 2; ++i) {
     ASSERT_EQ(range[i], uint8_t(0));
   }
 
-  assert_dummy_dealloc(state, range, SIZE);
+  assert_dummy_dealloc(state, range);
   for (size_t i(SIZE); i < SIZE * 2; ++i) {
     ASSERT_EQ(range[i], uint8_t(0));
   }
 
-  assert_dummy_alloc(state, range, SIZE, sz);
+  assert_dummy_alloc(state, range, sz);
   for (size_t i(SIZE); i < SIZE * 2; ++i) {
     ASSERT_EQ(range[i], uint8_t(0));
   }
 
-  free(range);
+  free(startR);
 }
 
 TEST_P(GlobalTest, dealloc_doubling_alloc) {
   const size_t sz = GetParam();
 
   const size_t SIZE = 1024 * 64;
-  alignas(64) uint8_t range[SIZE];
+  // alignas(64) uint8_t range[SIZE];
+  uint8_t *const startR = (uint8_t *)aligned_alloc(64, SIZE);
+  ASSERT_FALSE(startR == nullptr);
+  memset(startR, 0, SIZE);
+  Range range(startR, SIZE);
 
   //
-  dummy_dealloc_setup(state, range, SIZE, sz);
+  dummy_dealloc_setup(state, range, sz);
 
   //
-  assert_dummy_dealloc(state, range, SIZE);
+  assert_dummy_dealloc(state, range);
 
   //
-  assert_dummy_alloc(state, range, SIZE, sz * 2);
+  assert_dummy_alloc(state, range, sz * 2);
+
+  free(startR);
 }
 
 TEST_P(GlobalTest, dealloc_half_alloc) {
@@ -230,13 +279,19 @@ TEST_P(GlobalTest, dealloc_half_alloc) {
 
   if (sz != 64) { // 64 is the minimum size
     const size_t SIZE = 1024 * 64;
-    alignas(64) uint8_t range[SIZE];
+    // alignas(64) uint8_t range[SIZE];
+    uint8_t *const startR = (uint8_t *)aligned_alloc(64, SIZE);
+    ASSERT_FALSE(startR == nullptr);
+    memset(startR, 0, SIZE);
+    Range range(startR, SIZE);
 
-    dummy_dealloc_setup(state, range, SIZE, sz);
+    dummy_dealloc_setup(state, range, sz);
 
-    assert_dummy_dealloc(state, range, SIZE);
+    assert_dummy_dealloc(state, range);
 
-    assert_dummy_alloc(state, range, SIZE, sz / 2);
+    assert_dummy_alloc(state, range, sz / 2);
+
+    free(startR);
   }
 }
 
@@ -258,6 +313,30 @@ TEST_P(GlobalTest, dealloc_half_alloc) {
  * ===================THREAD=======================
  * ================================================
  */
+struct ThreadAllocArg {
+  int i;
+  sp::Barrier *b;
+  global::State *state;
+  size_t sz;
+  size_t thread_range_size;
+  Range range;
+};
+
+void *perform_work(void *argument) {
+  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
+
+  arg->b->await();
+
+  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
+  printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  dummy_dealloc_setup(*arg->state, sub, arg->sz);
+
+  assert_dummy_dealloc(*arg->state, arg->range);
+
+  assert_dummy_alloc(*arg->state, arg->range, arg->sz);
+  return 0;
+}
+
 TEST_P(GlobalTest, threaded_dealloc_alloc_symmetric) {
   const size_t sz = GetParam();
 
@@ -265,29 +344,37 @@ TEST_P(GlobalTest, threaded_dealloc_alloc_symmetric) {
   const size_t SIZE = 1024 * 64;
   const size_t RANGE_SIZE = SIZE * thCnt;
 
-  uint8_t *const range = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
-  memset(range, 0, RANGE_SIZE);
+  uint8_t *const startR = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
+  memset(startR, 0, RANGE_SIZE);
+  Range range(startR, RANGE_SIZE);
 
-  std::vector<std::thread> ts;
+  std::vector<pthread_t> ts;
+  ThreadAllocArg args[thCnt];
   sp::Barrier b(thCnt);
   for (size_t i(0); i < thCnt; ++i) {
-    global::State &statex = state;
-    ts.emplace_back([i, &b, &statex, sz, &range] {
-      b.await();
+    auto &arg = args[i];
+    {
+      arg.i = i;
+      arg.b = &b;
+      arg.state = &state;
+      arg.sz = sz;
+      arg.thread_range_size = SIZE;
+      arg.range = range;
+    }
+    pthread_t tid = 0;
 
-      dummy_dealloc_setup(statex, range + (i * SIZE), SIZE, sz);
+    int res = pthread_create(&tid, NULL, perform_work, &arg);
+    ASSERT_EQ(0, res);
+    ASSERT_FALSE(tid == 0);
 
-      assert_dummy_dealloc(statex, range, RANGE_SIZE);
-
-      assert_dummy_alloc(statex, range, RANGE_SIZE, sz);
-
-      free(range);
-    });
+    ts.push_back(tid);
   }
 
   for (auto &t : ts) {
-    t.join();
+    int res = pthread_join(t, NULL);
+    ASSERT_EQ(0, res);
   }
+  free(startR);
 }
 
 // TODO threaded

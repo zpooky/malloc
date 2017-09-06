@@ -42,6 +42,7 @@ $(EXEC): $(OBJECTS)
 # clean {{{
 clean:
 	rm -f $(EXEC) $(OBJECTS) $(LIB).a $(LIB).so
+	rm -f *.stackdump
 	$(MAKE) -C test clean
 # }}}
 

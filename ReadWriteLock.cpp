@@ -27,6 +27,14 @@ static void internal_print_state(T state, char (&hexed)[SIZE]) {
     hex_length += buffLength;
   }
 }
+
+static uint8_t get_prepare(std::uint64_t state) noexcept {
+  return uint8_t((state >> 8) & 0xFF);
+}
+
+static uint8_t get_exclusive(std::uint64_t state) noexcept {
+  return uint8_t(state & 0xFF);
+}
 #endif
 
 namespace {
@@ -34,16 +42,8 @@ bool is_exclusive(std::uint64_t cmp) noexcept {
   return std::uint64_t(cmp & SP_RW_EXCLUSIVE_MASK) > 0;
 }
 
-uint8_t get_exclusive(std::uint64_t state) noexcept {
-  return uint8_t(state & 0xFF);
-}
-
 bool is_prepare(std::uint64_t cmp) noexcept {
   return std::uint64_t(cmp & SP_RW_PREPARE_MASK) > 0;
-}
-
-uint8_t get_prepare(std::uint64_t state) noexcept {
-  return uint8_t((state >> 8) & 0xFF);
 }
 
 bool has_shared(std::uint64_t cmp) noexcept {
@@ -63,11 +63,6 @@ uint64_t add_shared(uint64_t shared, int8_t amount) noexcept {
 } // namespace
 static void print_state(const char *ctx, const sp::ReadWriteLock *lock) {
 #ifdef SP_DEBUG_RW
-  const char *C[]{
-      "\e[91m", "\e[92m", "\e[95m"
-      // , "\e[32m", " \e[31m", "\e[36m", "\e[90m"
-  };
-  //
 
   uint64_t state = lock->m_state.load(std::memory_order_acquire);
 
