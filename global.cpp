@@ -24,7 +24,7 @@ void free_enqueue(header::Free *const head,
   assert(target != nullptr);
   assert(head != target);
 
-  if (header::is_consecutive(*head, *target)) {
+  if (header::is_consecutive(head, target)) {
     header::coalesce(*head, *target);
   } else {
     target->next.store(head->next.load());
@@ -48,7 +48,7 @@ retry:
             // TODO maybe TryPrepare(current->next_lock) is enough here
             sp::TryExclusiveLock headGuard(current->next_lock);
             if (headGuard) {
-              sp::TryExclusiveLock exGuard(preGuard);
+              sp::EagerExclusiveLock exGuard(preGuard);
               if (exGuard) {
                 free_dequeue(*head, *current);
                 return current;
@@ -59,13 +59,13 @@ retry:
             } else {
               // Could not lock current->next
               head = current;
-              assert(false); // TODO just for test
+              // assert(false); // TODO just for test
               goto retry;
             }
           } else {
             // Some other thread got here first, continue
             head = current;
-            assert(false); // TODO just for test
+            // assert(false); // TODO just for test
             goto retry;
           }
         } else {
@@ -221,10 +221,62 @@ void print_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
-  header::Free *head = state->free.next.load();
+  header::Free *head = state->free.next.load(std::memory_order_acquire);
   if (head) {
     printf("cmpar: ");
     header::debug_print_free(head);
+  }
+}
+
+std::size_t count_free(global::State *state) {
+  if (state == nullptr) {
+    state = &internal_state;
+  }
+  std::size_t result = 0;
+  header::Free *head = state->free.next.load();
+start:
+  if (head) {
+    result++;
+    head = head->next.load(std::memory_order_acquire);
+    goto start;
+  }
+  return result;
+}
+void sort_free(global::State *state) {
+  // TODO
+  if (state == nullptr) {
+    state = &internal_state;
+  }
+  header::Free *head = state->free.next.load();
+start:
+  if (head) {
+    header::Free *const next = head->next.load(std::memory_order_acquire);
+    if (next) {
+      if (next > head) {
+      }
+      goto start;
+    }
+  }
+}
+
+void coalesce_free(global::State *state) {
+  if (state == nullptr) {
+    state = &internal_state;
+  }
+  sort_free(state);
+  header::Free *head = state->free.next.load();
+start:
+  if (head) {
+  get_next:
+    header::Free *const next = head->next.load(std::memory_order_acquire);
+    if (next) {
+      if (header::is_consecutive(head, next)) {
+        header::coalesce(*head, *next);
+        goto get_next;
+      }
+      head = next;
+      goto start;
+    }
   }
 }
 

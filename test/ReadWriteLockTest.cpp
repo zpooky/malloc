@@ -448,7 +448,7 @@ struct ThreadedTestArg {
 };
 
 class ReadWriteLockThreadTest : public ::testing::TestWithParam<std::size_t> {};
-INSTANTIATE_TEST_CASE_P(PreFill, ReadWriteLockThreadTest,
+INSTANTIATE_TEST_CASE_P(Default, ReadWriteLockThreadTest,
                         ::testing::Range(size_t(1), size_t(5)));
 
 static void exclusive_test(size_t thCnt, void *(*worker)(void *)) {
@@ -456,7 +456,6 @@ static void exclusive_test(size_t thCnt, void *(*worker)(void *)) {
   const size_t final_update = thCnt * thUpdate;
 
   sp::Barrier b(thCnt);
-  ReadWriteLock lock;
 
   pthread_t *ts = new pthread_t[thCnt];
   ThreadedTestArg arg;
@@ -666,10 +665,73 @@ static void *threaded_TrySharedTryPrepareEagerExclusive(void *a) {
   return nullptr;
 }
 
+template <std::size_t BS>
+class Brute {
+private:
+  std::size_t buckets[BS];
+
+public:
+  Brute() //
+      : buckets() {
+  }
+
+  bool next(std::size_t max) {
+    return true;
+  }
+  const std::size_t *get() const {
+    return buckets;
+  }
+};
+
 TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepareEagerExclusive) {
   const size_t thCnt = GetParam();
   exclusive_test(thCnt, threaded_TrySharedTryPrepareEagerExclusive);
 }
+// max:1[,,,,,]
+// max:2[,,,,,]
+static void tests(std::initializer_list<void *(*)(void *)> workers) {
+  size_t workerThreads[100] = {1}; // TODO
 
-// TEST(ReadWriteLockTest, threaded_combination){
-// }
+  constexpr size_t thUpdate = 1024;
+
+  const size_t thCnt = workers.size();
+  const size_t final_update = thCnt * thUpdate;
+
+  {
+    sp::Barrier b(thCnt);
+
+    std::vector<pthread_t> ts;
+    ThreadedTestArg arg;
+    arg.b = &b;
+    arg.it = thUpdate;
+    arg.toUpdate = 0;
+
+    {
+      size_t thW = 0;
+      for (auto worker : workers) {
+        size_t thCnt = workerThreads[thW];
+        for (size_t th(0); th < thCnt; ++th) {
+          ts.push_back(0);
+          pthread_t &tid = ts.back();
+          int res = pthread_create(&tid, nullptr, worker, &arg);
+          ASSERT_EQ(0, res);
+          ASSERT_FALSE(tid == 0);
+        }
+      }
+    }
+
+    for (auto &current : ts) {
+      int res = pthread_join(current, nullptr);
+      ASSERT_EQ(0, res);
+    }
+    ASSERT_EQ(arg.toUpdate, final_update);
+  }
+}
+
+TEST(ReadWriteLockTest, threaded_combination) {
+  //TODO combination of thread count for different work
+  tests({threaded_TrySharedTryPrepareEagerExclusive,
+         threaded_TryPrepareTryExclusive, threaded_TryExclusive,
+         threaded_LazyExclusive, threaded_TryPrepareEagerExclusive,
+         threaded_EagerExclusive});
+}

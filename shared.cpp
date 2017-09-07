@@ -12,7 +12,6 @@ namespace header {
 
 void debug_print_free(Free *const head) {
   if (head) {
-
     void *t = reinterpret_cast<void *>(head);
     printf("[%p,%zu]", t, head->size);
     debug_print_free(head->next.load());
@@ -21,15 +20,17 @@ void debug_print_free(Free *const head) {
   }
 }
 
-bool is_consecutive(const Free &head, const Free &tail) noexcept {
-  uintptr_t head_base = reinterpret_cast<uintptr_t>(&head);
-  uintptr_t head_end = head_base + head.size;
-  uintptr_t tail_base = reinterpret_cast<uintptr_t>(&tail);
+bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
+  assert(head != nullptr);
+  assert(tail != nullptr);
+  uintptr_t head_base = reinterpret_cast<uintptr_t>(head);
+  uintptr_t head_end = head_base + head->size;
+  uintptr_t tail_base = reinterpret_cast<uintptr_t>(tail);
   return head_end == tail_base;
 }
 
 void coalesce(Free &head, const Free &tail) noexcept {
-  assert(is_consecutive(head, tail));
+  assert(is_consecutive(&head, &tail));
   head.size += tail.size;
 }
 

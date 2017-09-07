@@ -54,10 +54,14 @@ void release_pool(local::PoolsRAII *) noexcept;
 } // namespace global
 
 #ifdef SP_TEST
+// any of these can not be used during load
 namespace test {
 std::vector<std::tuple<void *, std::size_t>> watch_free(global::State *);
 void clear_free(global::State *);
 void print_free(global::State *);
+std::size_t count_free(global::State *);
+void sort_free(global::State *);
+void coalesce_free(global::State *);
 } // namespace test
 #endif
 

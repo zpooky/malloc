@@ -49,10 +49,8 @@ public:
   }
 
   virtual void SetUp() {
-    ASSERT_EQ(size_t(0), free_entries(state));
   }
   virtual void TearDown() {
-    ASSERT_EQ(size_t(0), free_entries(state));
   }
 };
 
@@ -167,15 +165,10 @@ start:
   }
 }
 
-static void assert_dummy_dealloc(global::State &state, Range &range) {
-  auto free = test::watch_free(&state);
-
+template <typename Frees>
+static void assert_dummy_dealloc_no_abs_size(const Frees &free, Range &range) {
   // 1.
   assert_no_overlap(free);
-
-  // 2.
-  ASSERT_EQ(range.length, size_of_free(free));
-  ASSERT_EQ(size_t(1), free.size()); // free pages should be coalesced
 
   // 3.
   for (auto &current : free) {
@@ -192,6 +185,20 @@ static void assert_dummy_dealloc(global::State &state, Range &range) {
       ASSERT_TRUE(false);
     }
   }
+}
+
+static void assert_dummy_dealloc_no_abs_size(global::State &s, Range &r) {
+  auto free = test::watch_free(&s);
+  assert_dummy_dealloc_no_abs_size(free, r);
+}
+
+static void assert_dummy_dealloc(global::State &state, Range &range) {
+  auto free = test::watch_free(&state);
+
+  ASSERT_EQ(range.length, size_of_free(free));
+  ASSERT_EQ(size_t(1), free.size()); // free pages should be coalesced
+
+  assert_dummy_dealloc_no_abs_size(free, range);
 }
 
 static void assert_dummy_alloc(global::State &state, Range &range, size_t bSz) {
@@ -249,6 +256,7 @@ TEST_P(GlobalTest, dealloc_alloc_symmetric) {
     ASSERT_EQ(range[i], uint8_t(0));
   }
 
+  ASSERT_EQ(size_t(0), free_entries(state));
   free(startR);
 }
 
@@ -271,6 +279,7 @@ TEST_P(GlobalTest, dealloc_doubling_alloc) {
   //
   assert_dummy_alloc(state, range, sz * 2);
 
+  ASSERT_EQ(size_t(0), free_entries(state));
   free(startR);
 }
 
@@ -291,6 +300,7 @@ TEST_P(GlobalTest, dealloc_half_alloc) {
 
     assert_dummy_alloc(state, range, sz / 2);
 
+    ASSERT_EQ(size_t(0), free_entries(state));
     free(startR);
   }
 }
@@ -298,14 +308,12 @@ TEST_P(GlobalTest, dealloc_half_alloc) {
 // TEST_P(GlobalTest, dealloc_random_alloc) {
 //   const size_t sz = GetParam();
 //
-//   const size_t SIZE = 1024 * 64;
-//   alignas(64) uint8_t range[SIZE];
-//
 //   dealloc_rand_setup(range, SIZE, sz);
 //
 //   assert_dummy_dealloc(range, SIZE);
 //
 //   assert_dummy_alloc(range, SIZE, sz);
+//   ASSERT_EQ(size_t(0), free_entries(state));
 // }
 
 /*
@@ -326,21 +334,21 @@ static void *perform_work(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
-  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
   arg->b->await();
   dummy_dealloc_setup(*arg->state, sub, arg->sz);
 
-  assert_dummy_dealloc(*arg->state, arg->range);
+  // assert_dummy_dealloc_no_abs_size(*arg->state, arg->range);
 
-  assert_dummy_alloc(*arg->state, arg->range, arg->sz);
+  // assert_dummy_alloc(*arg->state, arg->range, arg->sz);
   return nullptr;
 }
 
-TEST_P(GlobalTest, threaded_dealloc_alloc_symmetric) {
+TEST_P(GlobalTest, threaded_dealloc) {
   const size_t sz = GetParam();
 
   const size_t thCnt = 4;
-  const size_t SIZE = 1024 * 128;
+  const size_t SIZE = 1024 * 64 * 8;
   const size_t RANGE_SIZE = SIZE * thCnt;
 
   uint8_t *const startR = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
@@ -374,8 +382,24 @@ TEST_P(GlobalTest, threaded_dealloc_alloc_symmetric) {
     int res = pthread_join(t, NULL);
     ASSERT_EQ(0, res);
   }
+  assert_dummy_dealloc_no_abs_size(state, range);
+
+  {
+      // // note we assume no coalecsing
+      // std::size_t frees = test::count_free(&state);
+      // printf("#free objects:%zu\n", frees);
+      // ASSERT_EQ(RANGE_SIZE / sz, frees);
+  } //
+  {
+    // TODO
+    // test::coalesce_free(&state);
+    // ASSERT_EQ(size_t(1), test::count_free(&state));
+    // assert_dummy_dealloc(state, range);
+  }
+
   free(startR);
 }
+// > make -C test && sp_repeat ./test/thetest.exe --gtest_filter="*threaded_dealloc*"
 
 // TODO threaded
 // TODO shuffle inc size dealloc
