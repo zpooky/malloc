@@ -104,7 +104,7 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
 
 void debug_print_free(Free *const head);
 bool is_consecutive(const Free *const head, const Free *const tail) noexcept;
-void coalesce(Free &, const Free &) noexcept;
+void coalesce(Free &head, const Free &tail, Free *const next) noexcept;
 
 static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");

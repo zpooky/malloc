@@ -135,6 +135,7 @@ start:
     i++;
     void *const start = (void *)range.raw_offset(offset);
 
+    // printf("global::internal::dealloc(state, %p, %zu)\n", start, bSz);
     global::internal::dealloc(state, start, bSz);
 
     // printf("[%p,%zu]", start, bucketSz);
@@ -334,8 +335,9 @@ static void *perform_work(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
-  printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
   arg->b->await();
+  // printf("arg->sz: %zu\n", arg->sz);
   dummy_dealloc_setup(*arg->state, sub, arg->sz);
 
   // assert_dummy_dealloc_no_abs_size(*arg->state, arg->range);
@@ -346,6 +348,7 @@ static void *perform_work(void *argument) {
 
 TEST_P(GlobalTest, threaded_dealloc) {
   const size_t sz = GetParam();
+  printf("sz: %zu\n", sz);
 
   const size_t thCnt = 4;
   const size_t SIZE = 1024 * 64 * 8;
@@ -391,15 +394,29 @@ TEST_P(GlobalTest, threaded_dealloc) {
       // ASSERT_EQ(RANGE_SIZE / sz, frees);
   } //
   {
-    // TODO
+    auto free = test::watch_free(&state);
+    auto cmp = [](const auto &first, const auto &second) -> bool {
+      return std::get<0>(first) < std::get<0>(second);
+    };
+    std::sort(free.begin(), free.end(), cmp);
+    void *first = startR;
+    for (auto it = free.begin(); it != free.end(); ++it) {
+      ASSERT_EQ(std::get<0>(*it), first);
+
+      uintptr_t fptr = reinterpret_cast<uintptr_t>(std::get<0>(*it));
+      first = reinterpret_cast<void *>(fptr + std::get<1>(*it));
+    }
+  }
+  {
     // test::coalesce_free(&state);
-    // ASSERT_EQ(size_t(1), test::count_free(&state));
+    // test::print_free(&state);
     // assert_dummy_dealloc(state, range);
   }
 
   free(startR);
 }
-// > make -C test && sp_repeat ./test/thetest.exe --gtest_filter="*threaded_dealloc*"
+// > make -C test && sp_repeat ./test/thetest.exe
+// --gtest_filter="*threaded_dealloc*"
 
 // TODO threaded
 // TODO shuffle inc size dealloc

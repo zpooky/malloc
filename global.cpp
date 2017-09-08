@@ -25,7 +25,8 @@ void free_enqueue(header::Free *const head,
   assert(head != target);
 
   if (header::is_consecutive(head, target)) {
-    header::coalesce(*head, *target);
+    header::Free *const next = head->next.load(std::memory_order_relaxed);
+    header::coalesce(*head, *target, next);
   } else {
     target->next.store(head->next.load());
     head->next.store(target);
@@ -116,69 +117,85 @@ header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
 void return_free(global::State &state, header::Free *const toReturn) noexcept {
 // [Head]->[Current]->[Next]
 start:
-  header::Free *head = &state.free;
-  sp::TrySharedLock cur_shared_guard(head->next_lock);
-  if (!cur_shared_guard) {
-    //...
-    goto start;
-  }
-retry:
   if (true) {
-    // [Current:SHARED][Next:-]
-
-    sp::TryPrepareLock cur_pre_guard(cur_shared_guard);
-    if (cur_pre_guard) {
-      // [Current:PREPARE][Next:-]
-
-      header::Free *const cur = head->next.load(std::memory_order_relaxed);
-      if (cur) { //<--------------------
-        if (toReturn > cur) {
-
-          // TODO TryPrepare guard is probably enough here
-          sp::TryExclusiveLock next_exc_guard(cur->next_lock);
-          if (next_exc_guard) {
-            // [Current:PREPARE][Next:EXCLUSIVE]
-
-            sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
-            if (cur_exc_guard) {
-              // [Current:EXCLUSIVE][Next:EXCLUSIVE]
-
-              free_enqueue(cur, toReturn);
-              return;
-            } /*Current Exclusive Guard*/ else {
-              // bug - if PREPARE then a exclusive should always succeed?
-              assert(false); // TODO fails
-            }
-          } /*Next Exclusive Guard*/ else {
-            //...???
-            goto start;
-          }
-        }
-        /*
-         *
-         */
-        sp::TrySharedLock next_shared_guard(cur->next_lock);
-        if (next_shared_guard) {
-          cur_shared_guard.swap(next_shared_guard);
-          head = cur;
-          goto retry;
-        } else {
-          //...?
-          goto start;
-        }
-        //<---------------------------
-      } /*current*/ else {
-        // current is null
-        free_enqueue(head, toReturn);
-        return;
-      }
-    } /*Current Prepare Guard*/ else {
-      // assert(false); // TODO fails
+    header::Free *head = &state.free;
+    sp::TrySharedLock cur_shared_guard(head->next_lock);
+    if (!cur_shared_guard) {
+      //...
       goto start;
     }
+  retry:
+    if (true) {
+      // [Current:SHARED][Next:-]
+
+      sp::TryPrepareLock cur_pre_guard(cur_shared_guard);
+      if (cur_pre_guard) {
+        // [Current:PREPARE][Next:-]
+
+        header::Free *const current = head->next;
+        if (current) { //<--------------------
+          if (toReturn > current) {
+
+            sp::TrySharedLock next_shared_guard(current->next_lock);
+            if (next_shared_guard) {
+              // [Current:PREPARE][Next:SHARED]
+
+              if (toReturn > current->next.load()) {
+                // higher than next aswell
+                cur_shared_guard.swap(next_shared_guard);
+                head = current;
+                goto retry;
+              }
+
+              sp::TryPrepareLock next_pre_guard(next_shared_guard);
+              if (next_pre_guard) {
+                // [Current:PREPARE][Next:EXCLUSIVE]
+
+                sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
+                if (cur_exc_guard) {
+                  // [Current:EXCLUSIVE][Next:EXCLUSIVE]
+
+                  free_enqueue(current, toReturn);
+                  return;
+                } /*Current Exclusive Guard*/ else {
+                  // bug - if PREPARE then a exclusive should always succeed?
+                  assert(false); // TODO fails
+                }
+              } /*Next Exclusive Guard*/ else {
+                //...???
+                goto start;
+              }
+            } /*Next Shared Guard*/ else {
+              //...???
+              goto start;
+            }
+          }
+          /*
+           *
+           */
+          sp::TrySharedLock next_shared_guard(current->next_lock);
+          if (next_shared_guard) {
+            cur_shared_guard.swap(next_shared_guard);
+            head = current;
+            goto retry;
+          } /*next_shared_guard*/ else {
+            //...?
+            goto start;
+          }
+          //<---------------------------
+        } /*current*/ else {
+          // current is null
+          free_enqueue(head, toReturn);
+          return;
+        }
+      } /*current_pre_guard*/ else {
+        // assert(false); // TODO fails
+        goto start;
+      }
+    }
+    assert(false); // leak memory here
   }
-  assert(false); // leak memory here
-}
+} // return_free()
 
 void return_free(global::State &state, void *const ptr,
                  size_t length) noexcept {
@@ -188,7 +205,7 @@ void return_free(global::State &state, void *const ptr,
     assert(ptr == toReturn);
     return return_free(state, toReturn);
   }
-}
+} // return_free()
 
 } // namespace
 
@@ -242,20 +259,42 @@ start:
   }
   return result;
 }
+
+static void swap(header::Free *p, header::Free *c, header::Free *n) {
+  p->next.store(n);
+  c->next.store(n->next);
+  n->next.store(c);
+}
+
 void sort_free(global::State *state) {
   // TODO
   if (state == nullptr) {
     state = &internal_state;
   }
-  header::Free *head = state->free.next.load();
+restart:
+  bool swapped = false;
+  header::Free *priv = &state->free;
+  header::Free *current = priv->next.load();
 start:
-  if (head) {
-    header::Free *const next = head->next.load(std::memory_order_acquire);
+  if (current) {
+    header::Free *const next = current->next;
     if (next) {
-      if (next > head) {
+      if (next > current) {
+        swap(priv, current, next);
+        swapped = true;
+        priv = next;
+        // current = current;
+        goto restart;
+      } else {
+        priv = current;
+        current = next;
       }
       goto start;
+    } else if (swapped) {
+      goto restart;
     }
+  } else if (swapped) {
+    goto restart;
   }
 }
 
@@ -263,15 +302,15 @@ void coalesce_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
-  sort_free(state);
+  // sort_free(state);
   header::Free *head = state->free.next.load();
 start:
   if (head) {
   get_next:
-    header::Free *const next = head->next.load(std::memory_order_acquire);
+    header::Free *const next = head->next;
     if (next) {
       if (header::is_consecutive(head, next)) {
-        header::coalesce(*head, *next);
+        header::coalesce(*head, *next, next->next);
         goto get_next;
       }
       head = next;

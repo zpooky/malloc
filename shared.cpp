@@ -29,9 +29,10 @@ bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
   return head_end == tail_base;
 }
 
-void coalesce(Free &head, const Free &tail) noexcept {
+void coalesce(Free &head, const Free &tail, Free *const next) noexcept {
   assert(is_consecutive(&head, &tail));
   head.size += tail.size;
+  head.next.store(next, std::memory_order_relaxed);
 }
 
 Free *init_free(void *const head, std::size_t length,
