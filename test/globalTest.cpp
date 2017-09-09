@@ -116,7 +116,7 @@ static void assert_no_overlap(Points &ptrs) {
     auto it = current;
     while (++it != ptrs.end()) {
       if (in_range(*current, *it)) {
-        printf("    current[%p, %zu]\n\t it[%p, %zu]",     //
+        printf("    current[%p, %zu]\n\t it[%p, %zu]",       //
                std::get<0>(*current), std::get<1>(*current), //
                std::get<0>(*it), std::get<1>(*it));
         printf(" == false\n");
@@ -336,7 +336,18 @@ struct ThreadAllocArg {
   Range range;
 };
 
-static void *perform_work(void *argument) {
+static void *worker_random_dealloc(void *argument) {
+  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
+
+  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
+  arg->b->await();
+  dummy_dealloc_setup(*arg->state, sub, arg->sz);
+
+  std::atomic_thread_fence(std::memory_order_release);
+  return nullptr;
+}
+
+static void *worker_dealloc(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
@@ -345,17 +356,13 @@ static void *perform_work(void *argument) {
   // printf("arg->sz: %zu\n", arg->sz);
   dummy_dealloc_setup(*arg->state, sub, arg->sz);
 
-  // assert_dummy_dealloc_no_abs_size(*arg->state, arg->range);
-
   // assert_dummy_alloc(*arg->state, arg->range, arg->sz);
   std::atomic_thread_fence(std::memory_order_release);
   return nullptr;
 }
 
-TEST_P(GlobalTest, threaded_dealloc) {
-  const size_t sz = GetParam();
-  // printf("sz: %zu\n", sz);
-
+static void threaded_dealloc_test(global::State &state, size_t sz,
+                                  void *(*f)(void *)) {
   const size_t thCnt = 4;
   const size_t SIZE = 1024 * 64 * 8;
   const size_t RANGE_SIZE = SIZE * thCnt;
@@ -381,7 +388,7 @@ TEST_P(GlobalTest, threaded_dealloc) {
     }
     pthread_t tid = 0;
 
-    int res = pthread_create(&tid, NULL, perform_work, &arg);
+    int res = pthread_create(&tid, NULL, f, &arg);
     ASSERT_EQ(0, res);
     ASSERT_FALSE(tid == 0);
 
@@ -422,6 +429,17 @@ TEST_P(GlobalTest, threaded_dealloc) {
   }
 
   free(startR);
+}
+
+TEST_P(GlobalTest, threaded_random_dealloc) {
+  const size_t sz = GetParam();
+  threaded_dealloc_test(state, sz, worker_random_dealloc);
+}
+
+TEST_P(GlobalTest, threaded_dealloc) {
+  const size_t sz = GetParam();
+  threaded_dealloc_test(state, sz, worker_dealloc);
+  // printf("sz: %zu\n", sz);
 }
 // > make -C test && sp_repeat ./test/thetest.exe
 // --gtest_filter="*threaded_dealloc*"
