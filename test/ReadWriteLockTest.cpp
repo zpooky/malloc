@@ -449,7 +449,7 @@ struct ThreadedTestArg {
 
 class ReadWriteLockThreadTest : public ::testing::TestWithParam<std::size_t> {};
 INSTANTIATE_TEST_CASE_P(Default, ReadWriteLockThreadTest,
-                        ::testing::Range(size_t(1), size_t(5)));
+                        ::testing::Range(size_t(1), size_t(15)));
 
 static void exclusive_test(size_t thCnt, void *(*worker)(void *)) {
   constexpr size_t thUpdate = 1024;

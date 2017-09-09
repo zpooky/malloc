@@ -29,20 +29,19 @@ bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
   return head_end == tail_base;
 }
 
-void coalesce(Free &head, const Free &tail, Free *const next) noexcept {
-  assert(is_consecutive(&head, &tail));
-  head.size += tail.size;
-  head.next.store(next, std::memory_order_relaxed);
+void coalesce(Free *head, Free *tail, Free *const next) noexcept {
+  assert(is_consecutive(head, tail));
+  head->size = head->size + tail->size;
+  head->next.store(next, std::memory_order_relaxed);
 }
 
-Free *init_free(void *const head, std::size_t length,
-                header::Free *const next) noexcept {
+Free *init_free(void *const head, std::size_t length) noexcept {
   if (head && length > 0) {
     assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
     assert(length >= sizeof(Free));
     memset(head, 0, length); // TODO only debug
 
-    Free *const result = new (head) Free(length, next);
+    Free *const result = new (head) Free(length, nullptr);
     assert(reinterpret_cast<Free *>(result) == head);
     return result;
   }

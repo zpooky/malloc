@@ -16,22 +16,21 @@ void free_dequeue(header::Free &head, header::Free &target) noexcept {
   assert(&head != &target);
   head.next.store(target.next.load());
   target.next.store(nullptr);
-}
+} // free_dequeue()
 
-void free_enqueue(header::Free *const head,
-                  header::Free *const target) noexcept {
+void free_enqueue(header::Free * head, header::Free * target) noexcept {
   assert(head != nullptr);
   assert(target != nullptr);
   assert(head != target);
 
   if (header::is_consecutive(head, target)) {
     header::Free *const next = head->next.load(std::memory_order_relaxed);
-    header::coalesce(*head, *target, next);
+    header::coalesce(head, target, next);
   } else {
     target->next.store(head->next.load());
     head->next.store(target);
   }
-}
+} // free_enqueue()
 
 header::Free *find_free(global::State &state, size_t size) noexcept {
 start:
@@ -84,7 +83,7 @@ retry:
     }
   }
   return nullptr;
-}
+} // find_free()
 
 header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
   // #ifdef SP_MALLOC_TEST_NO_ALLOC
@@ -103,7 +102,7 @@ header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
     void *const res = ::sbrk(allocSz);
     if (res != (void *)-1) {
       state.brk_alloc = state.brk_alloc + allocSz;
-      return header::init_free(res, allocSz, nullptr);
+      return header::init_free(res, allocSz);
     } else if (allocSz > atLeast) {
       allocSz = allocSz / 2;
       allocSz = std::max(allocSz, atLeast);
@@ -112,10 +111,10 @@ header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
   }
 
   return nullptr;
-}
+} // alloc_free()
 
 void return_free(global::State &state, header::Free *const toReturn) noexcept {
-// [Head]->[Current]->[Next]
+  // [Head]->[Current]->[Next]
 start:
   if (true) {
     header::Free *head = &state.free;
@@ -159,7 +158,7 @@ start:
                   return;
                 } /*Current Exclusive Guard*/ else {
                   // bug - if PREPARE then a exclusive should always succeed?
-                  assert(false); // TODO fails
+                  assert(false);
                 }
               } /*Next Exclusive Guard*/ else {
                 //...???
@@ -197,13 +196,11 @@ start:
   }
 } // return_free()
 
-void return_free(global::State &state, void *const ptr,
-                 size_t length) noexcept {
-  // assert(ptr != nullptr);
-  header::Free *const toReturn = header::init_free(ptr, length, nullptr);
+void return_free(global::State &s, void *const ptr, size_t length) noexcept {
+  header::Free *const toReturn = header::init_free(ptr, length);
   if (toReturn) {
     assert(ptr == toReturn);
-    return return_free(state, toReturn);
+    return return_free(s, toReturn);
   }
 } // return_free()
 
@@ -226,13 +223,14 @@ start:
   }
 
   return result;
-}
+} // watch_free()
+
 void clear_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
   state->free.next.store(nullptr);
-}
+} // clear_free()
 
 void print_free(global::State *state) {
   if (state == nullptr) {
@@ -243,7 +241,7 @@ void print_free(global::State *state) {
     printf("cmpar: ");
     header::debug_print_free(head);
   }
-}
+} // print_free()
 
 std::size_t count_free(global::State *state) {
   if (state == nullptr) {
@@ -258,13 +256,13 @@ start:
     goto start;
   }
   return result;
-}
+} // count_free()
 
 static void swap(header::Free *p, header::Free *c, header::Free *n) {
   p->next.store(n);
   c->next.store(n->next);
   n->next.store(c);
-}
+} // swap()
 
 void sort_free(global::State *state) {
   // TODO
@@ -296,7 +294,7 @@ start:
   } else if (swapped) {
     goto restart;
   }
-}
+} // sort_free()
 
 void coalesce_free(global::State *state) {
   if (state == nullptr) {
@@ -310,14 +308,14 @@ start:
     header::Free *const next = head->next;
     if (next) {
       if (header::is_consecutive(head, next)) {
-        header::coalesce(*head, *next, next->next);
+        header::coalesce(head, next, next->next);
         goto get_next;
       }
       head = next;
       goto start;
     }
   }
-}
+} // coalesce_free()
 
 } // namespace test
 #endif

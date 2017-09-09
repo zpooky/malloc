@@ -110,15 +110,19 @@ static bool in_range(T &b, T &e) {
 
 template <typename Points>
 static void assert_no_overlap(Points &ptrs) {
+  // printf("assert_no_overlap(points:%zu)\n", ptrs.size());
   auto current = ptrs.begin();
   while (current != ptrs.end()) {
     auto it = current;
-    while (it++ != ptrs.end()) {
+    while (++it != ptrs.end()) {
       if (in_range(*current, *it)) {
-        printf("    current[%p, %zu]\n\t it[%p, %zu]\n",     //
+        printf("    current[%p, %zu]\n\t it[%p, %zu]",     //
                std::get<0>(*current), std::get<1>(*current), //
                std::get<0>(*it), std::get<1>(*it));
+        printf(" == false\n");
         ASSERT_TRUE(false);
+      } else {
+        // printf(" == true\n");
       }
     }
     current++;
@@ -166,11 +170,9 @@ start:
   }
 }
 
-template <typename Frees>
-static void assert_dummy_dealloc_no_abs_size(const Frees &free, Range &range) {
-  // 1.
-  assert_no_overlap(free);
-
+template <typename Ts>
+static void assert_dummy_dealloc_no_abs_size(const std::vector<Ts> &free,
+                                             Range &range) {
   // 3.
   for (auto &current : free) {
     void *const cur_ptr = std::get<0>(current);
@@ -186,6 +188,9 @@ static void assert_dummy_dealloc_no_abs_size(const Frees &free, Range &range) {
       ASSERT_TRUE(false);
     }
   }
+
+  //
+  assert_no_overlap(free);
 }
 
 static void assert_dummy_dealloc_no_abs_size(global::State &s, Range &r) {
@@ -343,16 +348,18 @@ static void *perform_work(void *argument) {
   // assert_dummy_dealloc_no_abs_size(*arg->state, arg->range);
 
   // assert_dummy_alloc(*arg->state, arg->range, arg->sz);
+  std::atomic_thread_fence(std::memory_order_release);
   return nullptr;
 }
 
 TEST_P(GlobalTest, threaded_dealloc) {
   const size_t sz = GetParam();
-  printf("sz: %zu\n", sz);
+  // printf("sz: %zu\n", sz);
 
   const size_t thCnt = 4;
   const size_t SIZE = 1024 * 64 * 8;
   const size_t RANGE_SIZE = SIZE * thCnt;
+  // printf("range_size: %zu\n", RANGE_SIZE);
 
   uint8_t *const startR = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
   ASSERT_FALSE(startR == nullptr);
@@ -385,6 +392,8 @@ TEST_P(GlobalTest, threaded_dealloc) {
     int res = pthread_join(t, NULL);
     ASSERT_EQ(0, res);
   }
+  std::atomic_thread_fence(std::memory_order_acquire);
+  // test::print_free(&state);
   assert_dummy_dealloc_no_abs_size(state, range);
 
   {
@@ -409,7 +418,6 @@ TEST_P(GlobalTest, threaded_dealloc) {
   }
   {
     // test::coalesce_free(&state);
-    // test::print_free(&state);
     // assert_dummy_dealloc(state, range);
   }
 
