@@ -12,13 +12,13 @@ namespace {
 
 static global::State internal_state;
 
-void free_dequeue(header::Free &head, header::Free &target) noexcept {
-  assert(&head != &target);
-  head.next.store(target.next.load());
-  target.next.store(nullptr);
+static void free_dequeue(header::Free *head, header::Free *target) noexcept {
+  assert(head != target);
+  head->next.store(target->next.load());
+  target->next.store(nullptr);
 } // free_dequeue()
 
-void free_enqueue(header::Free * head, header::Free * target) noexcept {
+static void free_enqueue(header::Free *head, header::Free *target) noexcept {
   assert(head != nullptr);
   assert(target != nullptr);
   assert(head != target);
@@ -34,52 +34,64 @@ void free_enqueue(header::Free * head, header::Free * target) noexcept {
 
 header::Free *find_free(global::State &state, size_t size) noexcept {
 start:
-  header::Free *head = &state.free;
-retry:
   if (true) {
-    sp::TrySharedLock shGuard(head->next_lock);
-    if (shGuard) {
-      header::Free *current = head->next.load(std::memory_order_relaxed);
+    header::Free *head = &state.free;
+    sp::TrySharedLock cur_shared_guard(head->next_lock);
+    if (!cur_shared_guard) {
+      //...
+      goto start;
+    }
+  retry:
+    if (true) {
+      // [Current:SHARED][Next:-]
+
+      header::Free *const current = head->next;
       if (current) {
-        if (size <= current->size) {
-          // matching
-          sp::TryPrepareLock preGuard(shGuard);
-          if (preGuard) {
-            // TODO maybe TryPrepare(current->next_lock) is enough here
-            sp::TryExclusiveLock headGuard(current->next_lock);
-            if (headGuard) {
-              sp::EagerExclusiveLock exGuard(preGuard);
-              if (exGuard) {
-                free_dequeue(*head, *current);
-                return current;
-              } else {
-                // bug
-                assert(false);
+        sp::TrySharedLock next_shared_guard(current->next_lock);
+        if (next_shared_guard) {
+          if (size <= current->size) {
+            // matching
+
+            sp::TryPrepareLock cur_pre_guard(cur_shared_guard);
+            if (cur_pre_guard) {
+              // [Current:PREPARE][Next:-]
+
+              // TODO maybe TryPrepare(current->next_lock) is enough here
+              sp::TryPrepareLock next_pre_guard(next_shared_guard);
+              if (next_pre_guard) {
+
+                sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
+                if (cur_exc_guard) {
+
+                  free_dequeue(head, current);
+                  return current;
+                } else {
+                  // bug
+                  assert(false);
+                }
+              } /*next_pre_guard*/ else {
+                // Could not lock current->next
+                cur_shared_guard.swap(next_shared_guard);
+                head = current;
+                goto retry;
               }
-            } else {
-              // Could not lock current->next
+            } /*cur_pre_guard*/ else {
+              // Some other thread got here first, continue
+              cur_shared_guard.swap(next_shared_guard);
               head = current;
-              // assert(false); // TODO just for test
               goto retry;
             }
           } else {
-            // Some other thread got here first, continue
+            // Not matching, continue
             head = current;
-            // assert(false); // TODO just for test
             goto retry;
           }
-        } else {
-          // Not matching, continue
-          head = current;
-          goto retry;
+        } /*next_shared_guard*/ else {
         }
       } else {
         // Not found any matching Free node
         return nullptr;
       }
-    } else {
-      // TODO some other thread has exclusive lock on node, restart?
-      goto start;
     }
   }
   return nullptr;
@@ -114,7 +126,7 @@ header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
 } // alloc_free()
 
 void return_free(global::State &state, header::Free *const toReturn) noexcept {
-  // [Head]->[Current]->[Next]
+// [Head]->[Current]->[Next]
 start:
   if (true) {
     header::Free *head = &state.free;
@@ -155,6 +167,16 @@ start:
                   // [Current:EXCLUSIVE][Next:EXCLUSIVE]
 
                   free_enqueue(current, toReturn);
+
+                  // header::Free *const next = current->next.load();
+                  // if (header::is_consecutive(current, next)) {
+                  //   sp::TryExclusiveLock next_exc_guard(next_pre_guard);
+                  //   if (next_exc_guard) {
+                  //     header::Free *const next_next =
+                  //         next->next.load(std::memory_order_acquire);
+                  //     header::coalesce(current, next, next_next);
+                  //   }
+                  // }
                   return;
                 } /*Current Exclusive Guard*/ else {
                   // bug - if PREPARE then a exclusive should always succeed?

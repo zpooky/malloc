@@ -207,13 +207,20 @@ static void assert_dummy_dealloc(global::State &state, Range &range) {
   assert_dummy_dealloc_no_abs_size(free, range);
 }
 
-static void assert_dummy_alloc(global::State &state, Range &range, size_t bSz) {
-  for (size_t i = 0; i < range.length; i += bSz) {
+static void assert_dummy_alloc(global::State &state, size_t size, Range &range,
+                               size_t bSz) {
+  for (size_t i = 0; i < size; i += bSz) {
 
     void *const current = global::internal::alloc(state, bSz);
     ASSERT_FALSE(current == nullptr);
 
     if (!in_range(range.start, range.length, current, bSz)) {
+      printf("in_range(%p, %zu, %p, %zu)|range(%zu-%zu)|cur(%zu-%zu)\n", //
+             range.start, range.length, current, bSz,
+             reinterpret_cast<uintptr_t>(range.start),
+             reinterpret_cast<uintptr_t>(range.start) + range.length,
+             reinterpret_cast<uintptr_t>(current),
+             reinterpret_cast<uintptr_t>(current) + bSz);
       // uintptr_t rangeStartPtr = reinterpret_cast<uintptr_t>(range);
       // void *const rangeStart = reinterpret_cast<void *>(rangeStartPtr);
       // void *const rangeEnd = reinterpret_cast<void *>(rangeStartPtr + SIZE);
@@ -228,9 +235,8 @@ static void assert_dummy_alloc(global::State &state, Range &range, size_t bSz) {
       // printf("curEnd=%p\n", curEnd);
       // printf("rangeStart > curStart and curStart < rangeEnd and curEnd <= "
       //        "rangeEnd\n");
-      // printf("%p > %p and %p < %p and %p <= %p\n", rangeStart, current,
-      // current,
-      //        rangeEnd, curEnd, rangeEnd);
+      // printf("%p > %p and %p < %p and %p <= %p\n", //
+      //        rangeStart, current, current, rangeEnd, curEnd, rangeEnd);
       ASSERT_TRUE(false);
     }
   }
@@ -257,7 +263,7 @@ TEST_P(GlobalTest, dealloc_alloc_symmetric) {
     ASSERT_EQ(range[i], uint8_t(0));
   }
 
-  assert_dummy_alloc(state, range, sz);
+  assert_dummy_alloc(state, range.length, range, sz);
   for (size_t i(SIZE); i < SIZE * 2; ++i) {
     ASSERT_EQ(range[i], uint8_t(0));
   }
@@ -283,7 +289,7 @@ TEST_P(GlobalTest, dealloc_doubling_alloc) {
   assert_dummy_dealloc(state, range);
 
   //
-  assert_dummy_alloc(state, range, sz * 2);
+  assert_dummy_alloc(state, range.length, range, sz * 2);
 
   ASSERT_EQ(size_t(0), free_entries(state));
   free(startR);
@@ -304,7 +310,7 @@ TEST_P(GlobalTest, dealloc_half_alloc) {
 
     assert_dummy_dealloc(state, range);
 
-    assert_dummy_alloc(state, range, sz / 2);
+    assert_dummy_alloc(state, range.length, range, sz / 2);
 
     ASSERT_EQ(size_t(0), free_entries(state));
     free(startR);
@@ -336,43 +342,9 @@ struct ThreadAllocArg {
   Range range;
 };
 
-static void *worker_random_dealloc(void *argument) {
-  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
-
-  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
-  arg->b->await();
-  dummy_dealloc_setup(*arg->state, sub, arg->sz);
-
-  std::atomic_thread_fence(std::memory_order_release);
-  return nullptr;
-}
-
-static void *worker_dealloc(void *argument) {
-  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
-
-  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
-  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
-  arg->b->await();
-  // printf("arg->sz: %zu\n", arg->sz);
-  dummy_dealloc_setup(*arg->state, sub, arg->sz);
-
-  // assert_dummy_alloc(*arg->state, arg->range, arg->sz);
-  std::atomic_thread_fence(std::memory_order_release);
-  return nullptr;
-}
-
-static void threaded_dealloc_test(global::State &state, size_t sz,
-                                  void *(*f)(void *)) {
-  const size_t thCnt = 4;
-  const size_t SIZE = 1024 * 64 * 8;
-  const size_t RANGE_SIZE = SIZE * thCnt;
-  // printf("range_size: %zu\n", RANGE_SIZE);
-
-  uint8_t *const startR = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
-  ASSERT_FALSE(startR == nullptr);
-  memset(startR, 0, RANGE_SIZE);
-  Range range(startR, RANGE_SIZE);
-
+template <size_t thCnt>
+static void threaded(global::State &state, size_t sz, size_t SIZE,
+                     const Range &range, void *(*f)(void *)) {
   std::vector<pthread_t> ts;
   ThreadAllocArg args[thCnt];
   sp::Barrier b(thCnt);
@@ -394,39 +366,73 @@ static void threaded_dealloc_test(global::State &state, size_t sz,
 
     ts.push_back(tid);
   }
-
   for (auto &t : ts) {
     int res = pthread_join(t, NULL);
     ASSERT_EQ(0, res);
   }
   std::atomic_thread_fence(std::memory_order_acquire);
+}
+//==========================================
+//=======threaded=dealloc===================
+//==========================================
+
+static void *worker_random_dealloc(void *argument) {
+  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
+
+  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
+  arg->b->await();
+  dummy_dealloc_setup(*arg->state, sub, arg->sz);
+
+  std::atomic_thread_fence(std::memory_order_release);
+  return nullptr;
+}
+
+static void *worker_dealloc(void *argument) {
+  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
+
+  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
+  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  arg->b->await();
+  // printf("arg->sz: %zu\n", arg->sz);
+  dummy_dealloc_setup(*arg->state, sub, arg->sz);
+
+  std::atomic_thread_fence(std::memory_order_release);
+  return nullptr;
+}
+
+static void assert_consecutive_range(global::State &state,
+                                     uint8_t *const startR) {
+  auto free = test::watch_free(&state);
+  auto cmp = [](const auto &first, const auto &second) -> bool {
+    return std::get<0>(first) < std::get<0>(second);
+  };
+  std::sort(free.begin(), free.end(), cmp);
+  void *first = startR;
+  for (auto it = free.begin(); it != free.end(); ++it) {
+    ASSERT_EQ(std::get<0>(*it), first);
+
+    uintptr_t fptr = reinterpret_cast<uintptr_t>(std::get<0>(*it));
+    first = reinterpret_cast<void *>(fptr + std::get<1>(*it));
+  }
+}
+
+static void threaded_dealloc_test(global::State &state, size_t sz,
+                                  void *(*f)(void *)) {
+  const size_t thCnt = 4;
+  const size_t SIZE = 1024 * 64 * 8;
+  const size_t RANGE_SIZE = SIZE * thCnt;
+  // printf("range_size: %zu\n", RANGE_SIZE);
+
+  uint8_t *const startR = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
+  ASSERT_FALSE(startR == nullptr);
+  memset(startR, 0, RANGE_SIZE);
+  Range range(startR, RANGE_SIZE);
+
+  threaded<thCnt>(state, sz, SIZE, range, f);
   // test::print_free(&state);
   assert_dummy_dealloc_no_abs_size(state, range);
 
-  {
-      // // note we assume no coalecsing
-      // std::size_t frees = test::count_free(&state);
-      // printf("#free objects:%zu\n", frees);
-      // ASSERT_EQ(RANGE_SIZE / sz, frees);
-  } //
-  {
-    auto free = test::watch_free(&state);
-    auto cmp = [](const auto &first, const auto &second) -> bool {
-      return std::get<0>(first) < std::get<0>(second);
-    };
-    std::sort(free.begin(), free.end(), cmp);
-    void *first = startR;
-    for (auto it = free.begin(); it != free.end(); ++it) {
-      ASSERT_EQ(std::get<0>(*it), first);
-
-      uintptr_t fptr = reinterpret_cast<uintptr_t>(std::get<0>(*it));
-      first = reinterpret_cast<void *>(fptr + std::get<1>(*it));
-    }
-  }
-  {
-    // test::coalesce_free(&state);
-    // assert_dummy_dealloc(state, range);
-  }
+  assert_consecutive_range(state, startR);
 
   free(startR);
 }
@@ -439,12 +445,55 @@ TEST_P(GlobalTest, threaded_random_dealloc) {
 TEST_P(GlobalTest, threaded_dealloc) {
   const size_t sz = GetParam();
   threaded_dealloc_test(state, sz, worker_dealloc);
-  // printf("sz: %zu\n", sz);
+}
+//==========================================
+//=======threaded=dealloc=alloc=============
+//==========================================
+static void threaded_dealloc_alloc_test(global::State &state, size_t sz,
+                                        void *(*f)(void *)) {
+  const size_t thCnt = 4;
+  const size_t SIZE = 1024 * 64 * 8;
+  const size_t RANGE_SIZE = SIZE * thCnt;
+  // printf("range_size: %zu\n", RANGE_SIZE);
+
+  uint8_t *const startR = (uint8_t *)aligned_alloc(64, RANGE_SIZE);
+  ASSERT_FALSE(startR == nullptr);
+  memset(startR, 0, RANGE_SIZE);
+  Range range(startR, RANGE_SIZE);
+
+  threaded<thCnt>(state, sz, SIZE, range, f);
+
+  // TODO assert no duplicate alloc
+
+  ASSERT_EQ(size_t(0), test::count_free(&state));
+
+  free(startR);
+}
+
+static void *worker_dealloc_alloc(void *argument) {
+  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
+
+  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
+  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  arg->b->await();
+  // printf("arg->sz: %zu\n", arg->sz);
+  dummy_dealloc_setup(*arg->state, sub, arg->sz);
+
+  assert_dummy_alloc(*arg->state, arg->thread_range_size, arg->range, arg->sz);
+
+  std::atomic_thread_fence(std::memory_order_release);
+  return nullptr;
+}
+
+TEST_P(GlobalTest, threaded_dealloc_alloc) {
+  const size_t sz = GetParam();
+  threaded_dealloc_alloc_test(state, sz, worker_dealloc_alloc);
 }
 // > make -C test && sp_repeat ./test/thetest.exe
 // --gtest_filter="*threaded_dealloc*"
 
-// TODO threaded
+// TODO threaded random_dealloc+alloc
+// TODO threaded dealloc workers & alloc workers
 // TODO shuffle inc size dealloc
 // TODO increment size dealloc
 // TODO decrementing size dealloc
