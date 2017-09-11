@@ -435,14 +435,14 @@ TryPrepareLock::operator bool() const noexcept {
 namespace sp {
 EagerExclusiveLock::EagerExclusiveLock(ReadWriteLock &p_lock) noexcept //
     : m_lock(&p_lock) {
-  m_lock->eager_exclusive_lock();
+  m_lock->eager_exclusive_lock(false, false);
 }
 
 EagerExclusiveLock::EagerExclusiveLock(TrySharedLock &p_lock) noexcept //
     : m_lock(nullptr) {
   if (p_lock) {
     print_state("\e[44m \e[0meager_exclusive_lock_before[TS]", p_lock.m_lock);
-    m_lock->eager_exclusive_lock(true, false);
+    p_lock.m_lock->eager_exclusive_lock(true, false);
     print_state("\e[44m \e[0meager_exclusive_lock_after[TS]", p_lock.m_lock);
     m_lock = p_lock.m_lock;
     p_lock.m_lock = nullptr;

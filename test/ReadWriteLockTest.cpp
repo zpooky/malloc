@@ -690,6 +690,7 @@ static void *threaded_TrySharedTryPrepare(void *a) {
   arg->b->await();
   size_t i = 0;
   while (i < arg->it) {
+
     sp::TrySharedLock shared_guard(arg->lock);
     if (shared_guard) {
       assert_shared(arg->lock);
