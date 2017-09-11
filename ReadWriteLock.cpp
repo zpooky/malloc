@@ -166,12 +166,17 @@ retry:
   }
 }
 
-void ReadWriteLock::eager_exclusive_lock(bool unsetPrepare) noexcept {
+void ReadWriteLock::eager_exclusive_lock(bool decShared,
+                                         bool unsetPrepare) noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
 retry:
   if (unsetPrepare) {
     assert(is_prepare(cmp));
+  }
+
+  if (decShared) {
+    assert(has_shared(cmp));
   }
   // Shared
   const uint64_t shared = cmp & shared_mask;
@@ -181,7 +186,8 @@ retry:
   cmp = shared | prepare | uint64_t(0x00);
 
   const uint64_t new_prepare(0x00);
-  const uint64_t try_exclusive = shared | new_prepare | uint64_t(0x01);
+  const uint64_t new_shared = decShared ? add_shared(shared, int8_t(-1)) : shared;
+  const uint64_t try_exclusive = new_shared | new_prepare | uint64_t(0x01);
 
   if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
     goto retry;
@@ -432,12 +438,23 @@ EagerExclusiveLock::EagerExclusiveLock(ReadWriteLock &p_lock) noexcept //
   m_lock->eager_exclusive_lock();
 }
 
-EagerExclusiveLock::EagerExclusiveLock(TryPrepareLock &p_lock) noexcept //
+EagerExclusiveLock::EagerExclusiveLock(TrySharedLock &p_lock) noexcept //
     : m_lock(nullptr) {
   if (p_lock) {
     print_state("\e[44m \e[0meager_exclusive_lock_before[TS]", p_lock.m_lock);
-    p_lock.m_lock->eager_exclusive_lock(true);
+    m_lock->eager_exclusive_lock(true, false);
     print_state("\e[44m \e[0meager_exclusive_lock_after[TS]", p_lock.m_lock);
+    m_lock = p_lock.m_lock;
+    p_lock.m_lock = nullptr;
+  }
+}
+
+EagerExclusiveLock::EagerExclusiveLock(TryPrepareLock &p_lock) noexcept //
+    : m_lock(nullptr) {
+  if (p_lock) {
+    print_state("\e[44m \e[0meager_exclusive_lock_before[TP]", p_lock.m_lock);
+    p_lock.m_lock->eager_exclusive_lock(false, true);
+    print_state("\e[44m \e[0meager_exclusive_lock_after[TP]", p_lock.m_lock);
     m_lock = p_lock.m_lock;
     p_lock.m_lock = nullptr;
   }
@@ -445,9 +462,9 @@ EagerExclusiveLock::EagerExclusiveLock(TryPrepareLock &p_lock) noexcept //
 
 EagerExclusiveLock::~EagerExclusiveLock() noexcept {
   if (m_lock) {
-    print_state("\e[44m \e[0meager_exclusive_unlock_before[TS]", m_lock);
+    print_state("\e[44m \e[0meager_exclusive_unlock_before", m_lock);
     m_lock->exclusive_unlock();
-    print_state("\e[44m \e[0meager_exclusive_unlock_after[TS]", m_lock);
+    print_state("\e[44m \e[0meager_exclusive_unlock_after", m_lock);
     m_lock = nullptr;
   }
 }

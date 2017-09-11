@@ -35,6 +35,7 @@ struct State {
   }
 };
 namespace internal {
+header::Free *find_freex(State &, std::size_t) noexcept;
 void *alloc(State &, std::size_t) noexcept;
 void dealloc(State &state, void *const start, std::size_t length) noexcept;
 

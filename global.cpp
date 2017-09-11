@@ -350,8 +350,12 @@ start:
 namespace global {
 namespace internal {
 
+header::Free *find_freex(State &state, std::size_t length) noexcept {
+  return find_free(state, length);
+}
+
 void *alloc(State &state, std::size_t p_length) noexcept {
-  header::Free *free = find_free(state, p_length);
+  header::Free *free = find_freex(state, p_length);
   if (free == nullptr) {
     free = alloc_free(state, p_length);
     if (free == nullptr) {

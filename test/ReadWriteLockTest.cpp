@@ -9,36 +9,45 @@ using namespace sp;
 void assert_shared(ReadWriteLock &lock) {
   ASSERT_TRUE(lock.shared_locks() > 0);
 }
+
 void assert_not_shared(ReadWriteLock &lock) {
   ASSERT_FALSE(lock.shared_locks() > 0);
 }
+
 void assert_prepare(ReadWriteLock &lock) {
   ASSERT_TRUE(lock.has_prepare_lock());
 }
+
 void assert_not_prepare(ReadWriteLock &lock) {
   ASSERT_FALSE(lock.has_prepare_lock());
 }
+
 void assert_exclusive(ReadWriteLock &lock) {
   ASSERT_TRUE(lock.has_exclusive_lock());
 }
+
 void assert_not_exclusive(ReadWriteLock &lock) {
   ASSERT_FALSE(lock.has_exclusive_lock());
 }
+
 void assert_only_shared(ReadWriteLock &lock) {
   assert_shared(lock);
   assert_not_prepare(lock);
   assert_not_exclusive(lock);
 }
+
 void assert_only_prepare(ReadWriteLock &lock) {
   assert_not_shared(lock);
   assert_prepare(lock);
   assert_not_exclusive(lock);
 }
+
 void assert_only_exclusive(ReadWriteLock &lock) {
   assert_not_shared(lock);
   assert_not_prepare(lock);
   assert_exclusive(lock);
 }
+
 void assert_only_shared_prepare(ReadWriteLock &lock) {
   assert_shared(lock);
   assert_prepare(lock);
@@ -479,6 +488,7 @@ static void exclusive_test(size_t thCnt, void *(*worker)(void *)) {
   delete[] ts;
 }
 
+//==================================================
 static void *threaded_EagerExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
@@ -498,6 +508,7 @@ TEST_P(ReadWriteLockThreadTest, threaded_EagerExclusive) {
   exclusive_test(thCnt, threaded_EagerExclusive);
 }
 
+//==================================================
 static void *threaded_TryPrepareEagerExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
@@ -505,8 +516,12 @@ static void *threaded_TryPrepareEagerExclusive(void *a) {
   while (i < arg->it) {
     sp::TryPrepareLock pre_guard(arg->lock);
     if (pre_guard) {
+      assert_prepare(arg->lock);
+
       sp::EagerExclusiveLock ex_guard(pre_guard);
       if (ex_guard) {
+        assert_only_exclusive(arg->lock);
+
         arg->toUpdate++;
         i++;
       }
@@ -520,13 +535,47 @@ TEST_P(ReadWriteLockThreadTest, threaded_TryPrepareEagerExclusive) {
   exclusive_test(thCnt, threaded_TryPrepareEagerExclusive);
 }
 
+//==================================================
+static void *threaded_TrySharedEagerExclusive(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+
+  size_t i = 0;
+  while (i < arg->it) {
+
+    sp::TrySharedLock shared_guard(arg->lock);
+    if (shared_guard) {
+      assert_shared(arg->lock);
+
+      sp::EagerExclusiveLock ex_guard(shared_guard);
+      if (ex_guard) {
+        assert_only_exclusive(arg->lock);
+
+        arg->toUpdate++;
+        i++;
+      }
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_TrySharedEagerExclusive) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_TrySharedEagerExclusive);
+}
+
+//==================================================
 static void *threaded_LazyExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
+
   size_t i = 0;
   while (i < arg->it) {
+
     sp::LazyExclusiveLock guard(arg->lock);
     if (guard) {
+      assert_only_exclusive(arg->lock);
+
       arg->toUpdate++;
       i++;
     }
@@ -539,13 +588,18 @@ TEST_P(ReadWriteLockThreadTest, threaded_LazyExclusive) {
   exclusive_test(thCnt, threaded_LazyExclusive);
 }
 
+//==================================================
 static void *threaded_TryExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
+
   size_t i = 0;
   while (i < arg->it) {
+
     sp::TryExclusiveLock guard(arg->lock);
     if (guard) {
+      assert_only_exclusive(arg->lock);
+
       arg->toUpdate++;
       i++;
     }
@@ -580,6 +634,7 @@ TEST_P(ReadWriteLockThreadTest, threaded_TryExclusive) {
 //   exclusive_test(thCnt, threaded_TrySharedTryExclusive);
 // }
 
+//==================================================
 static void *threaded_TryPrepareTryExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
@@ -587,8 +642,12 @@ static void *threaded_TryPrepareTryExclusive(void *a) {
   while (i < arg->it) {
     sp::TryPrepareLock prep_guard(arg->lock);
     if (prep_guard) {
+      assert_prepare(arg->lock);
+
       sp::TryExclusiveLock ex_guard(prep_guard);
       if (ex_guard) {
+        assert_only_exclusive(arg->lock);
+
         arg->toUpdate++;
         i++;
       }
@@ -602,13 +661,17 @@ TEST_P(ReadWriteLockThreadTest, threaded_TryPrepareTryExclusive) {
   exclusive_test(thCnt, threaded_TryPrepareTryExclusive);
 }
 
+//==================================================
 static void *threaded_TryPrepare(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
   size_t i = 0;
   while (i < arg->it) {
+
     sp::TryPrepareLock prep_guard(arg->lock);
     if (prep_guard) {
+      assert_prepare(arg->lock);
+
       arg->toUpdate++;
       i++;
     }
@@ -621,6 +684,7 @@ TEST_P(ReadWriteLockThreadTest, threaded_TryPrepare) {
   exclusive_test(thCnt, threaded_TryPrepare);
 }
 
+//==================================================
 static void *threaded_TrySharedTryPrepare(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
@@ -628,8 +692,11 @@ static void *threaded_TrySharedTryPrepare(void *a) {
   while (i < arg->it) {
     sp::TrySharedLock shared_guard(arg->lock);
     if (shared_guard) {
+      assert_shared(arg->lock);
+
       sp::TryPrepareLock prep_guard(shared_guard);
       if (prep_guard) {
+        assert_prepare(arg->lock);
         arg->toUpdate++;
         i++;
       }
@@ -643,6 +710,7 @@ TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepare) {
   exclusive_test(thCnt, threaded_TrySharedTryPrepare);
 }
 
+//==================================================
 static void *threaded_TrySharedTryPrepareEagerExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
@@ -650,12 +718,16 @@ static void *threaded_TrySharedTryPrepareEagerExclusive(void *a) {
   while (i < arg->it) {
     sp::TrySharedLock shared_guard(arg->lock);
     if (shared_guard) {
+      assert_shared(arg->lock);
 
       sp::TryPrepareLock prep_guard(shared_guard);
       if (prep_guard) {
+        assert_prepare(arg->lock);
 
         sp::EagerExclusiveLock ex_guard(prep_guard);
         if (ex_guard) {
+          assert_only_exclusive(arg->lock);
+
           arg->toUpdate++;
           i++;
         }
@@ -683,6 +755,7 @@ public:
   }
 };
 
+//==================================================
 TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepareEagerExclusive) {
   const size_t thCnt = GetParam();
   exclusive_test(thCnt, threaded_TrySharedTryPrepareEagerExclusive);
@@ -729,7 +802,7 @@ static void tests(std::initializer_list<void *(*)(void *)> workers) {
 }
 
 TEST(ReadWriteLockTest, threaded_combination) {
-  //TODO combination of thread count for different work
+  // TODO combination of thread count for different work
   tests({threaded_TrySharedTryPrepareEagerExclusive,
          threaded_TryPrepareTryExclusive, threaded_TryExclusive,
          threaded_LazyExclusive, threaded_TryPrepareEagerExclusive,
