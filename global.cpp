@@ -47,6 +47,7 @@ start:
 
       header::Free *const current = head->next;
       if (current) {
+
         sp::TrySharedLock next_shared_guard(current->next_lock);
         if (next_shared_guard) {
           if (size <= current->size) {
@@ -56,8 +57,8 @@ start:
             if (cur_pre_guard) {
               // [Current:PREPARE][Next:-]
 
-              // TODO maybe TryPrepare(current->next_lock) is enough here
-              sp::TryPrepareLock next_pre_guard(next_shared_guard);
+              // TODO should succeed if prepare:0 & exc:0
+              sp::EagerExclusiveLock next_pre_guard(next_shared_guard);
               if (next_pre_guard) {
 
                 sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
@@ -65,7 +66,7 @@ start:
 
                   free_dequeue(head, current);
                   return current;
-                } else {
+                } /*cur_exc_guard*/ else {
                   // bug
                   assert(false);
                 }
@@ -83,10 +84,12 @@ start:
             }
           } else {
             // Not matching, continue
+            cur_shared_guard.swap(next_shared_guard);
             head = current;
             goto retry;
           }
         } /*next_shared_guard*/ else {
+          goto start; //???
         }
       } else {
         // Not found any matching Free node
@@ -157,8 +160,9 @@ start:
                 head = current;
                 goto retry;
               }
-
-              sp::TryPrepareLock next_pre_guard(next_shared_guard);
+              //
+              // TODO should succeed if prepare:0 & // exc:0
+              sp::EagerExclusiveLock next_pre_guard(next_shared_guard);
               if (next_pre_guard) {
                 // [Current:PREPARE][Next:EXCLUSIVE]
 
