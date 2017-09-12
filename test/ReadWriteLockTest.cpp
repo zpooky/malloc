@@ -465,6 +465,7 @@ static void exclusive_test(size_t thCnt, void *(*worker)(void *)) {
   const size_t final_update = thCnt * thUpdate;
 
   sp::Barrier b(thCnt);
+  // printf("th: %zu\n", thCnt);
 
   pthread_t *ts = new pthread_t[thCnt];
   ThreadedTestArg arg;
@@ -533,35 +534,6 @@ static void *threaded_TryPrepareEagerExclusive(void *a) {
 TEST_P(ReadWriteLockThreadTest, threaded_TryPrepareEagerExclusive) {
   const size_t thCnt = GetParam();
   exclusive_test(thCnt, threaded_TryPrepareEagerExclusive);
-}
-
-//==================================================
-static void *threaded_TrySharedEagerExclusive(void *a) {
-  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
-  arg->b->await();
-
-  size_t i = 0;
-  while (i < arg->it) {
-
-    sp::TrySharedLock shared_guard(arg->lock);
-    if (shared_guard) {
-      assert_shared(arg->lock);
-
-      sp::EagerExclusiveLock ex_guard(shared_guard);
-      if (ex_guard) {
-        assert_only_exclusive(arg->lock);
-
-        arg->toUpdate++;
-        i++;
-      }
-    }
-  }
-  return nullptr;
-}
-
-TEST_P(ReadWriteLockThreadTest, threaded_TrySharedEagerExclusive) {
-  const size_t thCnt = GetParam();
-  exclusive_test(thCnt, threaded_TrySharedEagerExclusive);
 }
 
 //==================================================

@@ -94,7 +94,6 @@ private:
 
 public:
   explicit EagerExclusiveLock(ReadWriteLock &) noexcept;
-  explicit EagerExclusiveLock(TrySharedLock &) noexcept;
   explicit EagerExclusiveLock(TryPrepareLock &) noexcept;
   ~EagerExclusiveLock() noexcept;
 

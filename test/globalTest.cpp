@@ -108,6 +108,38 @@ static bool in_range(T &b, T &e) {
          (strtE >= strtB && strtE < (strtB + lenB));
 }
 
+static void assert_in_range(Range &range, void *current, size_t bSz) {
+  if (!in_range(range.start, range.length, current, bSz)) {
+    printf("in_range(%p, %zu, %p, "
+           "%zu)|range(%zu-%zu[l:%zu])|cur(%zu-%zu[l:%zu])\n",      //
+           range.start, range.length, current, bSz,                 //
+           reinterpret_cast<uintptr_t>(range.start),                //
+           reinterpret_cast<uintptr_t>(range.start) + range.length, //
+           range.length,                                            //
+           reinterpret_cast<uintptr_t>(current),                    //
+           reinterpret_cast<uintptr_t>(current) + bSz,              //
+           bSz);
+
+    // uintptr_t rangeStartPtr = reinterpret_cast<uintptr_t>(range);
+    // void *const rangeStart = reinterpret_cast<void *>(rangeStartPtr);
+    // void *const rangeEnd = reinterpret_cast<void *>(rangeStartPtr + SIZE);
+    //
+    // printf("range[%p-%p]", rangeStart, rangeEnd);
+    // printf("current[%p,%zu]\n", current, bucketSz);
+    // printf("rangeStart=%p\n", rangeStart);
+    // printf("rangeEnd=%p\n", rangeEnd);
+    // printf("curStart=%p\n", current);
+    // void *curEnd = (void *)(reinterpret_cast<uintptr_t>(current) +
+    // bucketSz);
+    // printf("curEnd=%p\n", curEnd);
+    // printf("rangeStart > curStart and curStart < rangeEnd and curEnd <= "
+    //        "rangeEnd\n");
+    // printf("%p > %p and %p < %p and %p <= %p\n", //
+    //        rangeStart, current, current, rangeEnd, curEnd, rangeEnd);
+    ASSERT_TRUE(false);
+  }
+}
+
 template <typename Points>
 static void assert_no_overlap(Points &ptrs) {
   // printf("assert_no_overlap(points:%zu)\n", ptrs.size());
@@ -116,9 +148,9 @@ static void assert_no_overlap(Points &ptrs) {
     auto it = current;
     while (++it != ptrs.end()) {
       if (in_range(*current, *it)) {
-        printf("    current[%p, %zu]\n\t it[%p, %zu]",       //
-               std::get<0>(*current), std::get<1>(*current), //
-               std::get<0>(*it), std::get<1>(*it));
+        // printf("    current[%p, %zu]\n\t it[%p, %zu]",       //
+        //        std::get<0>(*current), std::get<1>(*current), //
+        //        std::get<0>(*it), std::get<1>(*it));
         printf(" == false\n");
         ASSERT_TRUE(false);
       } else {
@@ -207,33 +239,6 @@ static void assert_dummy_dealloc(global::State &state, Range &range) {
   assert_dummy_dealloc_no_abs_size(free, range);
 }
 
-static void assert_in_range(Range &range, void *current, size_t bSz) {
-  if (!in_range(range.start, range.length, current, bSz)) {
-    printf("in_range(%p, %zu, %p, %zu)|range(%zu-%zu)|cur(%zu-%zu)\n", //
-           range.start, range.length, current, bSz,
-           reinterpret_cast<uintptr_t>(range.start),
-           reinterpret_cast<uintptr_t>(range.start) + range.length,
-           reinterpret_cast<uintptr_t>(current),
-           reinterpret_cast<uintptr_t>(current) + bSz);
-    // uintptr_t rangeStartPtr = reinterpret_cast<uintptr_t>(range);
-    // void *const rangeStart = reinterpret_cast<void *>(rangeStartPtr);
-    // void *const rangeEnd = reinterpret_cast<void *>(rangeStartPtr + SIZE);
-    //
-    // printf("range[%p-%p]", rangeStart, rangeEnd);
-    // printf("current[%p,%zu]\n", current, bucketSz);
-    // printf("rangeStart=%p\n", rangeStart);
-    // printf("rangeEnd=%p\n", rangeEnd);
-    // printf("curStart=%p\n", current);
-    // void *curEnd = (void *)(reinterpret_cast<uintptr_t>(current) +
-    // bucketSz);
-    // printf("curEnd=%p\n", curEnd);
-    // printf("rangeStart > curStart and curStart < rangeEnd and curEnd <= "
-    //        "rangeEnd\n");
-    // printf("%p > %p and %p < %p and %p <= %p\n", //
-    //        rangeStart, current, current, rangeEnd, curEnd, rangeEnd);
-    ASSERT_TRUE(false);
-  }
-}
 static auto assert_find_free(global::State &state, size_t size, Range &range,
                              size_t bSz) {
   std::vector<std::tuple<void *, std::size_t>> result;
@@ -489,7 +494,7 @@ TEST_P(GlobalTest, threaded_dealloc) {
 }
 //==========================================
 //=======threaded=dealloc=alloc=============
-//==========================================
+//==========================================sp
 static void threaded_dealloc_alloc_test(global::State &state, size_t sz,
                                         void *(*f)(void *)) {
   const size_t thCnt = 4;

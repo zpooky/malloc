@@ -58,11 +58,12 @@ start:
               // [Current:PREPARE][Next:-]
 
               // TODO should succeed if prepare:0 & exc:0
-              sp::EagerExclusiveLock next_pre_guard(next_shared_guard);
+              sp::TryPrepareLock next_pre_guard(next_shared_guard);
               if (next_pre_guard) {
 
                 sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
-                if (cur_exc_guard) {
+                sp::EagerExclusiveLock next_exc_guard(next_pre_guard);
+                if (cur_exc_guard && next_exc_guard) {
 
                   free_dequeue(head, current);
                   return current;
@@ -102,8 +103,8 @@ start:
 
 header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
   // #ifdef SP_MALLOC_TEST_NO_ALLOC
-  assert(false);
-  exit(123);
+  // assert(false);
+  // exit(123);
   // #endif
 
   {
@@ -162,12 +163,13 @@ start:
               }
               //
               // TODO should succeed if prepare:0 & // exc:0
-              sp::EagerExclusiveLock next_pre_guard(next_shared_guard);
+              sp::TryPrepareLock next_pre_guard(next_shared_guard);
               if (next_pre_guard) {
                 // [Current:PREPARE][Next:EXCLUSIVE]
 
                 sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
-                if (cur_exc_guard) {
+                sp::EagerExclusiveLock next_exc_guard(next_pre_guard);
+                if (cur_exc_guard && next_exc_guard) {
                   // [Current:EXCLUSIVE][Next:EXCLUSIVE]
 
                   free_enqueue(current, toReturn);
