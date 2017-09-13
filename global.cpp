@@ -57,13 +57,21 @@ start:
             if (cur_pre_guard) {
               // [Current:PREPARE][Next:-]
 
-              // TODO should succeed if prepare:0 & exc:0
               sp::TryPrepareLock next_pre_guard(next_shared_guard);
               if (next_pre_guard) {
 
                 sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
                 sp::EagerExclusiveLock next_exc_guard(next_pre_guard);
                 if (cur_exc_guard && next_exc_guard) {
+                  {
+                    assert(head->next_lock.has_exclusive_lock());
+                    assert(head->next_lock.shared_locks() == 0);
+                    assert(!head->next_lock.has_prepare_lock());
+
+                    assert(current->next_lock.has_exclusive_lock());
+                    assert(current->next_lock.shared_locks() == 0);
+                    assert(!current->next_lock.has_prepare_lock());
+                  }
 
                   free_dequeue(head, current);
                   return current;
@@ -103,8 +111,8 @@ start:
 
 header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
   // #ifdef SP_MALLOC_TEST_NO_ALLOC
-  // assert(false);
-  // exit(123);
+  assert(false);
+  exit(123);
   // #endif
 
   {
@@ -171,6 +179,15 @@ start:
                 sp::EagerExclusiveLock next_exc_guard(next_pre_guard);
                 if (cur_exc_guard && next_exc_guard) {
                   // [Current:EXCLUSIVE][Next:EXCLUSIVE]
+                  {
+                    assert(head->next_lock.has_exclusive_lock());
+                    assert(head->next_lock.shared_locks() == 0);
+                    assert(!head->next_lock.has_prepare_lock());
+
+                    assert(current->next_lock.has_exclusive_lock());
+                    assert(current->next_lock.shared_locks() == 0);
+                    assert(!current->next_lock.has_prepare_lock());
+                  }
 
                   free_enqueue(current, toReturn);
 

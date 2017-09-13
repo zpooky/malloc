@@ -256,21 +256,21 @@ static auto assert_find_free(global::State &state, size_t size, Range &range,
   return result;
 }
 
-static std::vector<std::tuple<void *, std::size_t>>
-assert_dummy_alloc(global::State &state, size_t size, Range &range,
-                   size_t bSz) {
+static void
+assert_dummy_alloc(global::State &state, size_t size, Range &range, size_t bSz,
+                   std::vector<std::tuple<void *, std::size_t>> &result) {
 
-  std::vector<std::tuple<void *, std::size_t>> result;
   for (size_t i = 0; i < size; i += bSz) {
-
-    void *const current = global::internal::alloc(state, bSz);
-    // ASSERT_FALSE(current == nullptr);
+    // retry:
+    void *const current = global::internal::find_freex(state, bSz);
+    // if (current == nullptr) {
+    //   goto retry;
+    // }
+    ASSERT_FALSE(current == nullptr);
 
     assert_in_range(range, current, bSz);
     result.emplace_back(current, bSz);
   }
-
-  return result;
 }
 
 /*Test*/
@@ -294,7 +294,8 @@ TEST_P(GlobalTest, dealloc_alloc_symmetric) {
     ASSERT_EQ(range[i], uint8_t(0));
   }
 
-  assert_dummy_alloc(state, range.length, range, sz);
+  std::vector<std::tuple<void *, std::size_t>> result;
+  assert_dummy_alloc(state, range.length, range, sz, result);
   for (size_t i(SIZE); i < SIZE * 2; ++i) {
     ASSERT_EQ(range[i], uint8_t(0));
   }
@@ -320,7 +321,8 @@ TEST_P(GlobalTest, dealloc_doubling_alloc) {
   assert_dummy_dealloc(state, range);
 
   //
-  assert_dummy_alloc(state, range.length, range, sz * 2);
+  std::vector<std::tuple<void *, std::size_t>> result;
+  assert_dummy_alloc(state, range.length, range, sz * 2, result);
 
   ASSERT_EQ(size_t(0), free_entries(state));
   free(startR);
@@ -341,7 +343,8 @@ TEST_P(GlobalTest, dealloc_half_alloc) {
 
     assert_dummy_dealloc(state, range);
 
-    assert_dummy_alloc(state, range.length, range, sz / 2);
+    std::vector<std::tuple<void *, std::size_t>> result;
+    assert_dummy_alloc(state, range.length, range, sz / 2, result);
 
     ASSERT_EQ(size_t(0), free_entries(state));
     free(startR);
@@ -495,9 +498,51 @@ TEST_P(GlobalTest, threaded_dealloc) {
 //==========================================
 //=======threaded=dealloc=alloc=============
 //==========================================sp
+static void *worker_dealloc_alloc(void *argument) {
+  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
+
+  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
+  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  arg->b->await();
+  // printf("arg->sz: %zu\n", arg->sz);
+  dummy_dealloc_setup(*arg->state, sub, arg->sz);
+
+  {
+    arg->b->await();
+    // TODO assert stuff
+    arg->b->await();
+  }
+
+  std::vector<std::tuple<void *, std::size_t>> result;
+  assert_dummy_alloc(*arg->state, arg->thread_range_size, arg->range, arg->sz,
+                     result);
+  assert_no_overlap(result);
+
+  std::atomic_thread_fence(std::memory_order_release);
+  return nullptr;
+}
+
+static void *worker_random_dealloc_alloc(void *argument) {
+  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
+
+  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
+  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
+  arg->b->await();
+  // printf("arg->sz: %zu\n", arg->sz);
+  dealloc_rand_setup(*arg->state, sub, arg->sz);
+
+  std::vector<std::tuple<void *, std::size_t>> result;
+  assert_dummy_alloc(*arg->state, arg->thread_range_size, arg->range, arg->sz,
+                     result);
+  assert_no_overlap(result);
+
+  std::atomic_thread_fence(std::memory_order_release);
+  return nullptr;
+}
+
 static void threaded_dealloc_alloc_test(global::State &state, size_t sz,
                                         void *(*f)(void *)) {
-  const size_t thCnt = 4;
+  const size_t thCnt = 2;
   const size_t SIZE = 1024 * 64 * 8;
   const size_t RANGE_SIZE = SIZE * thCnt;
   // printf("range_size: %zu\n", RANGE_SIZE);
@@ -515,40 +560,6 @@ static void threaded_dealloc_alloc_test(global::State &state, size_t sz,
   ASSERT_EQ(size_t(0), test::count_free(&state));
 
   free(startR);
-}
-
-static void *worker_dealloc_alloc(void *argument) {
-  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
-
-  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
-  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
-  arg->b->await();
-  // printf("arg->sz: %zu\n", arg->sz);
-  dummy_dealloc_setup(*arg->state, sub, arg->sz);
-
-  auto result = assert_dummy_alloc(*arg->state, arg->thread_range_size,
-                                   arg->range, arg->sz);
-  assert_no_overlap(result);
-
-  std::atomic_thread_fence(std::memory_order_release);
-  return nullptr;
-}
-
-static void *worker_random_dealloc_alloc(void *argument) {
-  auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
-
-  Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
-  // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
-  arg->b->await();
-  // printf("arg->sz: %zu\n", arg->sz);
-  dealloc_rand_setup(*arg->state, sub, arg->sz);
-
-  auto result = assert_dummy_alloc(*arg->state, arg->thread_range_size,
-                                   arg->range, arg->sz);
-  assert_no_overlap(result);
-
-  std::atomic_thread_fence(std::memory_order_release);
-  return nullptr;
 }
 
 TEST_P(GlobalTest, threaded_dealloc_alloc) {
