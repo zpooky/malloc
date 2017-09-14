@@ -48,6 +48,17 @@ Free *init_free(void *const head, std::size_t length) noexcept {
   return nullptr;
 }
 
+Free *reduce(Free *free, std::size_t length) noexcept {
+  assert(free->size >= length);
+  assert((free->size - length) >= sizeof(Free));
+
+  std::size_t newSz = free->size - length;
+  free->size = newSz;
+
+  void *const result = free + newSz;
+  return new (result) Free(length, nullptr);
+}
+
 Extent *init_extent(void *const raw, std::size_t bucket,
                     std::size_t length) noexcept {
   assert(raw != nullptr);

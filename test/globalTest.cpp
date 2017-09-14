@@ -141,7 +141,7 @@ static void assert_in_range(Range &range, void *current, size_t bSz) {
 }
 
 template <typename Points>
-static void assert_no_overlap(Points &ptrs) {
+static void assert_no_overlap(const Points &ptrs) {
   // printf("assert_no_overlap(points:%zu)\n", ptrs.size());
   auto current = ptrs.begin();
   while (current != ptrs.end()) {
@@ -261,16 +261,36 @@ assert_dummy_alloc(global::State &state, size_t size, Range &range, size_t bSz,
                    std::vector<std::tuple<void *, std::size_t>> &result) {
 
   for (size_t i = 0; i < size; i += bSz) {
-    // retry:
+  retry:
     void *const current = global::internal::find_freex(state, bSz);
-    // if (current == nullptr) {
-    //   goto retry;
-    // }
+    if (current == nullptr) {
+      goto retry;
+    }
     ASSERT_FALSE(current == nullptr);
 
     assert_in_range(range, current, bSz);
     result.emplace_back(current, bSz);
   }
+}
+
+static void
+assert_consecutive_range(std::vector<std::tuple<void *, std::size_t>> &free,
+                         Range range) {
+  uint8_t *const startR = range.start;
+
+  auto cmp = [](const auto &first, const auto &second) -> bool {
+    return std::get<0>(first) < std::get<0>(second);
+  };
+  std::sort(free.begin(), free.end(), cmp);
+
+  void *first = startR;
+  for (auto it = free.begin(); it != free.end(); ++it) {
+    ASSERT_EQ(std::get<0>(*it), first);
+
+    uintptr_t fptr = reinterpret_cast<uintptr_t>(std::get<0>(*it));
+    first = reinterpret_cast<void *>(fptr + std::get<1>(*it));
+  }
+  ASSERT_EQ(first, range.start + range.length);
 }
 
 /*Test*/
@@ -370,6 +390,11 @@ TEST_P(GlobalTest, dealloc_half_alloc) {
 struct ThreadAllocArg {
   int i;
   sp::Barrier *b;
+  sp::Barrier *b1;
+  sp::Barrier *b2;
+  sp::Barrier *b3;
+  sp::Barrier *b4;
+
   global::State *state;
   size_t sz;
   size_t thread_range_size;
@@ -386,12 +411,20 @@ static void threaded(global::State &state, size_t sz, size_t SIZE,
   std::vector<pthread_t> ts;
   ThreadAllocArg args[thCnt];
   sp::Barrier b(thCnt);
+  sp::Barrier b1(thCnt);
+  sp::Barrier b2(thCnt);
+  sp::Barrier b3(thCnt);
+  sp::Barrier b4(thCnt);
 
   for (size_t i(0); i < thCnt; ++i) {
     auto &arg = args[i];
     {
       arg.i = i;
       arg.b = &b;
+      arg.b1 = &b1;
+      arg.b2 = &b2;
+      arg.b3 = &b3;
+      arg.b4 = &b4;
       arg.state = &state;
       arg.sz = sz;
       arg.thread_range_size = SIZE;
@@ -446,23 +479,6 @@ static void *worker_dealloc(void *argument) {
   return nullptr;
 }
 
-static void
-assert_consecutive_range(std::vector<std::tuple<void *, std::size_t>> &free,
-                         uint8_t *const startR) {
-  auto cmp = [](const auto &first, const auto &second) -> bool {
-    return std::get<0>(first) < std::get<0>(second);
-  };
-  std::sort(free.begin(), free.end(), cmp);
-
-  void *first = startR;
-  for (auto it = free.begin(); it != free.end(); ++it) {
-    ASSERT_EQ(std::get<0>(*it), first);
-
-    uintptr_t fptr = reinterpret_cast<uintptr_t>(std::get<0>(*it));
-    first = reinterpret_cast<void *>(fptr + std::get<1>(*it));
-  }
-}
-
 static void threaded_dealloc_test(global::State &state, size_t sz,
                                   void *(*f)(void *)) {
   const size_t thCnt = 4;
@@ -481,7 +497,7 @@ static void threaded_dealloc_test(global::State &state, size_t sz,
   assert_dummy_dealloc_no_abs_size(state, range);
 
   auto frees = test::watch_free(&state);
-  assert_consecutive_range(frees, startR);
+  assert_consecutive_range(frees, range);
 
   free(startR);
 }
@@ -504,18 +520,29 @@ static void *worker_dealloc_alloc(void *argument) {
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
   // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
   arg->b->await();
+
+  global::State &state = *arg->state;
+  size_t thread_range_size = arg->thread_range_size;
+
+  printf("arg->b->await();\n");
   // printf("arg->sz: %zu\n", arg->sz);
-  dummy_dealloc_setup(*arg->state, sub, arg->sz);
+  dummy_dealloc_setup(state, sub, arg->sz);
 
   {
-    arg->b->await();
-    // TODO assert stuff
-    arg->b->await();
+    arg->b1->await();
+    printf("arg->b1->await();\n");
+
+    assert_dummy_dealloc_no_abs_size(state, arg->range);
+    auto frees = test::watch_free(&state);
+    assert_no_overlap(frees);
+    assert_consecutive_range(frees, arg->range);
+
+    arg->b2->await();
+    printf("arg->b2->await();\n");
   }
 
   std::vector<std::tuple<void *, std::size_t>> result;
-  assert_dummy_alloc(*arg->state, arg->thread_range_size, arg->range, arg->sz,
-                     result);
+  assert_dummy_alloc(state, thread_range_size, arg->range, arg->sz, result);
   assert_no_overlap(result);
 
   std::atomic_thread_fence(std::memory_order_release);
@@ -555,7 +582,7 @@ static void threaded_dealloc_alloc_test(global::State &state, size_t sz,
   std::vector<std::tuple<void *, std::size_t>> result;
   threaded<thCnt>(state, sz, SIZE, range, {f}, result);
 
-  assert_consecutive_range(result, startR);
+  assert_consecutive_range(result, range);
 
   ASSERT_EQ(size_t(0), test::count_free(&state));
 
@@ -603,7 +630,7 @@ static void threaded_dealloc_threaded_alloc_test(global::State &state,
 
   std::vector<std::tuple<void *, std::size_t>> result;
   threaded<thCnt>(state, sz, SIZE, range, {wd, wa}, result);
-  assert_consecutive_range(result, startR);
+  assert_consecutive_range(result, range);
 
   ASSERT_EQ(size_t(0), test::count_free(&state));
 

@@ -73,8 +73,13 @@ start:
                     assert(!current->next_lock.has_prepare_lock());
                   }
 
-                  free_dequeue(head, current);
-                  return current;
+                  if (size == current->size ||
+                      (size + sizeof(header::Free)) <= current->size) {
+                    free_dequeue(head, current);
+                    return current;
+                  } else {
+                    return header::reduce(current, size);
+                  }
                 } /*cur_exc_guard*/ else {
                   // bug
                   assert(false);
