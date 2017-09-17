@@ -32,6 +32,7 @@ bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
 void coalesce(Free *head, Free *tail, Free *const next) noexcept {
   assert(is_consecutive(head, tail));
   head->size = head->size + tail->size;
+  memset(tail, 0, tail->size); // TODO only debug
   head->next.store(next, std::memory_order_relaxed);
 }
 
@@ -55,7 +56,8 @@ Free *reduce(Free *free, std::size_t length) noexcept {
   std::size_t newSz = free->size - length;
   free->size = newSz;
 
-  void *const result = free + newSz;
+  void *const result =
+      reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(free) + newSz);
   return new (result) Free(length, nullptr);
 }
 

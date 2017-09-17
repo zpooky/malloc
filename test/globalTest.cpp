@@ -264,6 +264,7 @@ assert_dummy_alloc(global::State &state, size_t size, Range &range, size_t bSz,
   retry:
     void *const current = global::internal::find_freex(state, bSz);
     if (current == nullptr) {
+      // printf("null\m");
       goto retry;
     }
     ASSERT_FALSE(current == nullptr);
@@ -470,11 +471,11 @@ static void *worker_dealloc(void *argument) {
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
   // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
   arg->b->await();
-  printf("dealloc start\n");
+  // printf("dealloc start\n");
   // printf("arg->sz: %zu\n", arg->sz);
   dummy_dealloc_setup(*arg->state, sub, arg->sz);
 
-  printf("dealloc done\n");
+  // printf("dealloc done\n");
   std::atomic_thread_fence(std::memory_order_release);
   return nullptr;
 }
@@ -537,8 +538,8 @@ static void *worker_dealloc_alloc(void *argument) {
     assert_no_overlap(frees);
     assert_consecutive_range(frees, arg->range);
 
-    arg->b2->await();
     printf("arg->b2->await();\n");
+    arg->b2->await();
   }
 
   std::vector<std::tuple<void *, std::size_t>> result;
@@ -603,13 +604,13 @@ static void *worker_alloc(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   arg->b->await();
-  printf("alloc start\n");
+  // printf("alloc start\n");
 
   auto result = assert_find_free(*arg->state, arg->thread_range_size,
                                  arg->range, arg->sz);
   assert_no_overlap(result);
 
-  printf("alloc done\n");
+  // printf("alloc done\n");
   std::atomic_thread_fence(std::memory_order_release);
   return 0;
 }

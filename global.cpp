@@ -74,10 +74,14 @@ start:
                   }
 
                   if (size == current->size ||
-                      (size + sizeof(header::Free)) <= current->size) {
+                      (size + sizeof(header::Free)) > current->size) {
+                    // printf("free_dequeue(head, current)size:%zu,cur-sz:%zu\n",
+                    //        size, current->size);
                     free_dequeue(head, current);
                     return current;
                   } else {
+                    // printf("header::reduce(current, size)size:%zu,cur-sz:%zu\n",
+                    //        size, current->size);
                     return header::reduce(current, size);
                   }
                 } /*cur_exc_guard*/ else {
