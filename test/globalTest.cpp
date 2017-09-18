@@ -151,7 +151,7 @@ static void assert_in_range(Range &range, void *current, size_t bSz) {
 }
 
 static void assert_no_overlap(const Points &ptrs) {
-  printf("assert_no_overlap(points:%zu)\n", ptrs.size());
+  // printf("assert_no_overlap(points:%zu)\n", ptrs.size());
   auto current = ptrs.begin();
   while (current != ptrs.end()) {
     auto it = current;
@@ -172,7 +172,7 @@ static void assert_no_overlap(const Points &ptrs) {
 
 static void dummy_dealloc_setup(global::State &state, Range &range,
                                 size_t bSz) {
-  printf("dummy_dealloc_setup\n");
+  // printf("dummy_dealloc_setup\n");
   size_t i = 0;
 // printf("valid: ");
 start:
@@ -217,7 +217,7 @@ start:
 template <typename Ts>
 static void assert_dummy_dealloc_no_abs_size(const std::vector<Ts> &free,
                                              Range &range) {
-  printf("assert_dummy_dealloc_no_abs_size\n");
+  // printf("assert_dummy_dealloc_no_abs_size\n");
   // 3.
   for (auto &current : free) {
     void *const cur_ptr = std::get<0>(current);
@@ -255,7 +255,7 @@ static void assert_dummy_dealloc(global::State &state, Range &range) {
 static void assert_dummy_alloc(global::State &state, size_t size, Range &range,
                                size_t bSz, Points &result) {
 
-  printf("assert_dummy_dealloc\n");
+  // printf("assert_dummy_dealloc\n");
   for (size_t i = 0; i < size; i += bSz) {
   retry:
     void *const current = global::internal::find_freex(state, bSz);
@@ -270,7 +270,7 @@ static void assert_dummy_alloc(global::State &state, size_t size, Range &range,
 }
 
 static void assert_consecutive_range(Points &free, Range range) { // spz
-  printf("assert_consecutive_range\n");
+  // printf("assert_consecutive_range\n");
   uint8_t *const startR = range.start;
 
   auto cmp = [](const auto &first, const auto &second) -> bool {
@@ -511,7 +511,7 @@ TEST_P(GlobalTest, threaded_dealloc) {
 }
 //==========================================
 //=======threaded=dealloc=alloc=============
-//==========================================spx
+//==========================================
 static void *worker_dealloc_alloc(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
@@ -555,12 +555,15 @@ static void *worker_random_dealloc_alloc(void *argument) {
   // printf("range%d[%p,%p]\n", arg->i, sub.start, sub.start + sub.length);
   arg->b->await();
   // printf("arg->sz: %zu\n", arg->sz);
-  dealloc_rand_setup(*arg->state, sub, arg->sz);
 
-  Points result;
-  assert_dummy_alloc(*arg->state, arg->thread_range_size, arg->range, arg->sz,
-                     result);
-  assert_no_overlap(result);
+  global::State &state = *arg->state;
+  size_t thread_range_size = arg->thread_range_size;
+
+  dealloc_rand_setup(state, sub, arg->sz);
+
+  assert_dummy_alloc(state, thread_range_size, arg->range, arg->sz,
+                     arg->result);
+  assert_no_overlap(arg->result);
 
   std::atomic_thread_fence(std::memory_order_release);
   return nullptr;
@@ -593,7 +596,7 @@ TEST_P(GlobalTest, threaded_dealloc_alloc) {
   threaded_dealloc_alloc_test(state, sz, worker_dealloc_alloc);
 }
 
-TEST_P(GlobalTest, threaded_random_dealloc_alloc) {
+TEST_P(GlobalTest, threaded_random_dealloc_alloc) { // spx
   const size_t sz = GetParam();
   threaded_dealloc_alloc_test(state, sz, worker_random_dealloc_alloc);
 }
@@ -657,7 +660,7 @@ static void threaded_dealloc_threaded_alloc_test(global::State &state,
     pthread_t tid = 0;
 
     auto current_worker = wa;
-    if(i % 2 == 0){
+    if (i % 2 == 0) {
       arg.i = des++;
       current_worker = wd;
     }
