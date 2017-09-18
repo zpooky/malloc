@@ -397,10 +397,23 @@ struct ThreadAllocArg {
 };
 
 template <size_t thCnt>
+static void join(std::vector<pthread_t> &ts, ThreadAllocArg (&args)[thCnt],
+                 Points &result) {
+  for (size_t i(0); i < thCnt; ++i) {
+    int res = pthread_join(ts[i], NULL);
+    ASSERT_EQ(0, res);
+
+    std::atomic_thread_fence(std::memory_order_acquire);
+
+    Points &curResult = args[i].result;
+    result.insert(result.end(), curResult.begin(), curResult.end());
+  }
+}
+
+template <size_t thCnt>
 static void threaded(global::State &state, size_t sz, size_t SIZE,
                      const Range &range,
-                     const std::vector<void *(*)(void *)> &fs,
-                     Points &result) {
+                     const std::vector<void *(*)(void *)> &fs, Points &result) {
 
   std::vector<pthread_t> ts;
   ThreadAllocArg args[thCnt];
@@ -432,16 +445,7 @@ static void threaded(global::State &state, size_t sz, size_t SIZE,
 
     ts.push_back(tid);
   }
-
-  for (size_t i(0); i < thCnt; ++i) {
-    int res = pthread_join(ts[i], NULL);
-    ASSERT_EQ(0, res);
-
-    std::atomic_thread_fence(std::memory_order_acquire);
-
-    Points &curResult = args[i].result;
-    result.insert(result.end(), curResult.begin(), curResult.end());
-  }
+  join(ts, args, result);
 }
 //==========================================
 //=======threaded=dealloc===================
@@ -627,8 +631,47 @@ static void threaded_dealloc_threaded_alloc_test(global::State &state,
   memset(startR, 0, RANGE_SIZE);
   Range range(startR, RANGE_SIZE);
 
+  std::vector<pthread_t> ts;
+  ThreadAllocArg args[thCnt];
+  sp::Barrier b(thCnt);
+  sp::Barrier b1(thCnt);
+  sp::Barrier b2(thCnt);
+  sp::Barrier b3(thCnt);
+  sp::Barrier b4(thCnt);
+
+  size_t des = 0;
+  for (size_t i(0); i < thCnt; ++i) {
+    auto &arg = args[i];
+    {
+      arg.i = i;
+      arg.b = &b;
+      arg.b1 = &b1;
+      arg.b2 = &b2;
+      arg.b3 = &b3;
+      arg.b4 = &b4;
+      arg.state = &state;
+      arg.sz = sz;
+      arg.thread_range_size = SIZE;
+      arg.range = range;
+    }
+    pthread_t tid = 0;
+
+    auto current_worker = wa;
+    if(i % 2 == 0){
+      arg.i = des++;
+      current_worker = wd;
+    }
+
+    int res = pthread_create(&tid, NULL, current_worker, &arg);
+    ASSERT_EQ(0, res);
+    ASSERT_FALSE(tid == 0);
+
+    ts.push_back(tid);
+  }
+
   Points result;
-  threaded<thCnt>(state, sz, SIZE, range, {wd, wa}, result);
+  join(ts, args, result);
+
   assert_consecutive_range(result, range);
 
   ASSERT_EQ(size_t(0), test::count_free(&state));
