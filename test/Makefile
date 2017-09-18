@@ -2,7 +2,7 @@
 # Declaration of variables
 CXX = g++
 # using -std=gnu++17 because gtest uses functions only presisent in the gun dialect of c++
-CXXFLAGS = -enable-frame-pointers -std=gnu++17 -Wall -Wextra -ggdb -fno-strict-aliasing
+CXXFLAGS = -enable-frame-pointers -std=gnu++17 -Wall -Wextra -ggdb -fno-strict-aliasing -Wpointer-arith
 PROJECT_ROOT = ..
 GTEST_ROOT = $(PROJECT_ROOT)/external/googletest/googletest
 HEADER_DIRS = -I$(GTEST_ROOT)/include -I$(PROJECT_ROOT) -I$(PROJECT_ROOT)/external

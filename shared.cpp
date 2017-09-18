@@ -18,7 +18,7 @@ void debug_print_free(Free *const head) {
   } else {
     printf("\n");
   }
-}
+} // debug_print_free()
 
 bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
   assert(head != nullptr);
@@ -27,14 +27,14 @@ bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
   uintptr_t head_end = head_base + head->size;
   uintptr_t tail_base = reinterpret_cast<uintptr_t>(tail);
   return head_end == tail_base;
-}
+} // is_consecutive()
 
 void coalesce(Free *head, Free *tail, Free *const next) noexcept {
   assert(is_consecutive(head, tail));
   head->size = head->size + tail->size;
   memset(tail, 0, tail->size); // TODO only debug
   head->next.store(next, std::memory_order_relaxed);
-}
+} // coalesce()
 
 Free *init_free(void *const head, std::size_t length) noexcept {
   if (head && length > 0) {
@@ -47,7 +47,7 @@ Free *init_free(void *const head, std::size_t length) noexcept {
     return result;
   }
   return nullptr;
-}
+} // init_free()
 
 Free *reduce(Free *free, std::size_t length) noexcept {
   assert(free->size >= length);
@@ -56,10 +56,9 @@ Free *reduce(Free *free, std::size_t length) noexcept {
   std::size_t newSz = free->size - length;
   free->size = newSz;
 
-  void *const result =
-      reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(free) + newSz);
+  void *const result = util::ptr_math(free, +newSz);
   return new (result) Free(length, nullptr);
-}
+} // reduce()
 
 Extent *init_extent(void *const raw, std::size_t bucket,
                     std::size_t length) noexcept {
@@ -80,7 +79,7 @@ Free *free(void *const start) noexcept {
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % alignof(Free) == 0);
   return reinterpret_cast<Free *>(start);
-}
+} // free()
 
 Node *node(void *const start) noexcept {
   assert(start != nullptr);

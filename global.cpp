@@ -277,14 +277,14 @@ start:
   }
 
   return result;
-} // watch_free()
+} // test::watch_free()
 
 void clear_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
   state->free.next.store(nullptr);
-} // clear_free()
+} // test::clear_free()
 
 void print_free(global::State *state) {
   if (state == nullptr) {
@@ -295,7 +295,7 @@ void print_free(global::State *state) {
     printf("cmpar: ");
     header::debug_print_free(head);
   }
-} // print_free()
+} // test::print_free()
 
 std::size_t count_free(global::State *state) {
   if (state == nullptr) {
@@ -310,7 +310,7 @@ start:
     goto start;
   }
   return result;
-} // count_free()
+} // test::count_free()
 
 static void swap(header::Free *p, header::Free *c, header::Free *n) {
   p->next.store(n);
@@ -348,7 +348,7 @@ start:
   } else if (swapped) {
     goto restart;
   }
-} // sort_free()
+} // test::sort_free()
 
 void coalesce_free(global::State *state) {
   if (state == nullptr) {
@@ -369,7 +369,7 @@ start:
       goto start;
     }
   }
-} // coalesce_free()
+} // test::coalesce_free()
 
 } // namespace test
 #endif

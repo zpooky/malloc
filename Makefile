@@ -2,7 +2,7 @@
 #http://www.puxan.com/web/howto-write-generic-makefiles/
 # Declaration of variables
 CXX = g++
-CXXFLAGS = -enable-frame-pointers -std=c++17 -Wall -Wextra -Wpedantic -ggdb -fno-strict-aliasing
+CXXFLAGS = -enable-frame-pointers -std=c++17 -Wall -Wextra -Wpedantic -ggdb -fno-strict-aliasing -Wpointer-arith
 
 HEADER_DIRS = -Iexternal
 LDLIBS = -lpthread
