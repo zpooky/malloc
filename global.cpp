@@ -119,11 +119,6 @@ start:
 } // find_free()
 
 header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
-  // #ifdef SP_MALLOC_TEST_NO_ALLOC
-  assert(false);
-  exit(123);
-  // #endif
-
   {
     std::lock_guard<std::mutex> guard(state.brk_lock);
     // TODO some algorithm to determine optimal alloc size
@@ -202,12 +197,10 @@ start:
 
                   // header::Free *const next = current->next.load();
                   // if (header::is_consecutive(current, next)) {
-                  //   sp::TryExclusiveLock next_exc_guard(next_pre_guard);
-                  //   if (next_exc_guard) {
-                  //     header::Free *const next_next =
-                  //         next->next.load(std::memory_order_acquire);
-                  //     header::coalesce(current, next, next_next);
-                  //   }
+                  // //?
+                  // header::Free *const next_next =
+                  //     next->next.load(std::memory_order_acquire);
+                  // header::coalesce(current, next, next_next);
                   // }
                   return;
                 } /*Current Exclusive Guard*/ else {
@@ -262,6 +255,16 @@ void return_free(global::State &s, void *const ptr, size_t length) noexcept {
 
 #ifdef SP_TEST
 namespace test { //
+static void debug_print_free(header::Free *const head) {
+  if (head) {
+    void *t = reinterpret_cast<void *>(head);
+    printf("[%p,%zu]", t, head->size);
+    debug_print_free(head->next.load());
+  } else {
+    printf("\n");
+  }
+} // test::debug_print_free()
+
 std::vector<std::tuple<void *, std::size_t>> watch_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
@@ -293,7 +296,7 @@ void print_free(global::State *state) {
   header::Free *head = state->free.next.load(std::memory_order_acquire);
   if (head) {
     printf("cmpar: ");
-    header::debug_print_free(head);
+    debug_print_free(head);
   }
 } // test::print_free()
 

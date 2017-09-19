@@ -10,15 +10,13 @@
  */
 namespace header {
 
-void debug_print_free(Free *const head) {
-  if (head) {
-    void *t = reinterpret_cast<void *>(head);
-    printf("[%p,%zu]", t, head->size);
-    debug_print_free(head->next.load());
-  } else {
-    printf("\n");
-  }
-} // debug_print_free()
+/*Free*/
+static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
+
+Free::Free(std::size_t sz, Free *nxt) noexcept //
+    : next_lock{}, size(sz), next(nxt) {
+}
 
 bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
   assert(head != nullptr);
@@ -60,6 +58,20 @@ Free *reduce(Free *free, std::size_t length) noexcept {
   return new (result) Free(length, nullptr);
 } // reduce()
 
+Free *free(void *const start) noexcept {
+  assert(start != nullptr);
+  uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
+  assert(startPtr % alignof(Free) == 0);
+  return reinterpret_cast<Free *>(start);
+} // free()
+
+/*Extent*/
+static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
+Extent::Extent() noexcept //
+    : reserved(false) {
+}
+
 Extent *init_extent(void *const raw, std::size_t bucket,
                     std::size_t length) noexcept {
   assert(raw != nullptr);
@@ -74,20 +86,6 @@ Extent *init_extent(void *const raw, std::size_t bucket,
   return new (eHdr) Extent;
 } // init_extent()
 
-Free *free(void *const start) noexcept {
-  assert(start != nullptr);
-  uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
-  assert(startPtr % alignof(Free) == 0);
-  return reinterpret_cast<Free *>(start);
-} // free()
-
-Node *node(void *const start) noexcept {
-  assert(start != nullptr);
-  uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
-  assert(startPtr % alignof(Node) == 0);
-  return reinterpret_cast<Node *>(start);
-} // node_header()
-
 Extent *extent(void *const start) noexcept {
   assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
@@ -96,6 +94,23 @@ Extent *extent(void *const start) noexcept {
 
   return reinterpret_cast<Extent *>(headerPtr);
 } // extent_header()
+
+/*Node*/
+static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
+static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
+
+Node::Node(std::size_t p_extenSz, std::size_t p_bucket,
+           std::size_t p_nodeSz) noexcept //
+    : type(NodeType::HEAD), next{nullptr}, bucket(p_bucket),
+      rawNodeSize(p_nodeSz), size(p_extenSz) {
+}
+
+Node *node(void *const start) noexcept {
+  assert(start != nullptr);
+  uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
+  assert(startPtr % alignof(Node) == 0);
+  return reinterpret_cast<Node *>(start);
+} // node_header()
 }
 /*
  *===========================================================

@@ -32,6 +32,47 @@ using shared_mutex = mutex;
  */
 namespace header {
 
+/*Free*/
+struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
+  sp::ReadWriteLock next_lock;
+  std::size_t size;
+  std::atomic<Free *> next;
+
+  Free(std::size_t sz, Free *nxt) noexcept;
+};
+bool is_consecutive(const Free *const head, const Free *const tail) noexcept;
+void coalesce(Free *head, Free *tail, Free *const next) noexcept;
+Free *init_free(void *const head, std::size_t length) noexcept;
+Free *reduce(Free *free, std::size_t length) noexcept;
+Free *free(void *const start) noexcept;
+
+/*Extent*/
+struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
+  // const uint8_t block_size;
+  // fill out bitset so it occopies the whole cache_line
+  // bitset
+  // # block_size(uint32) + 4byte bitset_block(uint32)
+  // cache_line - sizeof(block_size) = 60
+  // 60/bitset_block = 15
+  // 15 * bits_in_bitset_bloc(32) = 480
+  // page_size(4k) - header_size(64B) = 4032
+  // 4032 / 480 = 8.4Byte
+  //
+  //# block_size(uint8) + 1byte bitset_block(uint8)
+  // cache_line - sizeof(block_size) = 63
+  // 63/bitset_block = 63
+  // 63 * bits_in_bitset_bloc(8) = 504
+  // page_size(4k) - header_size(64B) = 4032
+  // 4032 / 504 = 8Byte
+  sp::Bitset<512, std::uint64_t> reserved;
+
+  Extent() noexcept;
+};
+Extent *init_extent(void *const raw, std::size_t bucket,
+                    std::size_t nodeSz) noexcept;
+Extent *extent(void *const start) noexcept;
+
+/*Node*/
 enum class NodeType { //
   HEAD,
   INTERMEDIATE
@@ -55,71 +96,10 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   // } intermediate;
   // };
 
-  Node(std::size_t p_extenSz, std::size_t p_bucket,
-       std::size_t p_nodeSz) noexcept //
-      : type(NodeType::HEAD), next{nullptr}, bucket(p_bucket),
-        rawNodeSize(p_nodeSz), size(p_extenSz) {
-  }
+  Node(std::size_t extSz, std::size_t bucket, std::size_t nodeSz) noexcept;
 };
-
-static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
-static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
-
-struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
-  // const uint8_t block_size;
-  // fill out bitset so it occopies the whole cache_line
-  // bitset
-  // # block_size(uint32) + 4byte bitset_block(uint32)
-  // cache_line - sizeof(block_size) = 60
-  // 60/bitset_block = 15
-  // 15 * bits_in_bitset_bloc(32) = 480
-  // page_size(4k) - header_size(64B) = 4032
-  // 4032 / 480 = 8.4Byte
-  //
-  //# block_size(uint8) + 1byte bitset_block(uint8)
-  // cache_line - sizeof(block_size) = 63
-  // 63/bitset_block = 63
-  // 63 * bits_in_bitset_bloc(8) = 504
-  // page_size(4k) - header_size(64B) = 4032
-  // 4032 / 504 = 8Byte
-  sp::Bitset<512, std::uint64_t> reserved;
-
-  Extent() noexcept //
-      : reserved(false) {
-  }
-};
-
-static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
-static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
-
-struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
-  sp::ReadWriteLock next_lock;
-  std::size_t size;
-  std::atomic<Free *> next;
-
-  Free(std::size_t sz, Free *nxt) noexcept //
-      : next_lock{}, size(sz), next(nxt) {
-  }
-};
-
-void debug_print_free(Free *const head);
-bool is_consecutive(const Free *const head, const Free *const tail) noexcept;
-void coalesce(Free *head, Free *tail, Free *const next) noexcept;
-
-static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
-static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
-
-/*init*/
-Free *init_free(void *const head, std::size_t length) noexcept;
-Free *reduce(Free *free, std::size_t length) noexcept;
-Extent *init_extent(void *const raw, std::size_t bucket,
-                    std::size_t nodeSz) noexcept;
-
-/*cast*/
-Free *free(void *const start) noexcept;
 Node *node(void *const start) noexcept;
-Extent *extent(void *const start) noexcept;
-}
+} // namespace header
 
 /*
  *===========================================================
@@ -131,7 +111,7 @@ void *align_pointer(void *const start, std::uint32_t alignment) noexcept;
 std::size_t round_even(std::size_t v) noexcept;
 void *ptr_math(void *const ptr, std::int64_t add) noexcept;
 ptrdiff_t ptr_diff(void *const first, void *const second) noexcept;
-}
+} // namespace util
 
 /*
  *===========================================================
@@ -153,15 +133,16 @@ struct Pool { //
 
   Pool &operator=(const Pool &) = delete;
   Pool &operator=(Pool &&) = delete;
-};
+}; // struct Pool
 
 /*Pools*/
 struct PoolsRAII { //
   std::array<Pool, 64> buckets;
 
   PoolsRAII() noexcept;
-};
+}; // struct PoolsRAII
 
+/*Pools*/
 class Pools { //
 private:
   PoolsRAII *pools;
@@ -179,7 +160,7 @@ public:
   Pools &operator=(Pools &&) = delete;
 
   Pool &operator[](std::size_t) noexcept;
-};
+}; // struct Pool
 
 } // namespace local
 
