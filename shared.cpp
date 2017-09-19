@@ -103,6 +103,7 @@ Node::Node(std::size_t p_extenSz, std::size_t p_bucket,
            std::size_t p_nodeSz) noexcept //
     : type(NodeType::HEAD), next{nullptr}, bucket(p_bucket),
       rawNodeSize(p_nodeSz), size(p_extenSz) {
+  assert(bucket > 0);
 }
 
 Node *node(void *const start) noexcept {
@@ -111,7 +112,7 @@ Node *node(void *const start) noexcept {
   assert(startPtr % alignof(Node) == 0);
   return reinterpret_cast<Node *>(start);
 } // node_header()
-}
+} // namespace header
 /*
  *===========================================================
  *========UTIL===============================================
@@ -157,7 +158,7 @@ ptrdiff_t ptr_diff(void *const first, void *const second) noexcept {
   return firstPtr - secondPtr;
 }
 
-} // namespace
+} // namespace util
 
 /*
  *===========================================================

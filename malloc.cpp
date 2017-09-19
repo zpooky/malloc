@@ -25,7 +25,10 @@
 // next so we have to hold the lock of the node pointing to current node do
 // anything
 namespace local {
-std::size_t index_of(std::size_t size) noexcept {
+
+static constexpr std::size_t HEADER_SIZE(sizeof(header::Node) +
+                                         sizeof(header::Extent));
+static std::size_t index_of(std::size_t size) noexcept {
   return (size / 8) - 1;
 }
 
@@ -62,7 +65,7 @@ static void *pointer_at(void *start, std::size_t index) noexcept {
   // The first NodeHeader in the extent contains data while intermediate
   // NodeHeader does not containt this data.
   header::Node *nH = header::node(start);
-  size_t hdrSz(sizeof(header::Node) + sizeof(header::Extent));
+  size_t hdrSz(HEADER_SIZE);
   size_t buckets = nH->size;
 node_start:
   const size_t dataSz(nH->rawNodeSize - hdrSz);
@@ -102,8 +105,11 @@ node_start:
  * desc  - Used by malloc & free
  */
 void *next_extent(void *start) noexcept {
+  assert(start != nullptr);
   header::Node *nH = header::node(start);
-  size_t hdrSz(sizeof(header::Node) + sizeof(header::Extent));
+  assert(nH != nullptr);
+
+  size_t hdrSz(HEADER_SIZE);
   size_t buckets = nH->size;
 node_start:
   const size_t dataSz(nH->rawNodeSize - hdrSz);
@@ -160,13 +166,12 @@ void *reserve(void *const start) noexcept {
 bool free(void *const dealloc) noexcept {
   // TODO
   uintptr_t ptr = reinterpret_cast<uintptr_t>(dealloc);
-  std::size_t maxIdx =
-      (ptr & (sizeof(header::Node) + sizeof(header::Extent))) == 0 ? 63 : 0;
+  std::size_t maxIdx = (ptr & HEADER_SIZE) == 0 ? 63 : 0;
 
   // TODO fence where apporopriate
   std::atomic_thread_fence(std::memory_order_acquire);
 
-  header::Extent *eHdr = header::extent(nullptr);
+  header::Extent *eHdr = header::extent(nullptr); // TODO
   const std::size_t idx = 0;
   if (true) {
     // a thread local alloc&free
@@ -206,7 +211,7 @@ void extend_extent(void *const start) noexcept {
   // TODO
 }
 
-} // namespace
+} // namespace local
 
 // {{{
 static thread_local local::Pools pools;
@@ -221,7 +226,6 @@ void *sp_malloc(std::size_t sz) noexcept {
   const std::size_t bucketSz = util::round_even(sz);
   local::Pool &pool = pool_for(pools, bucketSz);
 
-  std::shared_lock<std::shared_mutex> lock(pool.lock);
   void *start = pool.start.load();
   if (start) {
   reserve_start:
