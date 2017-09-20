@@ -93,25 +93,28 @@ Extent *extent(void *const start) noexcept {
   assert(headerPtr % alignof(Extent) == 0);
 
   return reinterpret_cast<Extent *>(headerPtr);
-} // extent_header()
+} // extent()
 
 /*Node*/
 static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-Node::Node(std::size_t p_extenSz, std::size_t p_bucket,
+Node::Node(std::size_t p_extentSz, std::size_t p_bucket,
            std::size_t p_nodeSz) noexcept //
     : type(NodeType::HEAD), next{nullptr}, bucket(p_bucket),
-      rawNodeSize(p_nodeSz), size(p_extenSz) {
+      rawNodeSize(p_nodeSz), size(p_extentSz) {
   assert(bucket > 0);
-}
+  assert(rawNodeSize > 0);
+  assert(size > 0);
+} // Node()
 
 Node *node(void *const start) noexcept {
   assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % alignof(Node) == 0);
   return reinterpret_cast<Node *>(start);
-} // node_header()
+} // node()
+
 } // namespace header
 /*
  *===========================================================
@@ -128,7 +131,7 @@ void *align_pointer(void *const start, std::uint32_t alignment) noexcept {
   uintptr_t diff = ptr + alignment - 1;
   ptr += diff & alignment;
   return reinterpret_cast<void *>(ptr);
-}
+} // align_pointer()
 
 std::size_t round_even(std::size_t v) noexcept {
   // TODO support 64 bit word
@@ -142,13 +145,13 @@ std::size_t round_even(std::size_t v) noexcept {
   v |= v >> 16;
   v++;
   return v;
-}
+} // round_even()
 
 void *ptr_math(void *const ptr, std::int64_t add) noexcept {
   assert(ptr != nullptr);
   uintptr_t start = reinterpret_cast<uintptr_t>(ptr);
   return reinterpret_cast<void *>(start + add);
-}
+} // ptr_math()
 
 ptrdiff_t ptr_diff(void *const first, void *const second) noexcept {
   assert(first != nullptr);
@@ -156,7 +159,7 @@ ptrdiff_t ptr_diff(void *const first, void *const second) noexcept {
   uintptr_t firstPtr = reinterpret_cast<uintptr_t>(first);
   uintptr_t secondPtr = reinterpret_cast<uintptr_t>(second);
   return firstPtr - secondPtr;
-}
+} //ptr_diff()
 
 } // namespace util
 

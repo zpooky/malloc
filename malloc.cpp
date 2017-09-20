@@ -21,30 +21,23 @@
 // # local
 // TODO add local::free_list
 // TODO coaless local::free_list when allocating thread looks for matching pages
-// TODO free_list header with sp::ReadWriteLock instead global. node locks the
-// next so we have to hold the lock of the node pointing to current node do
-// anything
 namespace local {
-
 static constexpr std::size_t HEADER_SIZE(sizeof(header::Node) +
                                          sizeof(header::Extent));
+
 static std::size_t index_of(std::size_t size) noexcept {
   return (size / 8) - 1;
-}
+} // local::index_of()
 
 static local::Pool &pool_for(local::Pools &pools, std::size_t sz) noexcept {
   std::size_t index = index_of(sz);
   return pools[index];
-} // pool_for()
+} // local::pool_for()
 
-static std::tuple<void *, std::size_t> alloc(std::size_t sz) noexcept {
-  // TODO
-  auto ret = global::alloc(sz);
-  if (ret) {
-    return std::make_tuple(ret, sz);
-  }
-  return std::make_tuple(nullptr, 0);
-} // alloc()
+static void *alloc(std::size_t sz) noexcept {
+  // TODO local alloc
+  return global::alloc(sz);
+} // local::alloc()
 
 /*
  * @start - node start
@@ -53,7 +46,7 @@ static std::tuple<void *, std::size_t> alloc(std::size_t sz) noexcept {
 static void *next_node(void *const start) noexcept {
   auto header = header::node(start);
   return header->next.load();
-} // next_node()
+} // local::next_node()
 
 /*
  * @param start - extent start
@@ -98,13 +91,13 @@ node_start:
       return nullptr;
     }
   }
-} // pointer_at()
+} // local::pointer_at()
 
 /*
  * @start - extent start
  * desc  - Used by malloc & free
  */
-void *next_extent(void *start) noexcept {
+static void *next_extent(void *start) noexcept {
   assert(start != nullptr);
   header::Node *nH = header::node(start);
   assert(nH != nullptr);
@@ -142,13 +135,13 @@ node_start:
     }
     return next;
   }
-} // next_intent()
+} // local::next_intent()
 
 /*
  * @start - extent start
  * desc  - Used by malloc
  */
-void *reserve(void *const start) noexcept {
+static void *reserve(void *const start) noexcept {
   header::Node *nHdr = header::node(start);
   header::Extent *eHdr = header::extent(start);
 
@@ -157,13 +150,13 @@ void *reserve(void *const start) noexcept {
     return pointer_at(start, index);
   }
   return nullptr;
-} // reserve()
+} // local::reserve()
 
 /*
- * @dealloc - the same pointer as received for mammloc
- * desc  - Used by free
+ * @dealloc - the same pointer as received from malloc
+ * desc     - Used by free
  */
-bool free(void *const dealloc) noexcept {
+static bool free(void *const dealloc) noexcept {
   // TODO
   uintptr_t ptr = reinterpret_cast<uintptr_t>(dealloc);
   std::size_t maxIdx = (ptr & HEADER_SIZE) == 0 ? 63 : 0;
@@ -185,31 +178,47 @@ bool free(void *const dealloc) noexcept {
     return global::free(dealloc);
   }
   return true;
-} // free()
+} // local::free()
+
+static std::size_t calc_min_extent(std::size_t bucketSz) noexcept {
+  assert(bucketSz >= 8);
+  assert(bucketSz % 8 == 0);
+
+  // TODO make not a loop
+
+  constexpr std::size_t min_alloc = SP_MALLOC_PAGE_SIZE;
+  std::size_t result = HEADER_SIZE;
+  std::size_t indicies = 0;
+  while (result % min_alloc != 0) {
+    result += bucketSz;
+    ++indicies;
+    if (indicies > header::Extent::MAX_BUCKETS) {
+      assert(false);
+    }
+  }
+  return result;
+}
 
 /*
  * @bucketSz - Normailzed size of bucket
  * desc  - Used by malloc
  */
-void *alloc_extent(std::size_t bucketSz) noexcept {
-  // TODO calculate size of extent
-  std::size_t extentSz(0);
-  auto mem = alloc(extentSz);
-  void *const start = std::get<0>(mem);
-  std::size_t length = std::get<1>(mem);
-  if (start) {
-    return header::init_extent(start, bucketSz, length);
+static header::Extent *alloc_extent(std::size_t bucketSz) noexcept {
+  std::size_t extentSz = calc_min_extent(bucketSz);
+  void *const raw = alloc(extentSz);
+  if (raw) {
+    return header::init_extent(raw, bucketSz, extentSz);
   }
   return nullptr;
-}
+} // local::alloc_extent()
 
 /*
  * @size - extent start
  * desc  - Used by malloc
  */
-void extend_extent(void *const start) noexcept {
+static void extend_extent(void *const start) noexcept {
   // TODO
-}
+} // local::extend_extent()
 
 } // namespace local
 
@@ -222,11 +231,11 @@ static thread_local local::Pools pools;
  *=======PUBLIC==============================================
  *===========================================================
  */
-void *sp_malloc(std::size_t sz) noexcept {
-  const std::size_t bucketSz = util::round_even(sz);
+void *sp_malloc(std::size_t length) noexcept {
+  const std::size_t bucketSz = util::round_even(length);
   local::Pool &pool = pool_for(pools, bucketSz);
 
-  void *start = pool.start.load();
+  void *start = pool.start.load(std::memory_order_acquire);
   if (start) {
   reserve_start:
     void *result = local::reserve(start);
@@ -244,8 +253,6 @@ void *sp_malloc(std::size_t sz) noexcept {
       }
     }
   } else {
-    // TODO shared lock not required here
-
     // only TL allowed to malloc meaning no alloc contention
     void *const extent = local::alloc_extent(bucketSz);
     if (extent) {
@@ -254,7 +261,6 @@ void *sp_malloc(std::size_t sz) noexcept {
       if (pool.start.compare_exchange_strong(start, extent)) {
         return result;
       } else {
-        // somehow we failed to cas
         assert(false);
       }
     } else {

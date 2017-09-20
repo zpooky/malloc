@@ -16,7 +16,7 @@ static void free_dequeue(header::Free *head, header::Free *target) noexcept {
   assert(head != target);
   head->next.store(target->next.load());
   target->next.store(nullptr);
-} // free_dequeue()
+} // ::free_dequeue()
 
 static void free_enqueue(header::Free *head, header::Free *target) noexcept {
   assert(head != nullptr);
@@ -30,7 +30,7 @@ static void free_enqueue(header::Free *head, header::Free *target) noexcept {
     target->next.store(head->next.load());
     head->next.store(target);
   }
-} // free_enqueue()
+} // ::free_enqueue()
 
 header::Free *find_free(global::State &state, size_t size) noexcept {
 start:
@@ -116,7 +116,7 @@ start:
     }
   }
   return nullptr;
-} // find_free()
+} // ::find_free()
 
 header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
   {
@@ -139,7 +139,7 @@ header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
   }
 
   return nullptr;
-} // alloc_free()
+} // ::alloc_free()
 
 void return_free(global::State &state, header::Free *const toReturn) noexcept {
 // [Head]->[Current]->[Next]
@@ -241,7 +241,7 @@ start:
     }
     assert(false); // leak memory here
   }
-} // return_free()
+} // ::return_free()
 
 void return_free(global::State &s, void *const ptr, size_t length) noexcept {
   header::Free *const toReturn = header::init_free(ptr, length);
@@ -249,7 +249,7 @@ void return_free(global::State &s, void *const ptr, size_t length) noexcept {
     assert(ptr == toReturn);
     return return_free(s, toReturn);
   }
-} // return_free()
+} // ::return_free()
 
 } // namespace
 
@@ -390,6 +390,9 @@ header::Free *find_freex(State &state, std::size_t length) noexcept {
 }
 
 void *alloc(State &state, std::size_t p_length) noexcept {
+  if(p_length == 0){
+    return nullptr;
+  }
   header::Free *free = find_freex(state, p_length);
   if (free == nullptr) {
     free = alloc_free(state, p_length);

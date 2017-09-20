@@ -5,6 +5,8 @@
 #include <vector>
 #include <cstddef>
 #include <cstdint>
+#include <cassert>
+#include "gtest/gtest.h"
 
 using Point = std::tuple<void *, std::size_t>;
 using Points = std::vector<Point>;

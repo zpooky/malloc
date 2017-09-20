@@ -48,6 +48,7 @@ Free *free(void *const start) noexcept;
 
 /*Extent*/
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
+  static constexpr std::size_t MAX_BUCKETS = 512;
   // const uint8_t block_size;
   // fill out bitset so it occopies the whole cache_line
   // bitset
@@ -64,7 +65,7 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
   // 63 * bits_in_bitset_bloc(8) = 504
   // page_size(4k) - header_size(64B) = 4032
   // 4032 / 504 = 8Byte
-  sp::Bitset<512, std::uint64_t> reserved;
+  sp::Bitset<MAX_BUCKETS, std::uint64_t> reserved;
 
   Extent() noexcept;
 };
