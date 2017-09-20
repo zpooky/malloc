@@ -1,5 +1,5 @@
-#include "Util.h"
 #include "malloc.h"
+#include "Util.h"
 #include "shared.h"
 #include "gtest/gtest.h"
 #include <tuple>
@@ -16,17 +16,26 @@ static std::size_t calc_min_extent(std::size_t bucketSz) noexcept {
   // TODO make not a loop
 
   constexpr std::size_t min_alloc = SP_MALLOC_PAGE_SIZE;
-  constexpr std::size_t max_min_alloc = min_alloc * 2;
+  constexpr std::size_t max_alloc = min_alloc * 4;
+  if (bucketSz > max_alloc) {
+    std::size_t result = HEADER_SIZE + bucketSz;
+    printf("reuslt(%zu) + (%zu)\n", result, (result % min_alloc));
+    return result + (result % min_alloc);
+  }
 
+  // return 0;
   std::size_t result = HEADER_SIZE;
   std::size_t indicies = 0;
-  while (indicies < header::Extent::MAX_BUCKETS && result < max_min_alloc) {
+
+  while (indicies++ < header::Extent::MAX_BUCKETS) {
     result += bucketSz;
-    ++indicies;
+    if ((result + bucketSz) >= max_alloc) {
+      break;
+    }
   }
-  if(indicies == header::Extent::MAX_BUCKETS){
-  }
-  return result;
+
+  printf("reuslt(%zu) + (%zu)\n", result, (result % min_alloc));
+  return result + (result % min_alloc);
 }
 
 TEST(MallocTest, test) {
@@ -41,6 +50,10 @@ TEST(MallocTest, test) {
 }
 
 TEST(MallocTest, test_calc_min_extent) {
+  printf("%zu\n", SP_MALLOC_PAGE_SIZE * 4);
+  printf("%zu\n", SP_MALLOC_PAGE_SIZE * 3);
+  printf("%zu\n", SP_MALLOC_PAGE_SIZE * 2);
+  printf("%zu\n", SP_MALLOC_PAGE_SIZE * 1);
   std::size_t bucketSz = 8;
   size_t idx = 0;
   while (bucketSz > 0) {
