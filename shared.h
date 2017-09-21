@@ -69,8 +69,6 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
 
   Extent() noexcept;
 };
-Extent *init_extent(void *const raw, std::size_t bucket,
-                    std::size_t nodeSz) noexcept;
 Extent *extent(void *const start) noexcept;
 
 /*Node*/
@@ -83,23 +81,28 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   const NodeType type;
   // next node
   std::atomic<void *> next;
-  // size of what is reserved(a bucket)
-  const std::size_t bucket;
-  // size of the node include the header itself
-  // rawNodeSize = sizeof(Node[NodeHDR,...])
-  const std::size_t rawNodeSize;
+  // size of bucket
+  const std::size_t bucket_size;
+  // size of the node include the header itself sizeof(Node[NodeHDR,...])
+  const std::size_t node_size;
   // union {
   //   struct {
   // number of buckets available
-  std::size_t size;
+  std::size_t buckets;
   // } head;
   // struct {
   // } intermediate;
   // };
 
-  Node(std::size_t extSz, std::size_t bucket, std::size_t nodeSz) noexcept;
+  Node(std::size_t node_size, std::size_t bucket_size,
+       std::size_t buckets) noexcept;
 };
+Node *init_node(void *const raw, std::size_t size,
+                std::size_t bucketSz) noexcept;
 Node *node(void *const start) noexcept;
+
+static constexpr std::size_t SIZE(sizeof(header::Node) +
+                                  sizeof(header::Extent));
 } // namespace header
 
 /*
@@ -112,6 +115,8 @@ void *align_pointer(void *const start, std::uint32_t alignment) noexcept;
 std::size_t round_even(std::size_t v) noexcept;
 void *ptr_math(void *const ptr, std::int64_t add) noexcept;
 ptrdiff_t ptr_diff(void *const first, void *const second) noexcept;
+std::size_t trailing_zeros(std::size_t) noexcept;
+std::size_t round_up(std::size_t data, std::size_t eventMultiple) noexcept;
 } // namespace util
 
 /*

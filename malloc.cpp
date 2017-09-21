@@ -22,8 +22,6 @@
 // TODO add local::free_list
 // TODO coaless local::free_list when allocating thread looks for matching pages
 namespace local {
-static constexpr std::size_t HEADER_SIZE(sizeof(header::Node) +
-                                         sizeof(header::Extent));
 
 static std::size_t index_of(std::size_t size) noexcept {
   return (size / 8) - 1;
@@ -35,6 +33,7 @@ static local::Pool &pool_for(local::Pools &pools, std::size_t sz) noexcept {
 } // local::pool_for()
 
 static void *alloc(std::size_t sz) noexcept {
+  // printf("local::alloc(%zu)\n", sz);
   // TODO local alloc
   return global::alloc(sz);
 } // local::alloc()
@@ -54,42 +53,44 @@ static void *next_node(void *const start) noexcept {
  * @desc  -
  */
 static void *pointer_at(void *start, std::size_t index) noexcept {
+  // printf("pointer_at(start,index(%zu))\n", index);
   // Pool[Extent[Node[nodeHDR,extHDR],Node[nodeHDR]...]...]
   // The first NodeHeader in the extent contains data while intermediate
   // NodeHeader does not containt this data.
   header::Node *nH = header::node(start);
-  size_t hdrSz(HEADER_SIZE);
-  size_t buckets = nH->size;
+  size_t hdrSz(header::SIZE);
+  size_t buckets = nH->buckets;
+  const size_t bucket_size = nH->bucket_size;
 node_start:
-  const size_t dataSz(nH->rawNodeSize - hdrSz);
+  const size_t node_size = nH->node_size;
+  const size_t data_size(node_size - hdrSz);
 
-  size_t nodeBuckets = std::min(dataSz / nH->bucket, buckets);
+  size_t nodeBuckets = std::min(data_size / nH->bucket_size, buckets);
   if (index < nodeBuckets) {
     // the index is in range of current node
     uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
     uintptr_t data_start = startPtr + hdrSz;
 
-    return reinterpret_cast<void *>(data_start + (index * nH->bucket));
+    return reinterpret_cast<void *>(data_start + (index * bucket_size));
+  }
+  // the index is out of range, go to next node
+
+  void *const next = next_node(start);
+  index = index - nodeBuckets;
+  buckets = buckets - nodeBuckets;
+
+  if (buckets > 0) {
+    assert(next != nullptr);
+    header::Node *iNHdr = header::node(next);
+    assert(iNHdr->type == header::NodeType::INTERMEDIATE);
+
+    start = next;
+    // the same extent but a new node
+    hdrSz = sizeof(header::Node);
+    goto node_start;
   } else {
-    // the index is out of range go to next node or extent
-
-    void *next = next_node(start);
-    index = index - nodeBuckets;
-    buckets = buckets - nodeBuckets;
-
-    if (buckets > 0) {
-      assert(next != nullptr);
-      header::Node *iNHdr = header::node(next);
-      assert(iNHdr->type == header::NodeType::INTERMEDIATE);
-
-      start = next;
-      // the same extent but a new node
-      hdrSz = sizeof(header::Node);
-      goto node_start;
-    } else {
-      // out of bound
-      return nullptr;
-    }
+    // out of bound
+    assert(false);
   }
 } // local::pointer_at()
 
@@ -99,15 +100,16 @@ node_start:
  */
 static void *next_extent(void *start) noexcept {
   assert(start != nullptr);
-  header::Node *nH = header::node(start);
+  header::Node *const nH = header::node(start);
   assert(nH != nullptr);
+  assert(nH->bucket_size > 0);
 
-  size_t hdrSz(HEADER_SIZE);
-  size_t buckets = nH->size;
+  size_t hdrSz(header::SIZE);
+  size_t buckets = nH->buckets;
 node_start:
-  const size_t dataSz(nH->rawNodeSize - hdrSz);
+  const size_t dataSz(nH->node_size - hdrSz);
 
-  size_t nodeBuckets = std::min(dataSz / nH->bucket, buckets);
+  size_t nodeBuckets = std::min(dataSz / nH->bucket_size, buckets);
   buckets = buckets - nodeBuckets;
 
   void *const next = next_node(start);
@@ -142,11 +144,13 @@ node_start:
  * desc  - Used by malloc
  */
 static void *reserve(void *const start) noexcept {
-  header::Node *nHdr = header::node(start);
-  header::Extent *eHdr = header::extent(start);
+  header::Node *const nHdr = header::node(start);
+  header::Extent *const eHdr = header::extent(start);
 
-  const size_t index = eHdr->reserved.swap_first(true, nHdr->size);
-  if (index != eHdr->reserved.npos) {
+  auto &reservations = eHdr->reserved;
+  // printf("reservations.swap_first(true,buckets(%zu))\n", nHdr->buckets);
+  const std::size_t index = reservations.swap_first(true, nHdr->buckets);
+  if (index != reservations.npos) {
     return pointer_at(start, index);
   }
   return nullptr;
@@ -159,7 +163,7 @@ static void *reserve(void *const start) noexcept {
 static bool free(void *const dealloc) noexcept {
   // TODO
   uintptr_t ptr = reinterpret_cast<uintptr_t>(dealloc);
-  std::size_t maxIdx = (ptr & HEADER_SIZE) == 0 ? 63 : 0;
+  std::size_t maxIdx = (ptr & header::SIZE) == 0 ? 63 : 0;
 
   // TODO fence where apporopriate
   std::atomic_thread_fence(std::memory_order_acquire);
@@ -180,34 +184,45 @@ static bool free(void *const dealloc) noexcept {
   return true;
 } // local::free()
 
-static std::size_t calc_min_extent(std::size_t bucketSz) noexcept {
+static std::size_t calc_min_node(std::size_t bucketSz) noexcept {
   assert(bucketSz >= 8);
   assert(bucketSz % 8 == 0);
 
-  // TODO make not a loop
-
   constexpr std::size_t min_alloc = SP_MALLOC_PAGE_SIZE;
-  std::size_t result = HEADER_SIZE;
-  std::size_t indicies = 0;
-  while (result % min_alloc != 0) {
-    result += bucketSz;
-    ++indicies;
-    if (indicies > header::Extent::MAX_BUCKETS) {
-      assert(false);
-    }
+  constexpr std::size_t max_alloc = min_alloc * 4;
+  if (bucketSz + header::SIZE > max_alloc) {
+    return util::round_up(bucketSz + header::SIZE, min_alloc);
   }
-  return result;
+
+  constexpr std::size_t lookup[] = //
+      {
+          //
+          /*___8:*/ min_alloc,
+          /*__16:*/ min_alloc * 2,
+          /*__32:*/ max_alloc,
+          /*__64:*/ max_alloc,
+          /*_128:*/ max_alloc,
+          /*_256:*/ max_alloc,
+          /*_512:*/ max_alloc,
+          /*1024:*/ max_alloc,
+          /*2048:*/ max_alloc,
+          /*4096:*/ max_alloc,
+          /*8192:*/ min_alloc * 5,
+          //
+      };
+  return lookup[util::trailing_zeros(bucketSz >> 3)];
 }
 
 /*
  * @bucketSz - Normailzed size of bucket
  * desc  - Used by malloc
  */
-static header::Extent *alloc_extent(std::size_t bucketSz) noexcept {
-  std::size_t extentSz = calc_min_extent(bucketSz);
-  void *const raw = alloc(extentSz);
+static void *alloc_extent(std::size_t bucketSz) noexcept {
+  // printf("alloc_extent(%zu)\n", bucketSz);
+  std::size_t nodeSz = calc_min_node(bucketSz);
+  void *const raw = alloc(nodeSz);
   if (raw) {
-    return header::init_extent(raw, bucketSz, extentSz);
+    return header::init_node(raw, nodeSz, bucketSz);
   }
   return nullptr;
 } // local::alloc_extent()
@@ -247,9 +262,10 @@ void *sp_malloc(std::size_t length) noexcept {
         start = next;
         goto reserve_start;
       } else {
+        assert(false);
         // TODO  either extend extent or allocate new extent
         // does not need to do the local::alloc under the exclusive lock
-        // since we will only have one TL allocater at a time
+        // since we will only have one TL allocator at a time
       }
     }
   } else {
@@ -257,10 +273,12 @@ void *sp_malloc(std::size_t length) noexcept {
     void *const extent = local::alloc_extent(bucketSz);
     if (extent) {
       void *const result = local::reserve(extent);
-      std::atomic_thread_fence(std::memory_order_release);
+      // TODO some kind of fence to ensure construction before publication
+      // std::atomic_thread_fence(std::memory_order_release);
       if (pool.start.compare_exchange_strong(start, extent)) {
         return result;
       } else {
+        // should never fail
         assert(false);
       }
     } else {
@@ -268,14 +286,15 @@ void *sp_malloc(std::size_t length) noexcept {
       return nullptr;
     }
   }
-  return nullptr;
+  // should never get to here
+  assert(false);
 } // sp_malloc()
 
 void sp_free(void *const dealloc) noexcept {
   // TODO a initial std::thread_atomic_fence_acquire(); required
-  // the allocating thread is required to atomuc_release it before the free
-  // thread can see it and there fore only the first initial aquire fence.
-  // Because any _aquire fence since it can be another thread that performs the
+  // the allocating thread is required to atomic_release it before the free
+  // thread can see it and there fore only the first initial acquire fence.
+  // Because any acquire fence since it can be another thread that performs the
   // free than the one allocating it
   if (!local::free(dealloc)) {
     assert(false);

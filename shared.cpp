@@ -68,23 +68,18 @@ Free *free(void *const start) noexcept {
 /*Extent*/
 static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
+
 Extent::Extent() noexcept //
     : reserved(false) {
 }
 
-Extent *init_extent(void *const raw, std::size_t bucket,
-                    std::size_t length) noexcept {
-  assert(raw != nullptr);
-  // TODO calc based on bucket and nodeSz
-  std::size_t extentIdxs = 0;
+static std::size_t calc_buckets(std::size_t extentSz,
+                                std::size_t bucketSz) noexcept {
+  assert(bucketSz > 0);
+  assert(extentSz > header::SIZE);
 
-  Node *nHdr = node(raw);
-  new (nHdr) Node(length, bucket, extentIdxs);
-
-  Extent *eHdr = extent(raw);
-  // memset(raw, 0, length);
-  return new (eHdr) Extent;
-} // init_extent()
+  return (extentSz - header::SIZE) / bucketSz;
+}
 
 Extent *extent(void *const start) noexcept {
   assert(start != nullptr);
@@ -99,14 +94,35 @@ Extent *extent(void *const start) noexcept {
 static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-Node::Node(std::size_t p_extentSz, std::size_t p_bucket,
-           std::size_t p_nodeSz) noexcept //
-    : type(NodeType::HEAD), next{nullptr}, bucket(p_bucket),
-      rawNodeSize(p_nodeSz), size(p_extentSz) {
-  assert(bucket > 0);
-  assert(rawNodeSize > 0);
-  assert(size > 0);
+Node::Node(std::size_t nodeSz, std::size_t bucketSz,
+           std::size_t p_buckets) noexcept //
+    : type(NodeType::HEAD), next{nullptr}, bucket_size(bucketSz),
+      node_size(nodeSz), buckets(p_buckets) {
+  assert(this->bucket_size > 0);
+  assert(this->node_size > 0);
+  assert(this->buckets > 0);
 } // Node()
+
+Node *init_node(void *const raw, std::size_t size,
+                std::size_t bucketSz) noexcept {
+  assert(raw != nullptr);
+  assert(size >= header::SIZE);
+  const std::size_t buckets = calc_buckets(size, bucketSz);
+  assert(buckets > 0);
+  // printf("init_node(ptr,size(%zu),bucketSz(%zu),buckets(%zu))\n", //
+         // size, bucketSz, buckets);
+
+  Node *nHdr = node(raw);
+  new (nHdr) Node(size, bucketSz, buckets);
+  // printf("node(size(%zu),bucketSz(%zu),buckets(%zu))\n", //
+  //        nHdr->node_size, nHdr->bucket_size, nHdr->buckets);
+
+  Extent *eHdr = extent(raw);
+  // memset(raw, 0, length);
+  new (eHdr) Extent;
+
+  return nHdr;
+} // init_node()
 
 Node *node(void *const start) noexcept {
   assert(start != nullptr);
@@ -134,6 +150,9 @@ void *align_pointer(void *const start, std::uint32_t alignment) noexcept {
 } // align_pointer()
 
 std::size_t round_even(std::size_t v) noexcept {
+  if (v <= 8) {
+    return 8;
+  }
   // TODO support 64 bit word
   // https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
   // 8,16,32,64,...
@@ -159,7 +178,17 @@ ptrdiff_t ptr_diff(void *const first, void *const second) noexcept {
   uintptr_t firstPtr = reinterpret_cast<uintptr_t>(first);
   uintptr_t secondPtr = reinterpret_cast<uintptr_t>(second);
   return firstPtr - secondPtr;
-} //ptr_diff()
+} // ptr_diff()
+
+std::size_t trailing_zeros(std::size_t n) noexcept {
+  return __builtin_ctz(n);
+}
+
+std::size_t round_up(std::size_t data, std::size_t evenMultiple) noexcept {
+  const std::size_t remaining = data % evenMultiple;
+  const std::size_t add = remaining > 0 ? evenMultiple - remaining : 0;
+  return data + add;
+}
 
 } // namespace util
 
