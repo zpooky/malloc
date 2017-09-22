@@ -81,8 +81,9 @@ static std::size_t calc_buckets(std::size_t extentSz,
   return (extentSz - header::SIZE) / bucketSz;
 }
 
-Extent *extent(void *const start) noexcept {
+Extent *extent(Node *const start) noexcept {
   assert(start != nullptr);
+  assert(start->type == NodeType::HEAD);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   uintptr_t headerPtr = startPtr + sizeof(Node);
   assert(headerPtr % alignof(Extent) == 0);
@@ -110,14 +111,14 @@ Node *init_node(void *const raw, std::size_t size,
   const std::size_t buckets = calc_buckets(size, bucketSz);
   assert(buckets > 0);
   // printf("init_node(ptr,size(%zu),bucketSz(%zu),buckets(%zu))\n", //
-         // size, bucketSz, buckets);
+  // size, bucketSz, buckets);
 
-  Node *nHdr = node(raw);
+  Node *const nHdr = node(raw);
   new (nHdr) Node(size, bucketSz, buckets);
   // printf("node(size(%zu),bucketSz(%zu),buckets(%zu))\n", //
   //        nHdr->node_size, nHdr->bucket_size, nHdr->buckets);
 
-  Extent *eHdr = extent(raw);
+  Extent *const eHdr = extent(nHdr);
   // memset(raw, 0, length);
   new (eHdr) Extent;
 
@@ -182,7 +183,11 @@ ptrdiff_t ptr_diff(void *const first, void *const second) noexcept {
 
 std::size_t trailing_zeros(std::size_t n) noexcept {
   return __builtin_ctz(n);
-}
+} // util::trailing_zeroes()
+
+std::size_t leading_zeros(std::size_t n) noexcept {
+  return __builtin_clz(n);
+} // util:leading_zeroes()
 
 std::size_t round_up(std::size_t data, std::size_t evenMultiple) noexcept {
   const std::size_t remaining = data % evenMultiple;

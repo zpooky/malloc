@@ -5,19 +5,74 @@
 #include <tuple>
 #include <vector>
 
+// TODO just alloc continuasly of same same
+// TODO allocate increasing and wrap around
+// TODO large range 1-XXX to see that we get the right bucket
+
+/*Parametrized Fixture*/
+class MallocTest : public testing::TestWithParam<size_t> {
+public:
+  Malloctest() {
+  }
+
+  virtual void SetUp() {
+  }
+  virtual void TearDown() {
+  }
+};
+
+/*Setup Parameters*/
+INSTANTIATE_TEST_CASE_P(Default, MallocTest,
+                        ::testing::Values( //
+                            64             //
+                            ,
+                            128 //
+                            ,
+                            256 //
+                            ,
+                            512 //
+                            ,
+                            1024 //
+                            ,
+                            2048 //
+                            ,
+                            4096 //
+                            ,
+                            8192 //
+                            ,
+                            16384 //
+                            ,
+                            16384 * 2 //
+                            ,
+                            16384 * 4 //
+                            ,
+                            16384 * 8 //
+                            ));
+
 /*Test*/
-TEST(MallocTest, test) {
-  const size_t X = 1000;
-  const size_t I = 1000;
+TEST_P(MallocTest, test) {
+  const size_t I = GetParam();
+  const size_t allocSz = 8;
+
   Points allocs;
-  for (size_t x = 1; x < X; ++x) {
-    for (size_t i = 1; i < I; ++i) {
-      void *const ptr = sp_malloc(i);
-      ASSERT_FALSE(ptr == nullptr);
-      allocs.emplace_back(ptr, i);
-      // sp_free(ptr);
-      assert_no_overlap(allocs);
-    }
+  allocs.reserve(I);
+
+  printf("test(%zu)\n", I);
+  for (size_t i = 1; i < I; ++i) {
+    void *const ptr = sp_malloc(i);
+    ASSERT_FALSE(ptr == nullptr);
+    allocs.emplace_back(ptr, allocSz);
+    ASSERT_EQ(allocSz, sp_sizeof(ptr));
+  }
+
+  printf("assert\n");
+  assert_no_overlap(allocs);
+
+  printf("free\n");
+  for (auto c : allocs) {
+    void *ptr = std::get<0>(c);
+    ASSERT_EQ(allocSz, sp_sizeof(ptr));
+    sp_free(ptr);
   }
 }
 

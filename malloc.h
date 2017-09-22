@@ -9,8 +9,8 @@
 // ExtentHeader:
 // NodeHeader:
 
-// std::size_t sp_size(void *const p) noexcept;
-void sp_free(void *const dealloc) noexcept;
 void *sp_malloc(std::size_t sz) noexcept;
+void sp_free(void *const dealloc) noexcept;
+std::size_t sp_sizeof(void *const p) noexcept;
 
 #endif

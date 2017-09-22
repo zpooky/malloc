@@ -47,6 +47,8 @@ Free *reduce(Free *free, std::size_t length) noexcept;
 Free *free(void *const start) noexcept;
 
 /*Extent*/
+struct Node;
+
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
   static constexpr std::size_t MAX_BUCKETS = 512;
   // const uint8_t block_size;
@@ -69,7 +71,7 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
 
   Extent() noexcept;
 };
-Extent *extent(void *const start) noexcept;
+Extent *extent(Node *const start) noexcept;
 
 /*Node*/
 enum class NodeType { //
@@ -80,7 +82,7 @@ enum class NodeType { //
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   const NodeType type;
   // next node
-  std::atomic<void *> next;
+  std::atomic<Node *> next;
   // size of bucket
   const std::size_t bucket_size;
   // size of the node include the header itself sizeof(Node[NodeHDR,...])
@@ -93,6 +95,7 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   // struct {
   // } intermediate;
   // };
+  // TODO const std::size_t offset; for where the first bucket start
 
   Node(std::size_t node_size, std::size_t bucket_size,
        std::size_t buckets) noexcept;
@@ -116,6 +119,7 @@ std::size_t round_even(std::size_t v) noexcept;
 void *ptr_math(void *const ptr, std::int64_t add) noexcept;
 ptrdiff_t ptr_diff(void *const first, void *const second) noexcept;
 std::size_t trailing_zeros(std::size_t) noexcept;
+std::size_t leading_zeros(std::size_t) noexcept;
 std::size_t round_up(std::size_t data, std::size_t eventMultiple) noexcept;
 } // namespace util
 
@@ -127,9 +131,9 @@ std::size_t round_up(std::size_t data, std::size_t eventMultiple) noexcept;
 namespace local {
 /*Pool*/
 struct Pool { //
-  std::atomic<void *> start;
-  // sp::ReadWriteLock lock;
-  std::shared_mutex lock;
+  std::atomic<header::Node *> start;
+  sp::ReadWriteLock lock;
+  // std::shared_mutex lock;
   // std::mutex lock;
 
   Pool() noexcept;
@@ -143,7 +147,8 @@ struct Pool { //
 
 /*Pools*/
 struct PoolsRAII { //
-  std::array<Pool, 64> buckets;
+  static constexpr std::size_t BUCKETS = 60;
+  std::array<Pool, BUCKETS> buckets;
 
   PoolsRAII() noexcept;
 }; // struct PoolsRAII
@@ -156,6 +161,8 @@ private:
   std::atomic<bool> reclaimed;
 
 public:
+  static constexpr std::size_t BUCKETS = PoolsRAII::BUCKETS;
+
   Pools() noexcept;
   ~Pools() noexcept;
 

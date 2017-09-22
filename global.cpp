@@ -173,12 +173,18 @@ start:
                 head = current;
                 goto retry;
               }
-              //
+
               // TODO should succeed if prepare:0 & // exc:0
               sp::TryPrepareLock next_pre_guard(next_shared_guard);
               if (next_pre_guard) {
                 // [Current:PREPARE][Next:EXCLUSIVE]
 
+                // TODO cur_lock shoud unblockingly set the exclusive flag and
+                // continue
+                // to let next_lock execute in paralell first when we check for
+                // success.
+                // In the if case we should block until exclusive lock.
+                // Applies to both return & alloc free
                 sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
                 sp::EagerExclusiveLock next_exc_guard(next_pre_guard);
                 if (cur_exc_guard && next_exc_guard) {
@@ -390,7 +396,7 @@ header::Free *find_freex(State &state, std::size_t length) noexcept {
 }
 
 void *alloc(State &state, std::size_t p_length) noexcept {
-  if(p_length == 0){
+  if (p_length == 0) {
     return nullptr;
   }
   header::Free *free = find_freex(state, p_length);
