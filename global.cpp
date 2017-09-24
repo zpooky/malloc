@@ -180,11 +180,9 @@ start:
                 // [Current:PREPARE][Next:EXCLUSIVE]
 
                 // TODO cur_lock shoud unblockingly set the exclusive flag and
-                // continue
-                // to let next_lock execute in paralell first when we check for
-                // success.
-                // In the if case we should block until exclusive lock.
-                // Applies to both return & alloc free
+                // continue to let next_lock execute in paralell first when we
+                // check for success. In the if case we should block until
+                // exclusive lock. Applies to both return & alloc free
                 sp::EagerExclusiveLock cur_exc_guard(cur_pre_guard);
                 sp::EagerExclusiveLock next_exc_guard(next_pre_guard);
                 if (cur_exc_guard && next_exc_guard) {

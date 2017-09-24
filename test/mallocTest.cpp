@@ -12,7 +12,7 @@
 /*Parametrized Fixture*/
 class MallocTest : public testing::TestWithParam<size_t> {
 public:
-  Malloctest() {
+  MallocTest() {
   }
 
   virtual void SetUp() {
@@ -59,7 +59,7 @@ TEST_P(MallocTest, test) {
 
   printf("test(%zu)\n", I);
   for (size_t i = 1; i < I; ++i) {
-    void *const ptr = sp_malloc(i);
+    void *const ptr = sp_malloc(allocSz);
     ASSERT_FALSE(ptr == nullptr);
     allocs.emplace_back(ptr, allocSz);
     ASSERT_EQ(allocSz, sp_sizeof(ptr));

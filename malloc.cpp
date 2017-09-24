@@ -23,7 +23,7 @@
 // TODO coaless local::free_list when allocating thread looks for matching pages
 
 // {{{
-static thread_local local::Pools pools;
+static thread_local local::Pools internal_pools;
 // }}}
 
 namespace local {
@@ -161,27 +161,19 @@ static void *reserve(header::Node *const node) noexcept {
  * @dealloc - the same pointer as received from malloc
  * desc     - Used by free
  */
-static bool free(void *const dealloc) noexcept {
+static bool free(void *const ptr) noexcept {
   // TODO
-  uintptr_t ptr = reinterpret_cast<uintptr_t>(dealloc);
-  std::size_t maxIdx = (ptr & header::SIZE) == 0 ? 63 : 0;
-
-  // TODO fence where apporopriate
-  std::atomic_thread_fence(std::memory_order_acquire);
-
-  header::Extent *eHdr = header::extent(nullptr); // TODO
-  const std::size_t idx = 0;
-  if (true) {
-    // a thread local alloc&free
-    if (!eHdr->reserved.set(idx, false)) {
-      // dubble free is a runtime fault
-    }
-    // TODO reclaim node?
-  } else {
-    // not the same free:ing as malloc:ing thread
-    return global::free(dealloc);
-  }
-  return true;
+  // header::Extent *ext = extent_for(ptr);
+  // if (ext) {
+  //   const std::size_t idx = 0;
+  //   if (!eHdr->reserved.set(idx, false)) {
+  //     // double free is a runtime fault
+  //     assert(false); // TODO is runtime failure
+  //   }
+  //   // TODO reclaim node?
+  //   return true;
+  // }
+  return false;
 } // local::free()
 
 static std::size_t calc_min_node(std::size_t bucketSz) noexcept {
@@ -235,7 +227,35 @@ static void extend_extent(void *const start) noexcept {
   // TODO
 } // local::extend_extent()
 
-static header::Node *node_for(void *const ptr) noexcept {
+static bool in_node_range(const header::Node *const node,
+                          void *const ptr) noexcept {
+  assert(node != nullptr);
+  assert(ptr != nullptr);
+
+  uintptr_t start = reinterpret_cast<uintptr_t>(node);
+  uintptr_t end = start + node->node_size;
+
+  uintptr_t compare = reinterpret_cast<uintptr_t>(ptr);
+  return compare >= start && compare < end;
+}
+
+static header::Node *node_for(Pool &pool, void *const ptr) noexcept {
+  sp::SharedLock guard(pool.lock);
+  if (guard) {
+    header::Node *current = pool.start.load(std::memory_order_acquire);
+  start:
+    if (current) {
+      if (in_node_range(current, ptr)) {
+        return current;
+      }
+      current = current->next.load(std::memory_order_acquire);
+      goto start;
+    }
+  }
+  return nullptr;
+}
+
+static header::Node *node_for(Pools &pools, void *const ptr) noexcept {
   const std::uintptr_t raw = reinterpret_cast<std::uintptr_t>(ptr);
   const std::size_t tz = util::trailing_zeros(raw);
 
@@ -245,11 +265,14 @@ static header::Node *node_for(void *const ptr) noexcept {
     assert(false);
     return nullptr;
   }
-  std::size_t max = offset >= sizeof(header::Node) ? Pools::BUCKETS : tz + 1;
+  // std::size_t max = offset >= sizeof(header::Node) ? Pools::BUCKETS : tz + 1;
+  const std::size_t max = Pools::BUCKETS;
   for (std::size_t i(0); i < max; ++i) {
-    // TODO    pools.pools->buckets[i];
+    header::Node *result = node_for(pools[i], ptr);
+    if (result) {
+      return result;
+    }
   }
-  // TODO
   return nullptr;
 } // local::node_for()
 
@@ -278,7 +301,7 @@ static header::Node *enqueue_new_extent(std::atomic<header::Node *> &w,
 
 void *sp_malloc(std::size_t length) noexcept {
   const std::size_t bucketSz = util::round_even(length);
-  local::Pool &pool = pool_for(pools, bucketSz);
+  local::Pool &pool = pool_for(internal_pools, bucketSz);
 
   header::Node *start = pool.start.load(std::memory_order_acquire);
   if (start) {
@@ -329,12 +352,15 @@ void sp_free(void *const dealloc) noexcept {
   // easier.
   // but we need a way to arbitrary find the node header from a bucketIdx
   if (!local::free(dealloc)) {
-    assert(false);
+    // not the same free:ing as malloc:ing thread
+    if (!global::free(dealloc)) {
+      assert(false);
+    }
   }
 } // sp_free()
 
 std::size_t sp_sizeof(void *const p) noexcept {
-  const header::Node *const node = local::node_for(p);
+  const header::Node *const node = local::node_for(internal_pools, p);
   if (node) {
     return node->bucket_size;
   }
