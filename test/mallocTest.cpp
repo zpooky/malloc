@@ -1,5 +1,5 @@
-#include "Util.h"
 #include "malloc.h"
+#include "Util.h"
 #include "shared.h"
 #include "gtest/gtest.h"
 #include <tuple>
@@ -59,23 +59,21 @@ TEST_P(MallocTest, test) {
 
   // TODO assert 0 allocs of allocSz
 
-  printf("test(%zu)\n", I);
   for (size_t i = 1; i < I; ++i) {
     void *const ptr = sp_malloc(allocSz);
     ASSERT_FALSE(ptr == nullptr);
     allocs.emplace_back(ptr, allocSz);
     ASSERT_EQ(allocSz, sp_sizeof(ptr));
+    ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
   }
   // TODO assert I allocs of allocSz
 
-  printf("assert\n");
   assert_no_overlap(allocs);
 
-  printf("free\n");
   for (auto c : allocs) {
     void *ptr = std::get<0>(c);
     ASSERT_EQ(allocSz, sp_sizeof(ptr));
-    sp_free(ptr);
+    ASSERT_TRUE(sp_free(ptr));
   }
 
   // TODO assert 0 allocs of allocSz

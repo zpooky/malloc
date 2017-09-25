@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <memory.h>
 #include <mutex>
 #include <tuple>
 #include <utility>
@@ -326,6 +327,15 @@ static header::Node *enqueue_new_extent(std::atomic<header::Node *> &w,
   return current;
 } // local::enqueue_new_extent()
 
+static bool perform_free(header::Extent *ext, std::size_t idx) noexcept {
+  if (!ext->reserved.set(idx, false)) {
+    // double free is a runtime fault
+    assert(false);
+  }
+  // TODO reclaim node?
+  return true;
+}
+
 /*
  * @dealloc - the same pointer as received from malloc
  * desc     - Used by free
@@ -336,13 +346,7 @@ static bool free(Pools &pools, void *const ptr) noexcept {
   if (headNode) {
     header::Extent *ext = header::extent(headNode);
     std::size_t idx = std::get<1>(result);
-    if (!ext->reserved.set(idx, false)) {
-      // double free is a runtime fault
-      assert(false);
-      return true;
-    }
-    // TODO reclaim node?
-    return true;
+    return perform_free(ext, idx);
   }
   return false;
 } // local::free()
@@ -400,9 +404,9 @@ void *sp_malloc(std::size_t length) noexcept {
   assert(false);
 } // ::sp_malloc()
 
-void sp_free(void *const ptr) noexcept {
+bool sp_free(void *const ptr) noexcept {
   if (!ptr) {
-    return;
+    return true;
   }
 
   // TODO a initial std::thread_atomic_fence_acquire(); required
@@ -421,7 +425,9 @@ void sp_free(void *const ptr) noexcept {
       // unknown address
       assert(false);
     }
+    return false;
   }
+  return true;
 } // ::sp_free()
 
 std::size_t sp_sizeof(void *const ptr) noexcept {
@@ -441,6 +447,19 @@ void *sp_realloc(void *ptr, std::size_t length) noexcept {
     sp_free(ptr);
     return nullptr;
   }
-  // TODO
+  auto result = pools_find(internal_pools, ptr, local::extent_for);
+  header::Node *headNode = std::get<0>(result);
+  if (headNode) {
+    header::Extent *ext = header::extent(headNode);
+    if (headNode->bucket_size < length) {
+      void *nptr = sp_malloc(length);
+      if (nptr) {
+        memcpy(nptr, ptr, headNode->bucket_size);
+        local::perform_free(ext, std::get<1>(result));
+      }
+      return nptr;
+    }
+    return ptr;
+  }
   return nullptr;
 }

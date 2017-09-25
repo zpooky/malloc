@@ -2,6 +2,7 @@
 #define SP_MALLOC_GLOBAL_H
 
 #include "shared.h"
+#include <mutex>
 
 #define SP_TEST
 #ifdef SP_TEST

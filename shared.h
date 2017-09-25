@@ -5,24 +5,8 @@
 #include <atomic>
 #include <bitset/Bitset.h>
 
-#if __GNUC__ < 7
-#include <mutex>
-
-namespace std {
-template <typename T>
-using shared_lock = unique_lock<T>;
-using shared_mutex = mutex;
-}
-#else
-
-// #include <mutex>
-#include <shared_mutex>
-
-#endif
-
 #define SP_MALLOC_PAGE_SIZE std::size_t(4 * 1024)
 #define SP_MALLOC_CACHE_LINE_SIZE 64
-
 #define SP_ALLOC_INITIAL_ALLOC std::size_t(SP_MALLOC_PAGE_SIZE)
 
 /*
