@@ -49,9 +49,11 @@ INSTANTIATE_TEST_CASE_P(Default, MallocTest,
                             16384 * 8 //
                             ));
 
+static const size_t max(64 * 1024);
+
 /*Test*/
-TEST_P(MallocTest, test) {
-  const size_t I = GetParam();
+TEST(MallocTest, test_8) {
+  const size_t I = 16 * 1024;
   const size_t allocSz = 8;
 
   Points allocs;
@@ -72,7 +74,47 @@ TEST_P(MallocTest, test) {
 
   for (auto c : allocs) {
     void *ptr = std::get<0>(c);
-    ASSERT_EQ(allocSz, sp_sizeof(ptr));
+    ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
+    ASSERT_TRUE(sp_free(ptr));
+  }
+
+  // TODO assert 0 allocs of allocSz
+}
+
+static std::size_t roundAlloc(std::size_t sz) {
+  for (std::size_t i(8); i < ~std::size_t(0); i <<= 1) {
+    if (sz <= i) {
+      // printf("sz(%zu)%zu\n", sz, i);
+      return i;
+    }
+  }
+}
+
+TEST(MallocTest, test_range) {
+  const size_t I = 16 * 1024;
+
+  Points allocs;
+  allocs.reserve(I);
+
+  // TODO assert 0 allocs of allocSz
+
+  for (size_t i = 512; i < I; ++i) {
+    const size_t allocSz = i;
+
+    void *const ptr = sp_malloc(allocSz);
+    ASSERT_FALSE(ptr == nullptr);
+    allocs.emplace_back(ptr, allocSz);
+
+    ASSERT_EQ(roundAlloc(allocSz), sp_sizeof(ptr));
+    // ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
+  }
+  // TODO assert I allocs of allocSz
+
+  assert_no_overlap(allocs);
+
+  for (auto c : allocs) {
+    void *ptr = std::get<0>(c);
+    ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
     ASSERT_TRUE(sp_free(ptr));
   }
 
