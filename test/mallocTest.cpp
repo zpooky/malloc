@@ -57,6 +57,8 @@ TEST_P(MallocTest, test) {
   Points allocs;
   allocs.reserve(I);
 
+  // TODO assert 0 allocs of allocSz
+
   printf("test(%zu)\n", I);
   for (size_t i = 1; i < I; ++i) {
     void *const ptr = sp_malloc(allocSz);
@@ -64,6 +66,7 @@ TEST_P(MallocTest, test) {
     allocs.emplace_back(ptr, allocSz);
     ASSERT_EQ(allocSz, sp_sizeof(ptr));
   }
+  // TODO assert I allocs of allocSz
 
   printf("assert\n");
   assert_no_overlap(allocs);
@@ -74,6 +77,8 @@ TEST_P(MallocTest, test) {
     ASSERT_EQ(allocSz, sp_sizeof(ptr));
     sp_free(ptr);
   }
+
+  // TODO assert 0 allocs of allocSz
 }
 
 // TEST(MallocTest, test_calc_min_extent) {

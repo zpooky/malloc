@@ -87,6 +87,7 @@ start:
                 } /*cur_exc_guard*/ else {
                   // bug
                   assert(false);
+                  return nullptr;
                 }
               } /*next_pre_guard*/ else {
                 // Could not lock current->next
@@ -208,8 +209,10 @@ start:
                   // }
                   return;
                 } /*Current Exclusive Guard*/ else {
-                  // bug - if PREPARE then a exclusive should always succeed?
+                  // bug - TODO if PREPARE then a exclusive should always
+                  // succeed?
                   assert(false);
+                  return;
                 }
               } /*Next Exclusive Guard*/ else {
                 //...???
@@ -443,9 +446,9 @@ void dealloc(void *const start, std::size_t length) noexcept {
   return internal::dealloc(internal_state, start, length);
 }
 
-bool free(void *const) noexcept {
+bool free(void *) noexcept {
   // TODO
-  return true;
+  return false;
 } // free()
 
 local::PoolsRAII *alloc_pool() noexcept {
@@ -455,6 +458,7 @@ local::PoolsRAII *alloc_pool() noexcept {
 
   if (result == nullptr) {
     assert(false);
+    return nullptr;
   }
   return new (result) PoolType;
 } // alloc_pool()

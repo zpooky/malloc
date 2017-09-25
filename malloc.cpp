@@ -1,11 +1,11 @@
+#include <algorithm>
 #include <cassert>
 #include <mutex>
 #include <tuple>
+#include <utility>
 
 #include "ReadWriteLock.h"
 #include "bitset/Bitset.h"
-#include <algorithm>
-#include <utility>
 
 #include <array>
 #include <atomic>
@@ -21,6 +21,14 @@
 // # local
 // TODO add local::free_list
 // TODO coaless local::free_list when allocating thread looks for matching pages
+// local::free_list best while global::free_list first fit.
+
+// # version 2.0
+// - from a pointer get the node header and in the node header get a pointer to
+// the extent header to support random access free()
+// - use memmap instead of sbrk to more freely allow for reclamation of
+// larged unused ranges of global free-list memory. Without being blocked by a
+// single high sbrk reservation.
 
 // {{{
 static thread_local local::Pools internal_pools;
@@ -157,25 +165,6 @@ static void *reserve(header::Node *const node) noexcept {
   return nullptr;
 } // local::reserve()
 
-/*
- * @dealloc - the same pointer as received from malloc
- * desc     - Used by free
- */
-static bool free(void *const ptr) noexcept {
-  // TODO
-  // header::Extent *ext = extent_for(ptr);
-  // if (ext) {
-  //   const std::size_t idx = 0;
-  //   if (!eHdr->reserved.set(idx, false)) {
-  //     // double free is a runtime fault
-  //     assert(false); // TODO is runtime failure
-  //   }
-  //   // TODO reclaim node?
-  //   return true;
-  // }
-  return false;
-} // local::free()
-
 static std::size_t calc_min_node(std::size_t bucketSz) noexcept {
   assert(bucketSz >= 8);
   assert(bucketSz % 8 == 0);
@@ -237,25 +226,68 @@ static bool in_node_range(const header::Node *const node,
 
   uintptr_t compare = reinterpret_cast<uintptr_t>(ptr);
   return compare >= start && compare < end;
-}
+} // local::in_node_range()
 
-static header::Node *node_for(Pool &pool, void *const ptr) noexcept {
+static std::tuple<header::Node *, std::size_t>
+node_for(Pool &pool, void *const ptr) noexcept {
   sp::SharedLock guard(pool.lock);
   if (guard) {
     header::Node *current = pool.start.load(std::memory_order_acquire);
   start:
     if (current) {
       if (in_node_range(current, ptr)) {
-        return current;
+        return std::make_tuple(current, 0);
       }
       current = current->next.load(std::memory_order_acquire);
       goto start;
     }
   }
-  return nullptr;
+  return std::make_tuple(nullptr, std::size_t(0));
+} // local::node_for()
+
+static int bucket_index(header::Node *node, void *ptr) noexcept {
+  return 0;
 }
 
-static header::Node *node_for(Pools &pools, void *const ptr) noexcept {
+static std::size_t bucket_indecies(header::Node *node) noexcept {
+  return 0;
+}
+
+static std::tuple<header::Node *, std::size_t>
+extent_for(Pool &pool, void *const ptr) noexcept {
+  sp::SharedLock guard(pool.lock);
+  if (guard) {
+    header::Node *current = pool.start.load(std::memory_order_acquire);
+    header::Node *extent = nullptr;
+    std::size_t index{0};
+  start:
+    if (current) {
+      if (current->type == header::NodeType::HEAD) {
+        extent = current;
+        index = 0;
+      }
+
+      int nodeIdx = bucket_index(current, ptr);
+      if (nodeIdx != -1) {
+        assert(extent != nullptr);
+        index += nodeIdx;
+
+        return std::make_tuple(extent, index);
+      }
+      index += bucket_indecies(current);
+
+      current = current->next.load(std::memory_order_acquire);
+      goto start;
+    }
+  }
+
+  return std::make_tuple(nullptr, std::size_t(0));
+} // local::extent_for()
+
+template <typename T>
+static std::tuple<T *, std::size_t>
+pools_find(Pools &pools, void *const ptr,
+           std::tuple<T *, std::size_t> (*f)(Pool &, void *)) noexcept {
   const std::uintptr_t raw = reinterpret_cast<std::uintptr_t>(ptr);
   const std::size_t tz = util::trailing_zeros(raw);
 
@@ -263,26 +295,20 @@ static header::Node *node_for(Pools &pools, void *const ptr) noexcept {
   if (offset < 8) {
     // should be a runtime fault, the minimum alignment is 8
     assert(false);
-    return nullptr;
+    return std::make_tuple(nullptr, std::size_t(0));
   }
-  // std::size_t max = offset >= sizeof(header::Node) ? Pools::BUCKETS : tz + 1;
+  // TODO std::size_t max = offset >= sizeof(header::Node) ? Pools::BUCKETS : tz
+  // + 1;
   const std::size_t max = Pools::BUCKETS;
   for (std::size_t i(0); i < max; ++i) {
-    header::Node *result = node_for(pools[i], ptr);
-    if (result) {
+    auto result = f(pools[i], ptr);
+    if (std::get<0>(result)) {
       return result;
     }
   }
-  return nullptr;
-} // local::node_for()
+  return std::make_tuple(nullptr, std::size_t(0));
+} // local::pools_find()
 
-} // namespace local
-
-/*
- *===========================================================
- *=======PUBLIC==============================================
- *===========================================================
- */
 static header::Node *enqueue_new_extent(std::atomic<header::Node *> &w,
                                         std::size_t bucketSz) noexcept {
   header::Node *const current = local::alloc_extent(bucketSz);
@@ -291,15 +317,48 @@ static header::Node *enqueue_new_extent(std::atomic<header::Node *> &w,
     // std::atomic_thread_fence(std::memory_order_release);
     header::Node *start = nullptr;
     if (!w.compare_exchange_strong(start, current)) {
-      // TODO local::dealloc_extent(current)
       // should never fail
+
+      // TODO local::dealloc_extent(current)
       assert(false);
     }
   }
   return current;
-}
+} // local::enqueue_new_extent()
 
+/*
+ * @dealloc - the same pointer as received from malloc
+ * desc     - Used by free
+ */
+static bool free(Pools &pools, void *const ptr) noexcept {
+  auto result = pools_find(pools, ptr, extent_for);
+  header::Node *headNode = std::get<0>(result);
+  if (headNode) {
+    header::Extent *ext = header::extent(headNode);
+    std::size_t idx = std::get<1>(result);
+    if (!ext->reserved.set(idx, false)) {
+      // double free is a runtime fault
+      assert(false);
+      return true;
+    }
+    // TODO reclaim node?
+    return true;
+  }
+  return false;
+} // local::free()
+
+} // namespace local
+
+/*
+ *===========================================================
+ *=======PUBLIC==============================================
+ *===========================================================
+ */
 void *sp_malloc(std::size_t length) noexcept {
+  if (length == 0) {
+    return nullptr;
+  }
+
   const std::size_t bucketSz = util::round_even(length);
   local::Pool &pool = pool_for(internal_pools, bucketSz);
 
@@ -316,7 +375,7 @@ void *sp_malloc(std::size_t length) noexcept {
         goto reserve_start;
       } else {
         // TODO support expand extent
-        start = enqueue_new_extent(start->next, bucketSz);
+        start = local::enqueue_new_extent(start->next, bucketSz);
         if (start) {
           goto reserve_start;
         }
@@ -326,7 +385,7 @@ void *sp_malloc(std::size_t length) noexcept {
     }
   } else {
     // only TL allowed to malloc meaning no alloc contention
-    header::Node *const current = enqueue_new_extent(pool.start, bucketSz);
+    header::Node *current = local::enqueue_new_extent(pool.start, bucketSz);
     if (current) {
       void *const result = local::reserve(current);
       // since only one allocator this must succeed
@@ -339,9 +398,13 @@ void *sp_malloc(std::size_t length) noexcept {
   }
   // should never get to here
   assert(false);
-} // sp_malloc()
+} // ::sp_malloc()
 
-void sp_free(void *const dealloc) noexcept {
+void sp_free(void *const ptr) noexcept {
+  if (!ptr) {
+    return;
+  }
+
   // TODO a initial std::thread_atomic_fence_acquire(); required
   // the allocating thread is required to atomic_release it before the free
   // thread can see it and there fore only the first initial acquire fence.
@@ -351,18 +414,33 @@ void sp_free(void *const dealloc) noexcept {
   // maybe have a tag in the node header like Thread id to make global::free
   // easier.
   // but we need a way to arbitrary find the node header from a bucketIdx
-  if (!local::free(dealloc)) {
+  if (!local::free(internal_pools, ptr)) {
     // not the same free:ing as malloc:ing thread
-    if (!global::free(dealloc)) {
+    assert(false);
+    if (!global::free(ptr)) {
+      // unknown address
       assert(false);
     }
   }
-} // sp_free()
+} // ::sp_free()
 
-std::size_t sp_sizeof(void *const p) noexcept {
-  const header::Node *const node = local::node_for(internal_pools, p);
-  if (node) {
-    return node->bucket_size;
+std::size_t sp_sizeof(void *const ptr) noexcept {
+  if (ptr) {
+    auto &pools = internal_pools;
+    auto result = local::pools_find(pools, ptr, local::node_for);
+    header::Node *node = std::get<0>(result);
+    if (node) {
+      return node->bucket_size;
+    }
   }
   return 0;
+} // ::sp_sizeof()
+
+void *sp_realloc(void *ptr, std::size_t length) noexcept {
+  if (length == 0) {
+    sp_free(ptr);
+    return nullptr;
+  }
+  // TODO
+  return nullptr;
 }
