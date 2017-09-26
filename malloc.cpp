@@ -7,6 +7,7 @@
 
 #include "ReadWriteLock.h"
 #include "bitset/Bitset.h"
+#include "malloc_debug.h"
 
 #include <array>
 #include <atomic>
@@ -57,8 +58,7 @@ static void *alloc(std::size_t sz) noexcept {
  * desc   -
  */
 static header::Node *next_node(header::Node *const start) noexcept {
-  auto header = header::node(start);
-  return header->next.load();
+  return start->next.load();
 } // local::next_node()
 
 /*
@@ -355,6 +355,53 @@ static bool free(Pools &pools, void *const ptr) noexcept {
 
 /*
  *===========================================================
+ *=======DEBUG===============================================
+ *===========================================================
+ */
+#ifdef SP_TEST
+namespace debug {
+std::size_t malloc_count_alloc() {
+  std::size_t result(0);
+  for (std::size_t it = 8; it > 0; it <<= 1) {
+    result += malloc_count_alloc(it);
+  }
+  return result;
+}
+
+static std::size_t count_reserved(header::Extent &ext) {
+  std::size_t result(0);
+  auto &bitset = ext.reserved;
+  std::size_t idx(0);
+  for (; idx < bitset.size(); ++idx) {
+    if (bitset.test(idx)) {
+      result++;
+    }
+  }
+
+  return result;
+}
+
+std::size_t malloc_count_alloc(std::size_t sz) {
+  std::size_t result(0);
+  local::Pool &pool = local::pool_for(internal_pools, sz);
+  sp::SharedLock guard(pool.lock);
+  if (guard) {
+    auto current = pool.start.load();
+  start:
+    if (current) {
+      auto nodeHdr = header::node(current);
+      auto extentHdr = header::extent(nodeHdr);
+      result += count_reserved(*extentHdr);
+      current = local::next_extent(nodeHdr);
+      goto start;
+    }
+  }
+  return result;
+}
+}
+#endif
+/*
+ *===========================================================
  *=======PUBLIC==============================================
  *===========================================================
  */
@@ -420,12 +467,11 @@ bool sp_free(void *const ptr) noexcept {
   // but we need a way to arbitrary find the node header from a bucketIdx
   if (!local::free(internal_pools, ptr)) {
     // not the same free:ing as malloc:ing thread
-    assert(false);
     if (!global::free(ptr)) {
       // unknown address
       assert(false);
+      return false;
     }
-    return false;
   }
   return true;
 } // ::sp_free()

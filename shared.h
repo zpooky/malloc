@@ -64,6 +64,7 @@ enum class NodeType { //
 };
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
+  // TODO padding of bytes to avoid +1 errors sizeof Node should still be 64
   const NodeType type;
   // next node
   std::atomic<Node *> next;
@@ -80,6 +81,7 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   // } intermediate;
   // };
   // TODO const std::size_t offset; for where the first bucket start
+  // TODO padding of bytes to avoid -1 errors sizeof Node should still be 64
 
   Node(std::size_t node_size, std::size_t bucket_size,
        std::size_t buckets) noexcept;

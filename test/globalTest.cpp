@@ -1,6 +1,7 @@
 #include "Barrier.h"
 #include "gtest/gtest.h"
 #include <global.h>
+#include <global_debug.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <thread>
@@ -8,7 +9,7 @@
 
 /*Gtest*/
 static size_t free_entries(global::State &state) {
-  auto free = test::watch_free(&state);
+  auto free = debug::watch_free(&state);
   return free.size();
 }
 
@@ -68,7 +69,7 @@ start:
   }
   ASSERT_EQ(offset, range.length);
   // printf("\n");
-  // test::print_free();
+  // debug::print_free();
   // printf("dummy_dealloc_setup: %zu\n", i);
 }
 
@@ -118,12 +119,12 @@ static void assert_dummy_dealloc_no_abs_size(const std::vector<Ts> &free,
 }
 
 static void assert_dummy_dealloc_no_abs_size(global::State &s, Range &r) {
-  auto free = test::watch_free(&s);
+  auto free = debug::watch_free(&s);
   assert_dummy_dealloc_no_abs_size(free, r);
 }
 
 static void assert_dummy_dealloc(global::State &state, Range &range) {
-  auto free = test::watch_free(&state);
+  auto free = debug::watch_free(&state);
 
   ASSERT_EQ(range.length, size_of_free(free));
   ASSERT_EQ(size_t(1), free.size()); // free pages should be coalesced
@@ -370,10 +371,10 @@ static void threaded_dealloc_test(global::State &state, size_t sz,
 
   Points result;
   threaded<thCnt>(state, sz, SIZE, range, {f}, result);
-  // test::print_free(&state);
+  // debug::print_free(&state);
   assert_dummy_dealloc_no_abs_size(state, range);
 
-  auto frees = test::watch_free(&state);
+  auto frees = debug::watch_free(&state);
   assert_consecutive_range(frees, range);
 
   free(startR);
@@ -410,7 +411,7 @@ static void *worker_dealloc_alloc(void *argument) {
   //   printf("arg->b1->await();\n");
   //
   //   assert_dummy_dealloc_no_abs_size(state, arg->range);
-  //   auto frees = test::watch_free(&state);
+  //   auto frees = debug::watch_free(&state);
   //   assert_no_overlap(frees);
   //   assert_consecutive_range(frees, arg->range);
   //
@@ -465,7 +466,7 @@ static void threaded_dealloc_alloc_test(global::State &state, size_t sz,
 
   assert_consecutive_range(result, range);
 
-  ASSERT_EQ(size_t(0), test::count_free(&state));
+  ASSERT_EQ(size_t(0), debug::count_free(&state));
 
   free(startR);
 }
@@ -556,7 +557,7 @@ static void threaded_dealloc_threaded_alloc_test(global::State &state,
 
   assert_consecutive_range(result, range);
 
-  ASSERT_EQ(size_t(0), test::count_free(&state));
+  ASSERT_EQ(size_t(0), debug::count_free(&state));
 
   free(startR);
 }

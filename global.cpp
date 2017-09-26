@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <mutex>
 #include <tuple>
+#include "global_debug.h"
 
 #include <unistd.h> //sbrk
 
@@ -260,8 +261,13 @@ void return_free(global::State &s, void *const ptr, size_t length) noexcept {
 
 } // namespace
 
+/*
+ *===========================================================
+ *=======DEBUG===============================================
+ *===========================================================
+ */
 #ifdef SP_TEST
-namespace test { //
+namespace debug { //
 static void debug_print_free(header::Free *const head) {
   if (head) {
     void *t = reinterpret_cast<void *>(head);

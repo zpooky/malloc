@@ -1,4 +1,5 @@
 #include "global.h"
+#include "global_debug.h"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -85,7 +86,7 @@ int main() {
     std::vector<std::tuple<void *, std::size_t>> ptrs;
     std::size_t alloc(0);
 
-    printf("free: %zu\n", test::count_free(nullptr));
+    printf("free: %zu\n", debug::count_free(nullptr));
 
     time("alloc", [&]() {
       int i = 0;
@@ -104,8 +105,8 @@ int main() {
       check_overlap(ptrs);
     });
 
-    printf("free: %zu\n", test::count_free(nullptr));
-    // assert(test::watch_free().size() == 0);
+    printf("free: %zu\n", debug::count_free(nullptr));
+    // assert(debug::watch_free().size() == 0);
 
     time("dealloc", [&]() {
       for (auto &l : ptrs) {
@@ -115,7 +116,7 @@ int main() {
         global::dealloc(ptr, len);
       }
     });
-    printf("free: %zu\n", test::count_free(nullptr));
+    printf("free: %zu\n", debug::count_free(nullptr));
 
     time("alloc2", [&]() {
       int i = 0;
@@ -126,7 +127,7 @@ int main() {
         global::dealloc(ptr, sz);
       }
     });
-    printf("free: %zu\n", test::count_free(nullptr));
+    printf("free: %zu\n", debug::count_free(nullptr));
     printf("done\n");
   }
 }
