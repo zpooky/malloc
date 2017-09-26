@@ -38,12 +38,12 @@ static thread_local local::Pools internal_pools;
 
 namespace local {
 
-static std::size_t index_of(std::size_t size) noexcept {
-  return (size / 8) - 1;
-} // local::index_of()
+static std::size_t pool_index(std::size_t size) noexcept {
+  return util::trailing_zeros(size >> 3);
+} // local::pool_index()
 
 static local::Pool &pool_for(local::Pools &pools, std::size_t sz) noexcept {
-  std::size_t index = index_of(sz);
+  std::size_t index = pool_index(sz);
   return pools[index];
 } // local::pool_for()
 
@@ -192,7 +192,7 @@ static std::size_t calc_min_node(std::size_t bucketSz) noexcept {
           /*8192:*/ min_alloc * 5,
           //
       };
-  return lookup[util::trailing_zeros(bucketSz >> 3)];
+  return lookup[pool_index(bucketSz)];
 }
 
 /*
@@ -246,12 +246,19 @@ node_for(Pool &pool, void *const ptr) noexcept {
   return std::make_tuple(nullptr, std::size_t(0));
 } // local::node_for()
 
-static int bucket_index(header::Node *node, void *ptr) noexcept {
+static int index_of(header::Node *node, void *ptr) noexcept {
+  // TODO
   return 0;
 }
 
-static std::size_t bucket_indecies(header::Node *node) noexcept {
-  return 0;
+static std::size_t indecies_in(header::Node *node) noexcept {
+  std::size_t result = node->node_size;
+  if (node->type == header::NodeType::HEAD) {
+    result += header::SIZE;
+  } else {
+    result += sizeof(header::Node);
+  }
+  return std::size_t(result / node->bucket_size);
 }
 
 static std::tuple<header::Node *, std::size_t>
@@ -268,14 +275,14 @@ extent_for(Pool &pool, void *const ptr) noexcept {
         index = 0;
       }
 
-      int nodeIdx = bucket_index(current, ptr);
+      int nodeIdx = index_of(current, ptr);
       if (nodeIdx != -1) {
         assert(extent != nullptr);
         index += nodeIdx;
 
         return std::make_tuple(extent, index);
       }
-      index += bucket_indecies(current);
+      index += indecies_in(current);
 
       current = current->next.load(std::memory_order_acquire);
       goto start;
@@ -398,7 +405,7 @@ std::size_t malloc_count_alloc(std::size_t sz) {
   }
   return result;
 }
-}
+} // namespace debug
 #endif
 /*
  *===========================================================

@@ -95,6 +95,12 @@ static std::size_t roundAlloc(std::size_t sz) {
   return 0;
 }
 
+static void range_resize(void *ptr, std::size_t sz) {
+  // for(rangeStart<rangeEnd){
+  // ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
+  // }
+}
+
 TEST(MallocTest, test_range) {
   const size_t I = 16 * 1024;
 
@@ -111,7 +117,7 @@ TEST(MallocTest, test_range) {
     std::size_t roundSz = roundAlloc(allocSz);
     allocs.emplace_back(ptr, roundSz);
 
-    // ASSERT_EQ(roundSz, sp_sizeof(ptr));
+    ASSERT_EQ(roundSz, sp_sizeof(ptr));
     // ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
   }
   // TODO assert I allocs of allocSz

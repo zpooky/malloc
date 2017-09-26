@@ -230,6 +230,7 @@ Pools::~Pools() noexcept {
 }
 
 Pool &Pools::operator[](std::size_t idx) noexcept {
+  assert(idx < BUCKETS);
   return pools->buckets[idx];
 }
 // }}}
