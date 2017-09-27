@@ -27,10 +27,15 @@
 
 // # version 2.0
 // - from a pointer get the node header and in the node header get a pointer to
-// the extent header to support random access free()
+// the extent header to support random access free(). maybe have a tag in the
+// node header like Thread id to make global::free easier.
+
 // - use memmap instead of sbrk to more freely allow for reclamation of
 // larged unused ranges of global free-list memory. Without being blocked by a
 // single high sbrk reservation.
+
+// # TODO
+// 1. looks should be held as long as a refrence is held to a node
 
 // {{{
 static thread_local local::Pools internal_pools;
@@ -41,6 +46,27 @@ namespace local {
 static std::size_t pool_index(std::size_t size) noexcept {
   return util::trailing_zeros(size >> 3);
 } // local::pool_index()
+
+static std::size_t node_data_size(header::Node *node) noexcept {
+  std::size_t result = node->node_size;
+  if (node->type == header::NodeType::HEAD) {
+    assert(result >= header::SIZE);
+    result -= header::SIZE;
+  } else {
+    assert(result >= sizeof(header::Node));
+    result -= sizeof(header::Node);
+  }
+  return result;
+}
+
+static uintptr_t node_data_start(header::Node *node) noexcept {
+  uintptr_t result = reinterpret_cast<uintptr_t>(node);
+  result += sizeof(header::Node);
+  if (node->type == header::NodeType::HEAD) {
+    result += sizeof(header::Extent);
+  }
+  return result;
+}
 
 static local::Pool &pool_for(local::Pools &pools, std::size_t sz) noexcept {
   std::size_t index = pool_index(sz);
@@ -217,7 +243,7 @@ static void extend_extent(void *const start) noexcept {
   // TODO
 } // local::extend_extent()
 
-static bool in_node_range(const header::Node *const node,
+static bool node_in_range(const header::Node *const node,
                           void *const ptr) noexcept {
   assert(node != nullptr);
   assert(ptr != nullptr);
@@ -229,40 +255,55 @@ static bool in_node_range(const header::Node *const node,
   return compare >= start && compare < end;
 } // local::in_node_range()
 
-static std::tuple<header::Node *, std::size_t>
-node_for(Pool &pool, void *const ptr) noexcept {
+template <typename T>
+static util::maybe<T> node_for(Pool &pool, void *const search,
+                               T (*f)(header::Node *, void *)) noexcept {
   sp::SharedLock guard(pool.lock);
   if (guard) {
     header::Node *current = pool.start.load(std::memory_order_acquire);
   start:
     if (current) {
-      if (in_node_range(current, ptr)) {
-        return std::make_tuple(current, 0);
+      if (node_in_range(current, search)) {
+        return util::maybe<T>(f(current, search));
       }
       current = current->next.load(std::memory_order_acquire);
       goto start;
     }
   }
-  return std::make_tuple(nullptr, std::size_t(0));
+  return {};
 } // local::node_for()
 
-static int index_of(header::Node *node, void *ptr) noexcept {
-  // TODO
-  return 0;
+static int node_index_of(header::Node *node, void *ptr) noexcept {
+  const std::size_t data_size = node_data_size(node);
+  const uintptr_t data_start = node_data_start(node);
+  const uintptr_t data_end = data_start + data_size;
+  const uintptr_t search = reinterpret_cast<uintptr_t>(ptr);
+
+  if (search < data_end) {
+    uintptr_t it = data_start;
+    std::size_t index = 0;
+
+    // TODO make better
+    while (it < data_end) {
+      if (it == search) {
+        return index;
+      }
+      ++index;
+      it += node->bucket_size;
+    }
+  }
+  return -1;
 }
 
-static std::size_t indecies_in(header::Node *node) noexcept {
-  std::size_t result = node->node_size;
-  if (node->type == header::NodeType::HEAD) {
-    result += header::SIZE;
-  } else {
-    result += sizeof(header::Node);
-  }
+static std::size_t node_indecies_in(header::Node *node) noexcept {
+  std::size_t result = node_data_size(node);
   return std::size_t(result / node->bucket_size);
 }
 
-static std::tuple<header::Node *, std::size_t>
-extent_for(Pool &pool, void *const ptr) noexcept {
+template <typename T>
+static util::maybe<T> extent_for(Pool &pool, void *const search,
+                                 T (*f)(header::Node *, std::size_t,
+                                        void *)) noexcept {
   sp::SharedLock guard(pool.lock);
   if (guard) {
     header::Node *current = pool.start.load(std::memory_order_acquire);
@@ -275,46 +316,45 @@ extent_for(Pool &pool, void *const ptr) noexcept {
         index = 0;
       }
 
-      int nodeIdx = index_of(current, ptr);
+      int nodeIdx = node_index_of(current, search);
       if (nodeIdx != -1) {
         assert(extent != nullptr);
         index += nodeIdx;
 
-        return std::make_tuple(extent, index);
+        return util::maybe<T>(f(extent, index, search));
       }
-      index += indecies_in(current);
+      index += node_indecies_in(current);
 
       current = current->next.load(std::memory_order_acquire);
       goto start;
     }
   }
 
-  return std::make_tuple(nullptr, std::size_t(0));
+  return {};
 } // local::extent_for()
 
 template <typename T>
-static std::tuple<T *, std::size_t>
-pools_find(Pools &pools, void *const ptr,
-           std::tuple<T *, std::size_t> (*f)(Pool &, void *)) noexcept {
-  const std::uintptr_t raw = reinterpret_cast<std::uintptr_t>(ptr);
-  const std::size_t tz = util::trailing_zeros(raw);
+static util::maybe<T> pools_find(Pools &pools, void *const search,
+                                 util::maybe<T> (*f)(Pool &, void *)) noexcept {
+  std::uintptr_t rawSearch = reinterpret_cast<std::uintptr_t>(search);
+  std::size_t trail0 = util::trailing_zeros(rawSearch);
 
-  const std::size_t offset = 1 << tz;
+  const std::size_t offset = 1 << trail0;
   if (offset < 8) {
     // should be a runtime fault, the minimum alignment is 8
     assert(false);
-    return std::make_tuple(nullptr, std::size_t(0));
+    return {};
   }
-  // TODO std::size_t max = offset >= sizeof(header::Node) ? Pools::BUCKETS : tz
-  // + 1;
+  // TODO
+  // std::size_t max = offset >= sizeof(header::Node) ? Pools::BUCKETS : tz + 1;
   const std::size_t max = Pools::BUCKETS;
   for (std::size_t i(0); i < max; ++i) {
-    auto result = f(pools[i], ptr);
-    if (std::get<0>(result)) {
+    auto result = f(pools[i], search);
+    if (result) {
       return result;
     }
   }
-  return std::make_tuple(nullptr, std::size_t(0));
+  return {};
 } // local::pools_find()
 
 static header::Node *enqueue_new_extent(std::atomic<header::Node *> &w,
@@ -348,14 +388,19 @@ static bool perform_free(header::Extent *ext, std::size_t idx) noexcept {
  * desc     - Used by free
  */
 static bool free(Pools &pools, void *const ptr) noexcept {
-  auto result = pools_find(pools, ptr, extent_for);
-  header::Node *headNode = std::get<0>(result);
-  if (headNode) {
-    header::Extent *ext = header::extent(headNode);
-    std::size_t idx = std::get<1>(result);
-    return perform_free(ext, idx);
-  }
-  return false;
+  auto res = pools_find<bool>(
+      pools, ptr, //
+      [](local::Pool &pool, void *search) -> util::maybe<bool> {
+        return extent_for<bool>(
+            pool, search, //
+            [](header::Node *head, std::size_t idx, void *const) -> bool {
+              header::Extent *ext = header::extent(head);
+              return perform_free(ext, idx);
+            });
+      });
+
+  bool def = false;
+  return res.get_or(def);
 } // local::free()
 
 } // namespace local
@@ -463,15 +508,6 @@ bool sp_free(void *const ptr) noexcept {
     return true;
   }
 
-  // TODO a initial std::thread_atomic_fence_acquire(); required
-  // the allocating thread is required to atomic_release it before the free
-  // thread can see it and there fore only the first initial acquire fence.
-  // Because any acquire fence since it can be another thread that performs the
-  // free than the one allocating it
-  // -----
-  // maybe have a tag in the node header like Thread id to make global::free
-  // easier.
-  // but we need a way to arbitrary find the node header from a bucketIdx
   if (!local::free(internal_pools, ptr)) {
     // not the same free:ing as malloc:ing thread
     if (!global::free(ptr)) {
@@ -484,35 +520,45 @@ bool sp_free(void *const ptr) noexcept {
 } // ::sp_free()
 
 std::size_t sp_sizeof(void *const ptr) noexcept {
+  // TODO support global sizeof
   if (ptr) {
     auto &pools = internal_pools;
-    auto result = local::pools_find(pools, ptr, local::node_for);
-    header::Node *node = std::get<0>(result);
-    if (node) {
-      return node->bucket_size;
+    auto res = local::pools_find<std::size_t>(
+        pools, ptr,                                                       //
+        [](local::Pool &pool, void *search) -> util::maybe<std::size_t> { //
+          return local::node_for<std::size_t>(
+              pool, search, //
+              [](header::Node *current, void *const) -> std::size_t {
+                //
+                return current->bucket_size;
+              });
+        });
+    if (res) {
+      return res.get();
     }
   }
   return 0;
 } // ::sp_sizeof()
 
 void *sp_realloc(void *ptr, std::size_t length) noexcept {
-  if (length == 0) {
-    sp_free(ptr);
-    return nullptr;
-  }
-  auto result = pools_find(internal_pools, ptr, local::extent_for);
-  header::Node *headNode = std::get<0>(result);
-  if (headNode) {
-    header::Extent *ext = header::extent(headNode);
-    if (headNode->bucket_size < length) {
-      void *nptr = sp_malloc(length);
-      if (nptr) {
-        memcpy(nptr, ptr, headNode->bucket_size);
-        local::perform_free(ext, std::get<1>(result));
-      }
-      return nptr;
-    }
-    return ptr;
-  }
-  return nullptr;
+  // // TODO support global realloc
+  // if (length == 0) {
+  //   sp_free(ptr);
+  //   return nullptr;
+  // }
+  // auto result = pools_find(internal_pools, ptr, local::extent_for);
+  // header::Node *headNode = std::get<0>(result);
+  // if (headNode) {
+  //   header::Extent *ext = header::extent(headNode);
+  //   if (headNode->bucket_size < length) {
+  //     void *nptr = sp_malloc(length);
+  //     if (nptr) {
+  //       memcpy(nptr, ptr, headNode->bucket_size);
+  //       local::perform_free(ext, std::get<1>(result));
+  //     }
+  //     return nptr;
+  //   }
+  //   return ptr;
+  // }
+  // return nullptr;
 }

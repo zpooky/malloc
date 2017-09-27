@@ -1,12 +1,14 @@
 #ifndef SP_MALLOC_TEST_UTIL_H
 #define SP_MALLOC_TEST_UTIL_H
 
-#include <tuple>
-#include <vector>
+#include "gtest/gtest.h"
+#include <cassert>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cassert>
-#include "gtest/gtest.h"
+#include <iostream>
+#include <tuple>
+#include <vector>
 
 using Point = std::tuple<void *, std::size_t>;
 using Points = std::vector<Point>;
@@ -130,6 +132,17 @@ static inline void assert_no_overlap(const Points &ptrs) {
     }
     current++;
   }
+}
+
+template <typename Function>
+static inline void time(const char *msg, Function f) {
+  auto t1 = std::chrono::high_resolution_clock::now();
+  f();
+  auto t2 = std::chrono::high_resolution_clock::now();
+  std::cout
+      << msg << ":"
+      << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
+      << "ms" << std::endl;
 }
 
 #endif
