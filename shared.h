@@ -202,6 +202,9 @@ struct Pool { //
 struct PoolsRAII { //
   static constexpr std::size_t BUCKETS = 60;
   std::array<Pool, BUCKETS> buckets;
+  //{
+  std::atomic<PoolsRAII *> global;
+  //}
 
   PoolsRAII() noexcept;
 }; // struct PoolsRAII

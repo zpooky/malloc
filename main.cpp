@@ -85,56 +85,57 @@ pmath(T *v, ptrdiff_t diff) {
 
 int
 main() {
-  srand(0);
-
-  while (true) {
-    printf("==============================\n");
-
-    std::vector<std::tuple<void *, std::size_t>> ptrs;
-    std::size_t alloc(0);
-
-    printf("free: %zu\n", debug::count_free(nullptr));
-
-    time("alloc", [&]() {
-      int i = 0;
-      while (i++ < 10000) {
-        std::size_t sz(((rand() % 100) + 1) * 4096);
-        // std::size_t sz(i * 4096);
-        // printf("%zu\n", sz);
-        void *ptr = global::alloc(sz);
-        assert(ptr);
-        alloc += sz;
-        ptrs.emplace_back(ptr, sz);
-      }
-    });
-    printf("total: %zu\n", alloc);
-    time("check_overlap", [&]() { //
-      check_overlap(ptrs);
-    });
-
-    printf("free: %zu\n", debug::count_free(nullptr));
-    // assert(debug::watch_free().size() == 0);
-
-    time("dealloc", [&]() {
-      for (auto &l : ptrs) {
-        //   printf("alloc: %zu\n", std::get<1>(l));
-        void *const ptr = std::get<0>(l);
-        std::size_t len = std::get<1>(l);
-        global::dealloc(ptr, len);
-      }
-    });
-    printf("free: %zu\n", debug::count_free(nullptr));
-
-    time("alloc2", [&]() {
-      int i = 0;
-      while (i++ < 10000) {
-        std::size_t sz(((rand() % 100) + 1) * 4096);
-        // std::size_t sz(i * 4096);
-        void *const ptr = global::alloc(sz);
-        global::dealloc(ptr, sz);
-      }
-    });
-    printf("free: %zu\n", debug::count_free(nullptr));
-    printf("done\n");
-  }
+  // srand(0);
+  //
+  // while (true) {
+  //   printf("==============================\n");
+  //
+  //   std::vector<std::tuple<void *, std::size_t>> ptrs;
+  //   std::size_t alloc(0);
+  //
+  //   printf("free: %zu\n", debug::count_free(nullptr));
+  //
+  //   time("alloc", [&]() {
+  //     int i = 0;
+  //     while (i++ < 10000) {
+  //       std::size_t sz(((rand() % 100) + 1) * 4096);
+  //       // std::size_t sz(i * 4096);
+  //       // printf("%zu\n", sz);
+  //       void *ptr = global::alloc(sz);
+  //       assert(ptr);
+  //       alloc += sz;
+  //       ptrs.emplace_back(ptr, sz);
+  //     }
+  //   });
+  //   printf("total: %zu\n", alloc);
+  //   time("check_overlap", [&]() { //
+  //     check_overlap(ptrs);
+  //   });
+  //
+  //   printf("free: %zu\n", debug::count_free(nullptr));
+  //   // assert(debug::watch_free().size() == 0);
+  //
+  //   time("dealloc", [&]() {
+  //     for (auto &l : ptrs) {
+  //       //   printf("alloc: %zu\n", std::get<1>(l));
+  //       void *const ptr = std::get<0>(l);
+  //       std::size_t len = std::get<1>(l);
+  //       global::dealloc(ptr, len);
+  //     }
+  //   });
+  //   printf("free: %zu\n", debug::count_free(nullptr));
+  //
+  //   time("alloc2", [&]() {
+  //     int i = 0;
+  //     while (i++ < 10000) {
+  //       std::size_t sz(((rand() % 100) + 1) * 4096);
+  //       // std::size_t sz(i * 4096);
+  //       void *const ptr = global::alloc(sz);
+  //       global::dealloc(ptr, sz);
+  //     }
+  //   });
+  //   printf("free: %zu\n", debug::count_free(nullptr));
+  //   printf("done\n");
+  // }
+  return 0;
 }

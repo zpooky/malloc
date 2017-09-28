@@ -1,5 +1,6 @@
 #include "global.h"
 #include "shared.h"
+#include "stuff.h"
 #include <cassert>
 #include <string.h>
 
@@ -231,7 +232,8 @@ Pool::Pool() noexcept //
 
 // class PoolsRAII {{{
 PoolsRAII::PoolsRAII() noexcept //
-    : buckets{} {
+    : buckets{}
+    , global{nullptr} {
   std::atomic_thread_fence(std::memory_order_release);
 }
 // }}}
@@ -240,13 +242,13 @@ PoolsRAII::PoolsRAII() noexcept //
 Pools::Pools() noexcept //
     : pools{nullptr}
     , reclaimed{false} {
-  pools = global::alloc_pool();
+  pools = stuff::alloc_pool();
   printf("ctor Pools TL\n");
 }
 
 Pools::~Pools() noexcept {
   if (pools) {
-    global::release_pool(pools);
+    stuff::release_pool(pools);
     pools = nullptr;
   }
   printf("dtor Pools TL\n");

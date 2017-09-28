@@ -15,6 +15,7 @@
 #include "global.h"
 #include "malloc.h"
 #include "shared.h"
+#include "stuff.h"
 
 // http://preshing.com/20131125/acquire-and-release-fences-dont-work-the-way-youd-expect/
 
@@ -26,6 +27,8 @@
 // - use memmap instead of sbrk to more freely allow for reclamation of
 // large unused ranges of global free-list memory. Without being blocked by a
 // single high sbrk reservation.
+
+// sp::RefCounter Pools in global
 
 // # TODO
 // 1. local::free_list
@@ -592,7 +595,7 @@ sp_free(void *const ptr) noexcept {
 
   if (!local::free(internal_pools, ptr)) {
     // not the same free:ing as malloc:ing thread
-    if (!global::free(ptr)) {
+    if (!stuff::free(ptr)) {
       // unknown address
       assert(false);
       return false;

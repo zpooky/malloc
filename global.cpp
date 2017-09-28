@@ -474,28 +474,4 @@ dealloc(void *const start, std::size_t length) noexcept {
   return internal::dealloc(internal_state, start, length);
 }
 
-bool
-free(void *) noexcept {
-  // TODO
-  return false;
-} // free()
-
-local::PoolsRAII *
-alloc_pool() noexcept {
-  using PoolType = local::PoolsRAII;
-  static_assert(sizeof(PoolType) <= SP_MALLOC_PAGE_SIZE, "");
-  void *result = alloc(SP_MALLOC_PAGE_SIZE);
-
-  if (result == nullptr) {
-    assert(false);
-    return nullptr;
-  }
-  return new (result) PoolType;
-} // alloc_pool()
-
-void
-release_pool(local::PoolsRAII *) noexcept {
-  // TODO pool is of size SP_MALLOC_PAGE_SIZE
-} // release_pool()
-
 } // namespace global
