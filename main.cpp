@@ -9,8 +9,11 @@
 #include <tuple>
 #include <vector>
 
+#define SP_TEST
+
 template <typename Function>
-static void time(const char *msg, Function f) {
+static void
+time(const char *msg, Function f) {
   auto t1 = std::chrono::high_resolution_clock::now();
   f();
   auto t2 = std::chrono::high_resolution_clock::now();
@@ -21,7 +24,8 @@ static void time(const char *msg, Function f) {
 }
 
 template <typename T>
-static bool in_range(T &b, T &e) {
+static bool
+in_range(T &b, T &e) {
   uintptr_t strtB = reinterpret_cast<uintptr_t>(std::get<0>(b));
   std::size_t lenB = std::get<1>(b);
 
@@ -33,7 +37,8 @@ static bool in_range(T &b, T &e) {
 }
 
 template <typename C>
-static void check_overlap(C &ptrs) {
+static void
+check_overlap(C &ptrs) {
   std::sort(ptrs.begin(), ptrs.end());
   auto current = ptrs.begin();
   while (current != ptrs.end()) {
@@ -52,7 +57,8 @@ static void check_overlap(C &ptrs) {
 }
 
 template <typename T>
-T *pmath(T *v, ptrdiff_t diff) {
+T *
+pmath(T *v, ptrdiff_t diff) {
   uintptr_t result = reinterpret_cast<uintptr_t>(v);
   result = result + diff;
   return reinterpret_cast<T *>(result);
@@ -77,7 +83,8 @@ T *pmath(T *v, ptrdiff_t diff) {
 //   assert(first == pmath(range.start, +range.length));
 // }
 
-int main() {
+int
+main() {
   srand(0);
 
   while (true) {

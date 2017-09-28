@@ -1,5 +1,5 @@
-#include "shared.h"
 #include "global.h"
+#include "shared.h"
 #include <cassert>
 #include <string.h>
 
@@ -15,10 +15,13 @@ static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
 Free::Free(std::size_t sz, Free *nxt) noexcept //
-    : next_lock{}, size(sz), next(nxt) {
+    : next_lock{}
+    , size(sz)
+    , next(nxt) {
 }
 
-bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
+bool
+is_consecutive(const Free *const head, const Free *const tail) noexcept {
   assert(head != nullptr);
   assert(tail != nullptr);
   uintptr_t head_base = reinterpret_cast<uintptr_t>(head);
@@ -27,14 +30,16 @@ bool is_consecutive(const Free *const head, const Free *const tail) noexcept {
   return head_end == tail_base;
 } // is_consecutive()
 
-void coalesce(Free *head, Free *tail, Free *const next) noexcept {
+void
+coalesce(Free *head, Free *tail, Free *const next) noexcept {
   assert(is_consecutive(head, tail));
   head->size = head->size + tail->size;
   memset(tail, 0, tail->size); // TODO only debug
   head->next.store(next, std::memory_order_relaxed);
 } // coalesce()
 
-Free *init_free(void *const head, std::size_t length) noexcept {
+Free *
+init_free(void *const head, std::size_t length) noexcept {
   if (head && length > 0) {
     assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
     assert(length >= sizeof(Free));
@@ -47,7 +52,8 @@ Free *init_free(void *const head, std::size_t length) noexcept {
   return nullptr;
 } // init_free()
 
-Free *reduce(Free *free, std::size_t length) noexcept {
+Free *
+reduce(Free *free, std::size_t length) noexcept {
   assert(free->size >= length);
   assert((free->size - length) >= sizeof(Free));
 
@@ -58,7 +64,8 @@ Free *reduce(Free *free, std::size_t length) noexcept {
   return new (result) Free(length, nullptr);
 } // reduce()
 
-Free *free(void *const start) noexcept {
+Free *
+free(void *const start) noexcept {
   assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % alignof(Free) == 0);
@@ -73,15 +80,16 @@ Extent::Extent() noexcept //
     : reserved(false) {
 }
 
-static std::size_t calc_buckets(std::size_t extentSz,
-                                std::size_t bucketSz) noexcept {
+static std::size_t
+calc_buckets(std::size_t extentSz, std::size_t bucketSz) noexcept {
   assert(bucketSz > 0);
   assert(extentSz > header::SIZE);
 
   return (extentSz - header::SIZE) / bucketSz;
 }
 
-Extent *extent(Node *const start) noexcept {
+Extent *
+extent(Node *const start) noexcept {
   assert(start != nullptr);
   assert(start->type == NodeType::HEAD);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
@@ -97,15 +105,18 @@ static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
 Node::Node(std::size_t nodeSz, std::size_t bucketSz,
            std::size_t p_buckets) noexcept //
-    : type(NodeType::HEAD), next{nullptr}, bucket_size(bucketSz),
-      node_size(nodeSz), buckets(p_buckets) {
+    : type(NodeType::HEAD)
+    , next{nullptr}
+    , bucket_size(bucketSz)
+    , node_size(nodeSz)
+    , buckets(p_buckets) {
   assert(this->bucket_size > 0);
   assert(this->node_size > 0);
   assert(this->buckets > 0);
 } // Node()
 
-Node *init_node(void *const raw, std::size_t size,
-                std::size_t bucketSz) noexcept {
+Node *
+init_node(void *const raw, std::size_t size, std::size_t bucketSz) noexcept {
   assert(raw != nullptr);
   assert(size >= header::SIZE);
   const std::size_t buckets = calc_buckets(size, bucketSz);
@@ -125,7 +136,8 @@ Node *init_node(void *const raw, std::size_t size,
   return nHdr;
 } // init_node()
 
-Node *node(void *const start) noexcept {
+Node *
+node(void *const start) noexcept {
   assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % alignof(Node) == 0);
@@ -140,7 +152,8 @@ Node *node(void *const start) noexcept {
  */
 namespace util {
 
-void *align_pointer(void *const start, std::uint32_t alignment) noexcept {
+void *
+align_pointer(void *const start, std::uint32_t alignment) noexcept {
   assert(start != nullptr);
   assert(alignment >= 8);
   assert(alignment % 8 == 0);
@@ -150,7 +163,8 @@ void *align_pointer(void *const start, std::uint32_t alignment) noexcept {
   return reinterpret_cast<void *>(ptr);
 } // align_pointer()
 
-std::size_t round_even(std::size_t v) noexcept {
+std::size_t
+round_even(std::size_t v) noexcept {
   if (v <= 8) {
     return 8;
   }
@@ -167,13 +181,15 @@ std::size_t round_even(std::size_t v) noexcept {
   return v;
 } // round_even()
 
-void *ptr_math(void *const ptr, std::int64_t add) noexcept {
+void *
+ptr_math(void *const ptr, std::int64_t add) noexcept {
   assert(ptr != nullptr);
   uintptr_t start = reinterpret_cast<uintptr_t>(ptr);
   return reinterpret_cast<void *>(start + add);
 } // ptr_math()
 
-ptrdiff_t ptr_diff(void *const first, void *const second) noexcept {
+ptrdiff_t
+ptr_diff(void *const first, void *const second) noexcept {
   assert(first != nullptr);
   assert(first != nullptr);
   uintptr_t firstPtr = reinterpret_cast<uintptr_t>(first);
@@ -181,15 +197,18 @@ ptrdiff_t ptr_diff(void *const first, void *const second) noexcept {
   return firstPtr - secondPtr;
 } // ptr_diff()
 
-std::size_t trailing_zeros(std::size_t n) noexcept {
+std::size_t
+trailing_zeros(std::size_t n) noexcept {
   return __builtin_ctz(n);
 } // util::trailing_zeroes()
 
-std::size_t leading_zeros(std::size_t n) noexcept {
+std::size_t
+leading_zeros(std::size_t n) noexcept {
   return __builtin_clz(n);
 } // util:leading_zeroes()
 
-std::size_t round_up(std::size_t data, std::size_t evenMultiple) noexcept {
+std::size_t
+round_up(std::size_t data, std::size_t evenMultiple) noexcept {
   const std::size_t remaining = data % evenMultiple;
   const std::size_t add = remaining > 0 ? evenMultiple - remaining : 0;
   return data + add;
@@ -205,7 +224,8 @@ std::size_t round_up(std::size_t data, std::size_t evenMultiple) noexcept {
 namespace local {
 // class Pool {{{
 Pool::Pool() noexcept //
-    : start{nullptr}, lock{} {
+    : start{nullptr}
+    , lock{} {
 }
 // }}}
 
@@ -218,8 +238,10 @@ PoolsRAII::PoolsRAII() noexcept //
 
 // class Pools {{{
 Pools::Pools() noexcept //
-    : pools{nullptr}, reclaimed{false} {
+    : pools{nullptr}
+    , reclaimed{false} {
   pools = global::alloc_pool();
+  printf("ctor Pools TL\n");
 }
 
 Pools::~Pools() noexcept {
@@ -227,6 +249,7 @@ Pools::~Pools() noexcept {
     global::release_pool(pools);
     pools = nullptr;
   }
+  printf("dtor Pools TL\n");
 }
 
 Pool &Pools::operator[](std::size_t idx) noexcept {

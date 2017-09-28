@@ -14,7 +14,8 @@ using Point = std::tuple<void *, std::size_t>;
 using Points = std::vector<Point>;
 
 template <typename T>
-static inline T *pmath(T *v, ptrdiff_t diff) {
+static inline T *
+pmath(T *v, ptrdiff_t diff) {
   uintptr_t result = reinterpret_cast<uintptr_t>(v);
   result = result + diff;
   return reinterpret_cast<T *>(result);
@@ -24,7 +25,8 @@ struct Range {
   uint8_t *start;
   size_t length;
   Range(uint8_t *ps, size_t pl) //
-      : start(ps), length(pl) {
+      : start(ps)
+      , length(pl) {
   }
   Range() //
       : Range(nullptr, 0) {
@@ -36,13 +38,15 @@ struct Range {
     return start[idx];
   }
 
-  uint8_t *raw_offset(size_t off) {
+  uint8_t *
+  raw_offset(size_t off) {
     assert(off < length);
     return pmath(start, +off);
   }
 };
 
-static inline Range sub_range(Range &r, size_t ridx, size_t rlength) {
+static inline Range
+sub_range(Range &r, size_t ridx, size_t rlength) {
   size_t offset = (ridx * rlength);
   if (!(offset < r.length)) {
     assert(offset < r.length);
@@ -51,7 +55,8 @@ static inline Range sub_range(Range &r, size_t ridx, size_t rlength) {
   return Range(start, rlength);
 }
 
-static inline bool in_range(void *r, size_t rSz, void *e, size_t eLen) {
+static inline bool
+in_range(void *r, size_t rSz, void *e, size_t eLen) {
   uintptr_t in = reinterpret_cast<uintptr_t>(e);
   uintptr_t inEnd = in + eLen;
 
@@ -62,7 +67,8 @@ static inline bool in_range(void *r, size_t rSz, void *e, size_t eLen) {
 }
 
 template <typename T>
-static inline size_t size_of_free(const T &free) {
+static inline size_t
+size_of_free(const T &free) {
   size_t result(0);
   for (const auto &current : free) {
     result += std::get<1>(current);
@@ -71,7 +77,8 @@ static inline size_t size_of_free(const T &free) {
 }
 
 template <typename T>
-static inline bool in_range(T &b, T &e) {
+static inline bool
+in_range(T &b, T &e) {
   uintptr_t strtB = reinterpret_cast<uintptr_t>(std::get<0>(b));
   std::size_t lenB = std::get<1>(b);
 
@@ -82,7 +89,8 @@ static inline bool in_range(T &b, T &e) {
          (strtE >= strtB && strtE < (strtB + lenB));
 }
 
-static inline void assert_in_range(Range &range, void *current, size_t bSz) {
+static inline void
+assert_in_range(Range &range, void *current, size_t bSz) {
   if (!in_range(range.start, range.length, current, bSz)) {
     printf("in_range(%p, %zu, %p, "
            "%zu)|range(%zu-%zu[l:%zu])|cur(%zu-%zu[l:%zu])\n",      //
@@ -114,7 +122,8 @@ static inline void assert_in_range(Range &range, void *current, size_t bSz) {
   }
 }
 
-static inline void assert_no_overlap(const Points &ptrs) {
+static inline void
+assert_no_overlap(const Points &ptrs) {
   // printf("assert_no_overlap(points:%zu)\n", ptrs.size());
   auto current = ptrs.begin();
   while (current != ptrs.end()) {
@@ -135,7 +144,8 @@ static inline void assert_no_overlap(const Points &ptrs) {
 }
 
 template <typename Function>
-static inline void time(const char *msg, Function f) {
+static inline void
+time(const char *msg, Function f) {
   auto t1 = std::chrono::high_resolution_clock::now();
   f();
   auto t2 = std::chrono::high_resolution_clock::now();

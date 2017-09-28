@@ -4,12 +4,6 @@
 #include "shared.h"
 #include <mutex>
 
-#define SP_TEST
-#ifdef SP_TEST
-#include <tuple>
-#include <vector>
-#endif
-
 /*
  *===========================================================
  *========GLOBAL=============================================
@@ -29,9 +23,13 @@ struct State {
   header::Free free;
   // }}}
 
-  State() noexcept                                       //
-      : brk_lock{}, brk_position{nullptr}, brk_alloc{0}, //
-        free{0, nullptr} {
+  State() noexcept //
+      : brk_lock{}
+      , brk_position{nullptr}
+      , brk_alloc{0}
+      , //
+      free{0, nullptr} {
+    // TODO move to src
     std::atomic_thread_fence(std::memory_order_release);
   }
 };

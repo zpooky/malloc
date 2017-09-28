@@ -3,6 +3,7 @@
 #include "gtest/gtest.h"
 #include <malloc.h>
 #include <malloc_debug.h>
+#include <pthread.h>
 #include <tuple>
 #include <vector>
 
@@ -16,9 +17,11 @@ public:
   MallocRangeSizeTest() {
   }
 
-  virtual void SetUp() {
+  virtual void
+  SetUp() {
   }
-  virtual void TearDown() {
+  virtual void
+  TearDown() {
   }
 };
 
@@ -55,18 +58,37 @@ public:
   MallocTestAllocSizePFixture() {
   }
 
-  virtual void SetUp() {
+  virtual void
+  SetUp() {
   }
-  virtual void TearDown() {
+  virtual void
+  TearDown() {
   }
 };
 
-INSTANTIATE_TEST_CASE_P(Default, MallocTestAllocSizePFixture,
+INSTANTIATE_TEST_CASE_P(DefaultInstance, MallocTestAllocSizePFixture,
                         ::testing::Values(8, 16, 32, 64, 128, 256, 512, 1024,
                                           2048, 4096, 8192));
 
+// INSTANTIATE_TEST_CASE_P(AnotherInstance, MallocTestAllocSizePFixture,
+//                         ::testing::Range(std::size_t(1), std::size_t(1026)));
+
+/*util*/
+static std::size_t
+roundAlloc(std::size_t sz) {
+  for (std::size_t i(8); i < ~std::size_t(0); i <<= 1) {
+    if (sz <= i) {
+      // printf("sz(%zu)%zu\n", sz, i);
+      return i;
+    }
+  }
+  assert(false);
+  return 0;
+}
+
 /*Test*/
-static void malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
+static void
+malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
   Points allocs;
   allocs.reserve(iterations);
 
@@ -77,9 +99,9 @@ static void malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
     for (size_t i = 1; i < iterations; ++i) {
       void *const ptr = sp_malloc(allocSz);
       ASSERT_FALSE(ptr == nullptr);
-      allocs.emplace_back(ptr, allocSz);
+      allocs.emplace_back(ptr, roundAlloc(allocSz));
 
-      ASSERT_EQ(allocSz, sp_sizeof(ptr));
+      ASSERT_EQ(roundAlloc(allocSz), sp_sizeof(ptr));
       ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
     }
   });
@@ -99,29 +121,38 @@ static void malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
 
   // ASSERT_EQ(0, debug::malloc_count_alloc());
 }
+using ThreadArg = std::tuple<std::size_t, std::size_t>;
+
+static void *
+worker_malloc_test_uniform(void *argument) {
+  auto arg = (ThreadArg *)argument;
+  std::size_t it = std::get<0>(*arg);
+  std::size_t allocSz = std::get<1>(*arg);
+  malloc_test_uniform(it, allocSz);
+  return nullptr;
+}
 
 const size_t NUMBER_OF_IT = /*16 * */ 1025;
 
 TEST_P(MallocTestAllocSizePFixture, test_uniform) {
+  // create a thread and wait
   const size_t allocSz = GetParam();
   malloc_test_uniform(NUMBER_OF_IT, allocSz);
-}
 
-static std::size_t roundAlloc(std::size_t sz) {
-  for (std::size_t i(8); i < ~std::size_t(0); i <<= 1) {
-    if (sz <= i) {
-      // printf("sz(%zu)%zu\n", sz, i);
-      return i;
-    }
-  }
-  assert(false);
-  return 0;
+  ThreadArg arg(NUMBER_OF_IT, allocSz);
+  pthread_t tid = 0;
+  int ret = pthread_create(&tid, nullptr, worker_malloc_test_uniform, &arg);
+  ASSERT_EQ(0, ret);
+  ASSERT_FALSE(tid == 0);
+
+  ret = pthread_join(tid, nullptr);
+  ASSERT_EQ(0, ret);
 }
 
 // static void range_realloc_same_size(void *ptr, std::size_t sz) {
-  // for(rangeStart<rangeEnd){
-  // ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
-  // }
+// for(rangeStart<rangeEnd){
+// ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
+// }
 // }
 
 TEST(MallocTest, test_range) {

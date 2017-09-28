@@ -4,8 +4,9 @@
 #include <cassert>
 #include <cstdio>
 #include <mutex>
-#include <tuple>
+#ifdef SP_TEST
 #include "global_debug.h"
+#endif
 
 #include <unistd.h> //sbrk
 
@@ -13,13 +14,15 @@ namespace {
 
 static global::State internal_state;
 
-static void free_dequeue(header::Free *head, header::Free *target) noexcept {
+static void
+free_dequeue(header::Free *head, header::Free *target) noexcept {
   assert(head != target);
   head->next.store(target->next.load());
   target->next.store(nullptr);
 } // ::free_dequeue()
 
-static void free_enqueue(header::Free *head, header::Free *target) noexcept {
+static void
+free_enqueue(header::Free *head, header::Free *target) noexcept {
   assert(head != nullptr);
   assert(target != nullptr);
   assert(head != target);
@@ -33,7 +36,8 @@ static void free_enqueue(header::Free *head, header::Free *target) noexcept {
   }
 } // ::free_enqueue()
 
-header::Free *find_free(global::State &state, size_t size) noexcept {
+header::Free *
+find_free(global::State &state, size_t size) noexcept {
 start:
   if (true) {
     header::Free *head = &state.free;
@@ -76,12 +80,14 @@ start:
 
                   if (size == current->size ||
                       (size + sizeof(header::Free)) > current->size) {
-                    // printf("free_dequeue(head, current)size:%zu,cur-sz:%zu\n",
+                    // printf("free_dequeue(head,
+                    // current)size:%zu,cur-sz:%zu\n",
                     //        size, current->size);
                     free_dequeue(head, current);
                     return current;
                   } else {
-                    // printf("header::reduce(current, size)size:%zu,cur-sz:%zu\n",
+                    // printf("header::reduce(current,
+                    // size)size:%zu,cur-sz:%zu\n",
                     //        size, current->size);
                     return header::reduce(current, size);
                   }
@@ -120,7 +126,8 @@ start:
   return nullptr;
 } // ::find_free()
 
-header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
+header::Free *
+alloc_free(global::State &state, const size_t atLeast) noexcept {
   {
     std::lock_guard<std::mutex> guard(state.brk_lock);
     // TODO some algorithm to determine optimal alloc size
@@ -143,7 +150,8 @@ header::Free *alloc_free(global::State &state, const size_t atLeast) noexcept {
   return nullptr;
 } // ::alloc_free()
 
-void return_free(global::State &state, header::Free *const toReturn) noexcept {
+void
+return_free(global::State &state, header::Free *const toReturn) noexcept {
 // [Head]->[Current]->[Next]
 start:
   if (true) {
@@ -251,7 +259,8 @@ start:
   }
 } // ::return_free()
 
-void return_free(global::State &s, void *const ptr, size_t length) noexcept {
+void
+return_free(global::State &s, void *const ptr, size_t length) noexcept {
   header::Free *const toReturn = header::init_free(ptr, length);
   if (toReturn) {
     assert(ptr == toReturn);
@@ -268,7 +277,8 @@ void return_free(global::State &s, void *const ptr, size_t length) noexcept {
  */
 #ifdef SP_TEST
 namespace debug { //
-static void debug_print_free(header::Free *const head) {
+static void
+debug_print_free(header::Free *const head) {
   if (head) {
     void *t = reinterpret_cast<void *>(head);
     printf("[%p,%zu]", t, head->size);
@@ -278,7 +288,8 @@ static void debug_print_free(header::Free *const head) {
   }
 } // test::debug_print_free()
 
-std::vector<std::tuple<void *, std::size_t>> watch_free(global::State *state) {
+std::vector<std::tuple<void *, std::size_t>>
+watch_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
@@ -295,14 +306,16 @@ start:
   return result;
 } // test::watch_free()
 
-void clear_free(global::State *state) {
+void
+clear_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
   state->free.next.store(nullptr);
 } // test::clear_free()
 
-void print_free(global::State *state) {
+void
+print_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
@@ -313,7 +326,8 @@ void print_free(global::State *state) {
   }
 } // test::print_free()
 
-std::size_t count_free(global::State *state) {
+std::size_t
+count_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
@@ -328,13 +342,15 @@ start:
   return result;
 } // test::count_free()
 
-static void swap(header::Free *p, header::Free *c, header::Free *n) {
+static void
+swap(header::Free *p, header::Free *c, header::Free *n) {
   p->next.store(n);
   c->next.store(n->next);
   n->next.store(c);
 } // swap()
 
-void sort_free(global::State *state) {
+void
+sort_free(global::State *state) {
   // TODO
   if (state == nullptr) {
     state = &internal_state;
@@ -366,7 +382,8 @@ start:
   }
 } // test::sort_free()
 
-void coalesce_free(global::State *state) {
+void
+coalesce_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }
@@ -398,11 +415,13 @@ start:
 namespace global {
 namespace internal {
 
-header::Free *find_freex(State &state, std::size_t length) noexcept {
+header::Free *
+find_freex(State &state, std::size_t length) noexcept {
   return find_free(state, length);
 }
 
-void *alloc(State &state, std::size_t p_length) noexcept {
+void *
+alloc(State &state, std::size_t p_length) noexcept {
   if (p_length == 0) {
     return nullptr;
   }
@@ -436,7 +455,8 @@ void *alloc(State &state, std::size_t p_length) noexcept {
   return nullptr;
 }
 
-void dealloc(State &state, void *const start, std::size_t length) noexcept {
+void
+dealloc(State &state, void *const start, std::size_t length) noexcept {
   return return_free(state, start, length);
 }
 
@@ -444,20 +464,24 @@ void dealloc(State &state, void *const start, std::size_t length) noexcept {
 
 // TODO change so it should be number of pages instead of a specific
 // length+alignment
-void *alloc(std::size_t p_length) noexcept {
+void *
+alloc(std::size_t p_length) noexcept {
   return internal::alloc(internal_state, p_length);
 } // alloc()
 
-void dealloc(void *const start, std::size_t length) noexcept {
+void
+dealloc(void *const start, std::size_t length) noexcept {
   return internal::dealloc(internal_state, start, length);
 }
 
-bool free(void *) noexcept {
+bool
+free(void *) noexcept {
   // TODO
   return false;
 } // free()
 
-local::PoolsRAII *alloc_pool() noexcept {
+local::PoolsRAII *
+alloc_pool() noexcept {
   using PoolType = local::PoolsRAII;
   static_assert(sizeof(PoolType) <= SP_MALLOC_PAGE_SIZE, "");
   void *result = alloc(SP_MALLOC_PAGE_SIZE);
@@ -469,7 +493,8 @@ local::PoolsRAII *alloc_pool() noexcept {
   return new (result) PoolType;
 } // alloc_pool()
 
-void release_pool(local::PoolsRAII *) noexcept {
+void
+release_pool(local::PoolsRAII *) noexcept {
   // TODO pool is of size SP_MALLOC_PAGE_SIZE
 } // release_pool()
 

@@ -1,6 +1,9 @@
 #ifndef SP_MALLOC_GLOBAL_DEBUG_H
 #define SP_MALLOC_GLOBAL_DEBUG_H
 
+#include <tuple>
+#include <vector>
+
 namespace debug {
 // these functions can not be used during load
 std::vector<std::tuple<void *, std::size_t>> watch_free(global::State *);

@@ -117,11 +117,13 @@ private:
 
 public:
   maybe() noexcept //
-      : data{}, present{false} {
+      : data{}
+      , present{false} {
   }
   template <typename I>
-  explicit maybe(I &&d) // noexcept(if construct)
-      : data{}, present(true) {
+  explicit maybe(I &&d)
+      : data{}
+      , present(true) {
     new (&data) T{std::forward<I>(d)};
   }
   // TODO inplace construction
@@ -138,27 +140,34 @@ public:
     return present;
   }
 
-  const T &get() const &noexcept {
+  const T &
+  get() const &noexcept {
     T *ptr = reinterpret_cast<T *>(&data);
     return *ptr;
   }
-  T &get() & noexcept {
+  T &
+      get() &
+      noexcept {
     T *ptr = reinterpret_cast<T *>(&data);
     return *ptr;
   }
-  T &&get() && noexcept {
+  T &&
+      get() &&
+      noexcept {
     T *ptr = reinterpret_cast<T *>(&data);
     return std::move(*ptr);
   }
 
-  const T &get_or(T &def) const noexcept {
+  const T &
+  get_or(T &def) const noexcept {
     if (present) {
       return get();
     }
     return def;
   }
 
-  T &get_or(T &def) noexcept {
+  T &
+  get_or(T &def) noexcept {
     if (present) {
       return get();
     }

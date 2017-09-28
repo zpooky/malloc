@@ -1,14 +1,15 @@
 #include "Barrier.h"
+#include "Util.h"
 #include "gtest/gtest.h"
 #include <global.h>
 #include <global_debug.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <thread>
-#include "Util.h"
 
 /*Gtest*/
-static size_t free_entries(global::State &state) {
+static size_t
+free_entries(global::State &state) {
   auto free = debug::watch_free(&state);
   return free.size();
 }
@@ -17,12 +18,15 @@ static size_t free_entries(global::State &state) {
 class GlobalTest : public testing::TestWithParam<size_t> {
 public:
   global::State state;
-  GlobalTest() : state() {
+  GlobalTest()
+      : state() {
   }
 
-  virtual void SetUp() {
+  virtual void
+  SetUp() {
   }
-  virtual void TearDown() {
+  virtual void
+  TearDown() {
   }
 };
 
@@ -50,8 +54,8 @@ INSTANTIATE_TEST_CASE_P(Default, GlobalTest,
 
 /*Util*/
 
-static void dummy_dealloc_setup(global::State &state, Range &range,
-                                size_t bSz) {
+static void
+dummy_dealloc_setup(global::State &state, Range &range, size_t bSz) {
   // printf("dummy_dealloc_setup\n");
   size_t i = 0;
 // printf("valid: ");
@@ -73,7 +77,8 @@ start:
   // printf("dummy_dealloc_setup: %zu\n", i);
 }
 
-static void dealloc_rand_setup(global::State &state, Range &range, size_t bSz) {
+static void
+dealloc_rand_setup(global::State &state, Range &range, size_t bSz) {
   std::vector<void *> points;
   size_t i = 0;
 start:
@@ -95,8 +100,8 @@ start:
 }
 
 template <typename Ts>
-static void assert_dummy_dealloc_no_abs_size(const std::vector<Ts> &free,
-                                             Range &range) {
+static void
+assert_dummy_dealloc_no_abs_size(const std::vector<Ts> &free, Range &range) {
   // printf("assert_dummy_dealloc_no_abs_size\n");
   // 3.
   for (auto &current : free) {
@@ -118,12 +123,14 @@ static void assert_dummy_dealloc_no_abs_size(const std::vector<Ts> &free,
   assert_no_overlap(free);
 }
 
-static void assert_dummy_dealloc_no_abs_size(global::State &s, Range &r) {
+static void
+assert_dummy_dealloc_no_abs_size(global::State &s, Range &r) {
   auto free = debug::watch_free(&s);
   assert_dummy_dealloc_no_abs_size(free, r);
 }
 
-static void assert_dummy_dealloc(global::State &state, Range &range) {
+static void
+assert_dummy_dealloc(global::State &state, Range &range) {
   auto free = debug::watch_free(&state);
 
   ASSERT_EQ(range.length, size_of_free(free));
@@ -132,8 +139,9 @@ static void assert_dummy_dealloc(global::State &state, Range &range) {
   assert_dummy_dealloc_no_abs_size(free, range);
 }
 
-static void assert_dummy_alloc(global::State &state, size_t size, Range &range,
-                               size_t bSz, Points &result) {
+static void
+assert_dummy_alloc(global::State &state, size_t size, Range &range, size_t bSz,
+                   Points &result) {
 
   // printf("assert_dummy_dealloc\n");
   for (size_t i = 0; i < size; i += bSz) {
@@ -277,8 +285,9 @@ struct ThreadAllocArg {
 };
 
 template <size_t thCnt>
-static void join(std::vector<pthread_t> &ts, ThreadAllocArg (&args)[thCnt],
-                 Points &result) {
+static void
+join(std::vector<pthread_t> &ts, ThreadAllocArg (&args)[thCnt],
+     Points &result) {
   for (size_t i(0); i < thCnt; ++i) {
     int res = pthread_join(ts[i], NULL);
     ASSERT_EQ(0, res);
@@ -291,9 +300,9 @@ static void join(std::vector<pthread_t> &ts, ThreadAllocArg (&args)[thCnt],
 }
 
 template <size_t thCnt>
-static void threaded(global::State &state, size_t sz, size_t SIZE,
-                     const Range &range,
-                     const std::vector<void *(*)(void *)> &fs, Points &result) {
+static void
+threaded(global::State &state, size_t sz, size_t SIZE, const Range &range,
+         const std::vector<void *(*)(void *)> &fs, Points &result) {
 
   std::vector<pthread_t> ts;
   ThreadAllocArg args[thCnt];
@@ -331,7 +340,8 @@ static void threaded(global::State &state, size_t sz, size_t SIZE,
 //=======threaded=dealloc===================
 //==========================================
 
-static void *worker_random_dealloc(void *argument) {
+static void *
+worker_random_dealloc(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
@@ -342,7 +352,8 @@ static void *worker_random_dealloc(void *argument) {
   return nullptr;
 }
 
-static void *worker_dealloc(void *argument) {
+static void *
+worker_dealloc(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
@@ -357,8 +368,8 @@ static void *worker_dealloc(void *argument) {
   return nullptr;
 }
 
-static void threaded_dealloc_test(global::State &state, size_t sz,
-                                  void *(*f)(void *)) {
+static void
+threaded_dealloc_test(global::State &state, size_t sz, void *(*f)(void *)) {
   const size_t thCnt = 4;
   const size_t SIZE = 1024 * 64 * 8;
   const size_t RANGE_SIZE = SIZE * thCnt;
@@ -392,7 +403,8 @@ TEST_P(GlobalTest, threaded_dealloc) {
 //==========================================
 //=======threaded=dealloc=alloc=============
 //==========================================
-static void *worker_dealloc_alloc(void *argument) {
+static void *
+worker_dealloc_alloc(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   Range subRange = sub_range(arg->range, arg->i, arg->thread_range_size);
@@ -428,7 +440,8 @@ static void *worker_dealloc_alloc(void *argument) {
   return nullptr;
 }
 
-static void *worker_random_dealloc_alloc(void *argument) {
+static void *
+worker_random_dealloc_alloc(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   Range sub = sub_range(arg->range, arg->i, arg->thread_range_size);
@@ -449,8 +462,9 @@ static void *worker_random_dealloc_alloc(void *argument) {
   return nullptr;
 }
 
-static void threaded_dealloc_alloc_test(global::State &state, size_t sz,
-                                        void *(*f)(void *)) {
+static void
+threaded_dealloc_alloc_test(global::State &state, size_t sz,
+                            void *(*f)(void *)) {
   const size_t thCnt = 4;
   const size_t SIZE = 1024 * 64 * 8;
   const size_t RANGE_SIZE = SIZE * thCnt;
@@ -481,7 +495,8 @@ TEST_P(GlobalTest, threaded_random_dealloc_alloc) { // spx
   threaded_dealloc_alloc_test(state, sz, worker_random_dealloc_alloc);
 }
 //================================
-static void *worker_alloc(void *argument) {
+static void *
+worker_alloc(void *argument) {
   auto arg = reinterpret_cast<ThreadAllocArg *>(argument);
 
   arg->b->await();
@@ -496,10 +511,10 @@ static void *worker_alloc(void *argument) {
   return 0;
 }
 
-static void threaded_dealloc_threaded_alloc_test(global::State &state,
-                                                 size_t sz, //
-                                                 void *(*wa)(void *),
-                                                 void *(*wd)(void *)) {
+static void
+threaded_dealloc_threaded_alloc_test(global::State &state,
+                                     size_t sz, //
+                                     void *(*wa)(void *), void *(*wd)(void *)) {
   const size_t thPerType = 4;
   const size_t thAlloc = thPerType;
   const size_t thDealloc = thPerType;
@@ -545,7 +560,7 @@ static void threaded_dealloc_threaded_alloc_test(global::State &state,
       current_worker = wd;
     }
 
-    int res = pthread_create(&tid, NULL, current_worker, &arg);
+    int res = pthread_create(&tid, nullptr, current_worker, &arg);
     ASSERT_EQ(0, res);
     ASSERT_FALSE(tid == 0);
 
@@ -572,7 +587,8 @@ TEST_P(GlobalTest, threaded_random_dealloc_threaded_alloc_test) {
   threaded_dealloc_threaded_alloc_test(state, sz, worker_alloc,
                                        worker_random_dealloc);
 }
-// make -C test && sp_repeat ./test/thetest.exe --gtest_filter="*threaded_dealloc*"
+// make -C test && sp_repeat ./test/thetest.exe
+// --gtest_filter="*threaded_dealloc*"
 
 // TODO shuffle inc size dealloc
 // TODO increment size dealloc

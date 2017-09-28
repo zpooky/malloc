@@ -47,3 +47,4 @@ thetest
 perf.data
 perf.data.old
 .gdb_breakpoints
+Session.vim
