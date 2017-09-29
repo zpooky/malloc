@@ -2,9 +2,10 @@
 #define SP_MALLOC_SHARED_H
 
 #include "ReadWriteLock.h"
+#include "util.h"
 #include <atomic>
 #include <bitset/Bitset.h>
-#include <type_traits>
+#include <cassert>
 
 #define SP_MALLOC_PAGE_SIZE std::size_t(4 * 1024)
 #define SP_MALLOC_CACHE_LINE_SIZE 64
@@ -93,88 +94,11 @@ Node *node(void *const start) noexcept;
 
 static constexpr std::size_t SIZE(sizeof(header::Node) +
                                   sizeof(header::Extent));
+
+std::size_t node_data_size(Node *) noexcept;
+uintptr_t node_data_start(Node *) noexcept;
+
 } // namespace header
-
-/*
- *===========================================================
- *========UTIL===============================================
- *===========================================================
- */
-namespace util {
-void *align_pointer(void *const start, std::uint32_t alignment) noexcept;
-std::size_t round_even(std::size_t v) noexcept;
-void *ptr_math(void *const ptr, std::int64_t add) noexcept;
-ptrdiff_t ptr_diff(void *const first, void *const second) noexcept;
-std::size_t trailing_zeros(std::size_t) noexcept;
-std::size_t leading_zeros(std::size_t) noexcept;
-std::size_t round_up(std::size_t data, std::size_t eventMultiple) noexcept;
-
-template <typename T>
-class maybe {
-private:
-  typename std::aligned_storage<sizeof(T), alignof(T)>::type data;
-  bool present;
-
-public:
-  maybe() noexcept //
-      : data{}
-      , present{false} {
-  }
-  template <typename I>
-  explicit maybe(I &&d)
-      : data{}
-      , present(true) {
-    new (&data) T{std::forward<I>(d)};
-  }
-  // TODO inplace construction
-
-  ~maybe() noexcept {
-    if (present) {
-      present = false;
-      T *ptr = reinterpret_cast<T *>(&data);
-      ptr->~T();
-    }
-  }
-
-  operator bool() const noexcept {
-    return present;
-  }
-
-  const T &
-  get() const &noexcept {
-    T *ptr = reinterpret_cast<T *>(&data);
-    return *ptr;
-  }
-  T &
-      get() &
-      noexcept {
-    T *ptr = reinterpret_cast<T *>(&data);
-    return *ptr;
-  }
-  T &&
-      get() &&
-      noexcept {
-    T *ptr = reinterpret_cast<T *>(&data);
-    return std::move(*ptr);
-  }
-
-  const T &
-  get_or(T &def) const noexcept {
-    if (present) {
-      return get();
-    }
-    return def;
-  }
-
-  T &
-  get_or(T &def) noexcept {
-    if (present) {
-      return get();
-    }
-    return def;
-  }
-};
-} // namespace util
 
 /*
  *===========================================================
@@ -202,19 +126,22 @@ struct Pool { //
 struct PoolsRAII { //
   static constexpr std::size_t BUCKETS = 60;
   std::array<Pool, BUCKETS> buckets;
+  std::atomic<std::size_t> total_alloc;
+
   //{
   std::atomic<PoolsRAII *> global;
+  std::atomic<bool> reclaim;
   //}
 
   PoolsRAII() noexcept;
+
+  Pool &operator[](std::size_t) noexcept;
 }; // struct PoolsRAII
 
 /*Pools*/
 class Pools { //
-private:
+public:
   PoolsRAII *pools;
-  // no thread holds this instance but all memeory is not reclaimed
-  std::atomic<bool> reclaimed;
 
 public:
   static constexpr std::size_t BUCKETS = PoolsRAII::BUCKETS;
@@ -231,6 +158,40 @@ public:
   Pool &operator[](std::size_t) noexcept;
 }; // struct Pool
 
+template <typename Res, typename Arg>
+using PFind = util::maybe<Res> (*)(Pool &, void *, Arg &);
+
+template <typename Res, typename Arg>
+util::maybe<Res>
+pools_find(PoolsRAII &pools, void *const search, PFind<Res, Arg> f,
+           Arg &arg) noexcept {
+  std::uintptr_t rawSearch = reinterpret_cast<std::uintptr_t>(search);
+  std::size_t trail0 = util::trailing_zeros(rawSearch);
+
+  const std::size_t offset = 1 << trail0;
+  if (offset < 8) {
+    // should be a runtime fault, the minimum alignment is 8
+    assert(false);
+    return {};
+  }
+  // TODO
+  // std::size_t max = offset >= sizeof(header::Node) ? Pools::BUCKETS : tz + 1;
+  const std::size_t max = Pools::BUCKETS;
+  for (std::size_t i(0); i < max; ++i) {
+    auto result = f(pools[i], search, arg);
+    if (result) {
+      return result;
+    }
+  }
+
+  return {};
+} // local::pools_find()
+
+template <typename Res, typename Arg>
+util::maybe<Res>
+pools_find(Pools &pools, void *search, PFind<Res, Arg> f, Arg &arg) noexcept {
+  return pools_find<Res, Arg>(*pools.pools, search, f, arg);
+}
 } // namespace local
 
 #endif

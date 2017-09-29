@@ -12,6 +12,7 @@
 #include <array>
 #include <atomic>
 
+#include "free.h"
 #include "global.h"
 #include "malloc.h"
 #include "shared.h"
@@ -65,8 +66,18 @@
 //  * how to better coalesce global::free_list pages
 //  * first fit
 
+// TODO optimizations
+// - Some kind of TL cache with a reference to the most referenced Pools used
+// for non-TL free:ing.
+// - A range of the highest & lowest memory address used to determine if it is
+// necessary to walk through the Nodes
+//    - on PoolsRAII level
+//    - on Pool level
+// - a optimized collections of Pool:s used for free:ing in addition to the
+// Pool[60] used for allocating
+
 // {{{
-static thread_local local::Pools internal_pools;
+static thread_local local::Pools local_pools;
 // }}}
 
 namespace local {
@@ -75,29 +86,6 @@ static std::size_t
 pool_index(std::size_t size) noexcept {
   return util::trailing_zeros(size >> 3);
 } // local::pool_index()
-
-static std::size_t
-node_data_size(header::Node *node) noexcept {
-  std::size_t result = node->node_size;
-  if (node->type == header::NodeType::HEAD) {
-    assert(result >= header::SIZE);
-    result -= header::SIZE;
-  } else {
-    assert(result >= sizeof(header::Node));
-    result -= sizeof(header::Node);
-  }
-  return result;
-}
-
-static uintptr_t
-node_data_start(header::Node *node) noexcept {
-  uintptr_t result = reinterpret_cast<uintptr_t>(node);
-  result += sizeof(header::Node);
-  if (node->type == header::NodeType::HEAD) {
-    result += sizeof(header::Extent);
-  }
-  return result;
-}
 
 static local::Pool &
 pool_for(local::Pools &pools, std::size_t sz) noexcept {
@@ -308,101 +296,6 @@ node_for(Pool &pool, void *const search, NodeFor<Res, Arg> f,
   return {};
 } // local::node_for()
 
-static int
-node_index_of(header::Node *node, void *ptr) noexcept {
-  const std::size_t data_size = node_data_size(node);
-  const uintptr_t data_start = node_data_start(node);
-  const uintptr_t data_end = data_start + data_size;
-  const uintptr_t search = reinterpret_cast<uintptr_t>(ptr);
-
-  if (search >= data_start && search < data_end) {
-    uintptr_t it = data_start;
-    std::size_t index = 0;
-
-    // TODO make better
-    while (it < data_end) {
-      if (it == search) {
-        return index;
-      }
-      ++index;
-      it += node->bucket_size;
-    }
-    assert(false);
-  }
-  return -1;
-}
-
-static std::size_t
-node_indecies_in(header::Node *node) noexcept {
-  std::size_t result = node_data_size(node);
-  return std::size_t(result / node->bucket_size);
-}
-
-template <typename Res, typename Arg>
-using ExtFor = Res (*)(header::Node *, std::size_t, Arg &);
-
-template <typename Res, typename Arg>
-static util::maybe<Res>
-extent_for(Pool &pool, void *const search, ExtFor<Res, Arg> f,
-           Arg &arg) noexcept {
-  sp::SharedLock guard(pool.lock);
-  if (guard) {
-    header::Node *current = pool.start.load(std::memory_order_acquire);
-    header::Node *extent = nullptr;
-    std::size_t index{0};
-  start:
-    if (current) {
-      if (current->type == header::NodeType::HEAD) {
-        extent = current;
-        index = 0;
-      }
-
-      int nodeIdx = node_index_of(current, search);
-      if (nodeIdx != -1) {
-        assert(extent != nullptr);
-        index += nodeIdx;
-
-        return util::maybe<Res>(f(extent, index, arg));
-      }
-      index += node_indecies_in(current);
-
-      current = current->next.load(std::memory_order_acquire);
-      goto start;
-    }
-  }
-
-  return {};
-} // local::extent_for()
-
-template <typename Res, typename Arg>
-using PoolsFind = util::maybe<Res> (*)(Pool &, void *, Arg &);
-
-template <typename Res, typename Arg>
-static util::maybe<Res>
-pools_find(Pools &pools, void *const search, PoolsFind<Res, Arg> f,
-           Arg &arg) noexcept {
-  std::uintptr_t rawSearch = reinterpret_cast<std::uintptr_t>(search);
-  std::size_t trail0 = util::trailing_zeros(rawSearch);
-
-  const std::size_t offset = 1 << trail0;
-  if (offset < 8) {
-    // should be a runtime fault, the minimum alignment is 8
-    assert(false);
-    return {};
-  }
-  // TODO
-  // std::size_t max = offset >= sizeof(header::Node) ? Pools::BUCKETS : tz + 1;
-  const std::size_t max = Pools::BUCKETS;
-  for (std::size_t i(0); i < max; ++i) {
-    auto result = f(pools[i], search, arg);
-    if (result) {
-      return result;
-    }
-  }
-
-  return {};
-} // local::pools_find()
-
 static bool
 should_expand_extent(header::Node *) {
   return false;
@@ -434,40 +327,6 @@ static void
 expand_extent(void *const) noexcept {
   // TODO
 } // local::extend_extent()
-
-static bool
-perform_free(header::Extent *ext, std::size_t idx) noexcept {
-  if (!ext->reserved.set(idx, false)) {
-    // double free is a runtime fault
-    assert(false);
-  }
-  // TODO reclaim node?
-  return true;
-}
-
-/*
- * @dealloc - the same pointer as received from malloc
- * desc     - Used by free
- */
-static bool
-free(Pools &pools, void *const ptr) noexcept {
-  auto arg = nullptr;
-  auto res = pools_find<bool, std::nullptr_t>(
-      pools, ptr, //
-      [](local::Pool &p, void *search, std::nullptr_t &a) -> util::maybe<bool> {
-        return extent_for<bool, std::nullptr_t>(
-            p, search, //
-            [](header::Node *head, std::size_t idx, std::nullptr_t &) -> bool {
-              header::Extent *ext = header::extent(head);
-              return perform_free(ext, idx);
-            },
-            a);
-      },
-      arg);
-
-  bool def = false;
-  return res.get_or(def);
-} // local::free()
 
 } // namespace local
 
@@ -504,7 +363,7 @@ count_reserved(header::Extent &ext) {
 std::size_t
 malloc_count_alloc(std::size_t sz) {
   std::size_t result(0);
-  local::Pool &pool = local::pool_for(internal_pools, sz);
+  local::Pool &pool = local::pool_for(local_pools, sz);
   sp::SharedLock guard(pool.lock);
   if (guard) {
     auto current = pool.start.load();
@@ -533,7 +392,7 @@ sp_malloc(std::size_t length) noexcept {
   }
 
   const std::size_t bucketSz = util::round_even(length);
-  local::Pool &pool = pool_for(internal_pools, bucketSz);
+  local::Pool &pool = pool_for(local_pools, bucketSz);
 
   sp::SharedLock guard{pool.lock};
   if (guard) {
@@ -593,9 +452,9 @@ sp_free(void *const ptr) noexcept {
     return true;
   }
 
-  if (!local::free(internal_pools, ptr)) {
+  if (!shared::free(local_pools, ptr)) {
     // not the same free:ing as malloc:ing thread
-    if (!stuff::free(ptr)) {
+    if (!global::free(ptr)) {
       // unknown address
       assert(false);
       return false;
@@ -608,16 +467,17 @@ std::size_t
 sp_sizeof(void *const ptr) noexcept {
   // TODO support global sizeof
   if (ptr) {
-    std::nullptr_t arg = nullptr;
-    auto &pools = internal_pools;
+    using Arg = std::nullptr_t;
+    Arg arg = nullptr;
+    auto &pools = local_pools;
 
-    auto res = local::pools_find<std::size_t, std::nullptr_t>(
+    auto res = local::pools_find<std::size_t, Arg>(
         pools, ptr, //
         [](local::Pool &pool, void *search,
-           std::nullptr_t &a) -> util::maybe<std::size_t> { //
-          return local::node_for<std::size_t, std::nullptr_t>(
+           Arg &a) -> util::maybe<std::size_t> { //
+          return local::node_for<std::size_t, Arg>(
               pool, search, //
-              [](header::Node *current, std::nullptr_t &) -> std::size_t {
+              [](header::Node *current, Arg &) -> std::size_t {
                 //
                 return current->bucket_size;
               },
@@ -643,9 +503,9 @@ sp_realloc(void *ptr, std::size_t length) noexcept {
   Arg arg(ptr, length);
 
   auto result = local::pools_find<void *, Arg>(
-      internal_pools, ptr, //
+      local_pools, ptr, //
       [](local::Pool &pool, void *search, Arg &arg) {
-        return local::extent_for<void *, Arg>(
+        return shared::extent_for<void *, Arg>(
             pool, search, //
             [](header::Node *head, std::size_t idx, Arg &arg) {
 
@@ -660,7 +520,7 @@ sp_realloc(void *ptr, std::size_t length) noexcept {
 
                   memcpy(nptr, ptr, head->bucket_size);
                   // TODO move to somewhere else
-                  local::perform_free(ext, idx);
+                  shared::perform_free(ext, idx);
                 }
 
                 return nptr;

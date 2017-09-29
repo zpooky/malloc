@@ -3,7 +3,7 @@
 
 #include "shared.h"
 
-namespace stuff {
+namespace global {
 /*none Thread local free*/
 bool free(void *) noexcept;
 

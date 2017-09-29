@@ -1,7 +1,7 @@
 #include <cstdint>
 
-#ifndef SP_MALLOC_H
-#define SP_MALLOC_H
+#ifndef SP_MALLOC_MALLOC_H
+#define SP_MALLOC_MALLOC_H
 
 // Pool[Extent[Node[NodeHeader,ExtentHeader,
 // Buckets...],Node[NodeHeader]...]...]
