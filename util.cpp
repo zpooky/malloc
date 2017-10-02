@@ -55,12 +55,14 @@ ptr_diff(void *const first, void *const second) noexcept {
 
 std::size_t
 trailing_zeros(std::size_t n) noexcept {
-  return __builtin_ctz(n);
+  //TODO have to check for 32 bit mode?
+  return __builtin_ctzl(n);
 } // util::trailing_zeroes()
 
 std::size_t
 leading_zeros(std::size_t n) noexcept {
-  return __builtin_clz(n);
+  //TODO have to check for 32 bit mode?
+  return __builtin_clzl(n);
 } // util:leading_zeroes()
 
 std::size_t

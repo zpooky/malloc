@@ -26,11 +26,16 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
 
   Free(std::size_t sz, Free *nxt) noexcept;
 };
-bool is_consecutive(const Free *const head, const Free *const tail) noexcept;
-void coalesce(Free *head, Free *tail, Free *const next) noexcept;
-Free *init_free(void *const head, std::size_t length) noexcept;
-Free *reduce(Free *free, std::size_t length) noexcept;
-Free *free(void *const start) noexcept;
+bool
+is_consecutive(const Free *const head, const Free *const tail) noexcept;
+void
+coalesce(Free *head, Free *tail, Free *const next) noexcept;
+Free *
+init_free(void *const head, std::size_t length) noexcept;
+Free *
+reduce(Free *free, std::size_t length) noexcept;
+Free *
+free(void *const start) noexcept;
 
 /*Extent*/
 struct Node;
@@ -57,7 +62,12 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
 
   Extent() noexcept;
 };
-Extent *extent(Node *const start) noexcept;
+
+Extent *
+extent(Node *const start) noexcept;
+
+bool
+is_empty(Extent *) noexcept;
 
 /*Node*/
 enum class NodeType { //
@@ -77,6 +87,8 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   // union {
   //   struct {
   // number of buckets available
+
+  // only present in NodeType::HEAD
   std::size_t buckets;
   // } head;
   // struct {
@@ -88,15 +100,18 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   Node(std::size_t node_size, std::size_t bucket_size,
        std::size_t buckets) noexcept;
 };
-Node *init_node(void *const raw, std::size_t size,
-                std::size_t bucketSz) noexcept;
-Node *node(void *const start) noexcept;
+Node *
+init_node(void *const raw, std::size_t size, std::size_t bucketSz) noexcept;
+Node *
+node(void *const start) noexcept;
 
 static constexpr std::size_t SIZE(sizeof(header::Node) +
                                   sizeof(header::Extent));
 
-std::size_t node_data_size(Node *) noexcept;
-uintptr_t node_data_start(Node *) noexcept;
+std::size_t
+node_data_size(Node *) noexcept;
+std::uintptr_t
+node_data_start(Node *) noexcept;
 
 } // namespace header
 
@@ -118,13 +133,15 @@ struct Pool { //
   Pool(const Pool &) = delete;
   Pool(Pool &&) = delete;
 
-  Pool &operator=(const Pool &) = delete;
-  Pool &operator=(Pool &&) = delete;
+  Pool &
+  operator=(const Pool &) = delete;
+  Pool &
+  operator=(Pool &&) = delete;
 }; // struct Pool
 
 /*Pools*/
 struct PoolsRAII { //
-  static constexpr std::size_t BUCKETS = 60;
+  static constexpr std::size_t BUCKETS = (sizeof(std::size_t) * 8) - 3;
   std::array<Pool, BUCKETS> buckets;
   std::atomic<std::size_t> total_alloc;
 
@@ -152,8 +169,10 @@ public:
   Pools(const Pools &) = delete;
   Pools(Pools &&) = delete;
 
-  Pools &operator=(const Pools &) = delete;
-  Pools &operator=(Pools &&) = delete;
+  Pools &
+  operator=(const Pools &) = delete;
+  Pools &
+  operator=(Pools &&) = delete;
 
   Pool &operator[](std::size_t) noexcept;
 }; // struct Pool

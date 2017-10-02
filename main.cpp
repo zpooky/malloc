@@ -9,8 +9,6 @@
 #include <tuple>
 #include <vector>
 
-#define SP_TEST
-
 template <typename Function>
 static void
 time(const char *msg, Function f) {

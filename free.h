@@ -4,8 +4,6 @@
 #include "shared.h"
 
 namespace shared {
-// TODO move to src
-
 int
 node_index_of(header::Node *node, void *ptr) noexcept;
 
@@ -52,9 +50,10 @@ bool
 perform_free(header::Extent *ext, std::size_t idx) noexcept;
 
 bool
-free(local::PoolsRAII &pools, void *const ptr) noexcept ;
+free(local::PoolsRAII &pools, void *const ptr) noexcept;
 
-bool free(local::Pools &pools, void *const ptr) noexcept;
-}
+bool
+free(local::Pools &pools, void *const ptr) noexcept;
+} // namespace shared
 
 #endif

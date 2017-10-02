@@ -4,12 +4,16 @@
 #include "shared.h"
 
 namespace global {
-/*none Thread local free*/
-bool free(void *) noexcept;
+/*non-Thread local free*/
+bool
+free(void *) noexcept;
 
-/*Alloc ThreadLocal headers*/
-local::PoolsRAII *alloc_pool() noexcept;
-void release_pool(local::PoolsRAII *) noexcept;
+local::PoolsRAII *
+alloc_pool() noexcept;
+
+void
+release_pool(local::PoolsRAII *) noexcept;
+
 } // namespace stuff
 
 #endif

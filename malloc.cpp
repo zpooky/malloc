@@ -60,11 +60,18 @@
 // 4. Differentiate global and global_Pool storage
 //  * refactor to two different files
 //
-// 5. global::free_list sbrk (shrinking/reclamation/release/dealloc/free)
+// 5. global::free_list
+//  *  (shrinking/reclamation/release/dealloc) reclaim usuable mem to sbrk
+//  * change interface for global::alloc to N 4096 pages not X bytes
 //
 // 9. global::free_list
 //  * how to better coalesce global::free_list pages
 //  * first fit
+//
+// 10. local::free_list allocation strategy
+//  * allow externally to register a callback to control allocation strategy
+//    * hint of how much memory will be needed generally or specific bucketSz
+//    * hint to over allocate by haveing a % in local free list
 
 // TODO optimizations
 // - Some kind of TL cache with a reference to the most referenced Pools used
@@ -84,12 +91,13 @@ namespace local {
 
 static std::size_t
 pool_index(std::size_t size) noexcept {
-  return util::trailing_zeros(size >> 3);
+  assert(size % 8 == 0);
+  return util::trailing_zeros(size) - std::size_t(3);
 } // local::pool_index()
 
 static local::Pool &
 pool_for(local::Pools &pools, std::size_t sz) noexcept {
-  std::size_t index = pool_index(sz);
+  const std::size_t index = pool_index(sz);
   return pools[index];
 } // local::pool_for()
 
@@ -210,7 +218,8 @@ reserve(header::Node *const node) noexcept {
 
   auto &reservations = eHdr->reserved;
   // printf("reservations.swap_first(true,buckets(%zu))\n", nHdr->buckets);
-  const std::size_t index = reservations.swap_first(true, node->buckets);
+  const std::size_t limit = node->buckets;
+  const std::size_t index = reservations.swap_first(true, limit);
   if (index != reservations.npos) {
     return pointer_at(node, index);
   }
@@ -340,19 +349,18 @@ namespace debug {
 std::size_t
 malloc_count_alloc() {
   std::size_t result(0);
-  for (std::size_t it = 8; it > 0; it <<= 1) {
-    result += malloc_count_alloc(it);
+  for (std::size_t i(8); i > 0; i <<= 1) {
+    result += malloc_count_alloc(i);
   }
   return result;
 }
 
 static std::size_t
-count_reserved(header::Extent &ext) {
+count_reserved(header::Extent &ext, std::size_t buckets) {
   std::size_t result(0);
-  auto &bitset = ext.reserved;
-  std::size_t idx(0);
-  for (; idx < bitset.size(); ++idx) {
-    if (bitset.test(idx)) {
+  auto &b = ext.reserved;
+  for (std::size_t idx(0); idx < buckets; ++idx) {
+    if (b.test(idx)) {
       result++;
     }
   }
@@ -366,13 +374,15 @@ malloc_count_alloc(std::size_t sz) {
   local::Pool &pool = local::pool_for(local_pools, sz);
   sp::SharedLock guard(pool.lock);
   if (guard) {
-    auto current = pool.start.load();
+    header::Node *current = pool.start.load();
   start:
     if (current) {
-      auto nodeHdr = header::node(current);
-      auto extentHdr = header::extent(nodeHdr);
-      result += count_reserved(*extentHdr);
-      current = local::next_extent(nodeHdr);
+      assert(current->type == header::NodeType::HEAD);
+      auto ext = header::extent(current);
+      assert(ext != nullptr);
+      result += count_reserved(*ext, current->buckets);
+
+      current = local::next_extent(current);
       goto start;
     }
   }
@@ -517,11 +527,9 @@ sp_realloc(void *ptr, std::size_t length) noexcept {
 
                 void *nptr = sp_malloc(length); // TODO deadlock!
                 if (nptr) {
-
                   memcpy(nptr, ptr, head->bucket_size);
-                  // TODO move to somewhere else
-                  shared::perform_free(ext, idx);
                 }
+                shared::perform_free(ext, idx);
 
                 return nptr;
               }

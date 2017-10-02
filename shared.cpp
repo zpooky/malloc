@@ -100,6 +100,11 @@ extent(Node *const start) noexcept {
   return reinterpret_cast<Extent *>(headerPtr);
 } // extent()
 
+bool
+is_empty(Extent *const ext) noexcept {
+  return false;
+}
+
 /*Node*/
 static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
@@ -158,7 +163,7 @@ node_data_size(Node *node) noexcept {
   return result;
 }
 
-uintptr_t
+std::uintptr_t
 node_data_start(Node *node) noexcept {
   uintptr_t result = reinterpret_cast<uintptr_t>(node);
   result += sizeof(Node);
