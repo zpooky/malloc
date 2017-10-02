@@ -219,6 +219,8 @@ test_range(std::size_t it) {
   time("free", [&] { //
     for (auto c : allocs) {
       void *ptr = std::get<0>(c);
+      ASSERT_FALSE(ptr == nullptr);
+
       ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
       ASSERT_TRUE(sp_free(ptr));
     }

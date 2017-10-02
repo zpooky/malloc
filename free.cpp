@@ -40,8 +40,8 @@ perform_free(header::Extent *ext, std::size_t idx) noexcept {
     // double free is a runtime fault
     assert(false);
   }
-  // reclaim node?
-  return header::is_empty(ext);
+  // return header::is_empty(ext);
+  return true;
 }
 
 bool
