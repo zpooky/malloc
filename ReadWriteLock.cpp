@@ -13,7 +13,8 @@
 #include <stdio.h>
 #include <string.h>
 template <typename T, std::size_t SIZE>
-static void internal_print_state(T state, char (&hexed)[SIZE]) {
+static void
+internal_print_state(T state, char (&hexed)[SIZE]) {
   char *arr = (char *)&state;
   const std::size_t hex_cap = SIZE - 1;
   memset(hexed, 0, SIZE);
@@ -32,38 +33,46 @@ static void internal_print_state(T state, char (&hexed)[SIZE]) {
 
 namespace {
 
-static uint8_t get_exclusive(std::uint64_t state) noexcept {
+static uint8_t
+get_exclusive(std::uint64_t state) noexcept {
   return uint8_t(state & 0xFF);
 }
 
-bool is_exclusive(std::uint64_t cmp) noexcept {
+bool
+is_exclusive(std::uint64_t cmp) noexcept {
   return get_exclusive(cmp) > 0;
 }
 
-static uint8_t get_prepare(std::uint64_t state) noexcept {
+static uint8_t
+get_prepare(std::uint64_t state) noexcept {
   return uint8_t((state >> 8) & 0xFF);
 }
 
-bool is_prepare(std::uint64_t cmp) noexcept {
+bool
+is_prepare(std::uint64_t cmp) noexcept {
   return get_prepare(cmp) > 0;
 }
 
-uint64_t get_shared(uint64_t shared) noexcept {
+uint64_t
+get_shared(uint64_t shared) noexcept {
   return shared >> (2 * 8);
 }
 
-bool has_shared(std::uint64_t cmp) noexcept {
+bool
+has_shared(std::uint64_t cmp) noexcept {
   return get_shared(cmp) > 0;
 }
 
-uint64_t add_shared(uint64_t shared, int8_t amount) noexcept {
+uint64_t
+add_shared(uint64_t shared, int8_t amount) noexcept {
   shared = get_shared(shared);
   shared = shared + amount;
   shared = shared << (2 * 8);
   return shared;
 }
 } // namespace
-static void print_state(const char *ctx, const uint64_t state) {
+static void
+print_state(const char *ctx, const uint64_t state) {
 #ifdef SP_DEBUG_RW
   char cshared[sizeof(uint64_t) * 4];
   memset(cshared, 0, sizeof(cshared));
@@ -111,14 +120,16 @@ ReadWriteLock::ReadWriteLock() noexcept //
 ReadWriteLock::~ReadWriteLock() noexcept {
 }
 
-void ReadWriteLock::shared_lock() noexcept {
+void
+ReadWriteLock::shared_lock() noexcept {
 retry:
   if (!try_shared_lock()) {
     goto retry;
   }
 }
 
-bool ReadWriteLock::try_shared_lock() noexcept {
+bool
+ReadWriteLock::try_shared_lock() noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
   constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
@@ -144,7 +155,8 @@ retry:
   return false;
 }
 
-void ReadWriteLock::shared_unlock() noexcept {
+void
+ReadWriteLock::shared_unlock() noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
   constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
@@ -169,8 +181,9 @@ retry:
   print_state("\e[41m \e[0mtry_shared_unlock_after", try_unshare);
 }
 
-void ReadWriteLock::eager_exclusive_lock(bool decShared,
-                                         bool unsetPrepare) noexcept {
+void
+ReadWriteLock::eager_exclusive_lock(bool decShared,
+                                    bool unsetPrepare) noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
 retry:
@@ -192,7 +205,7 @@ retry:
   uint64_t try_exclusive = new_shared | uint64_t(0x00) | uint64_t(0x01);
 
   if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
-  print_state("\e[44m \e[0meager_exclusive_lock_retry", cmp);
+    print_state("\e[44m \e[0meager_exclusive_lock_retry", cmp);
     goto retry;
   }
   print_state("\e[44m \e[0meager_exclusive_lock_before", cmp);
@@ -202,7 +215,8 @@ retry:
     ;
 }
 
-void ReadWriteLock::lazy_exclusive_lock() noexcept {
+void
+ReadWriteLock::lazy_exclusive_lock() noexcept {
   const uint64_t shared(0x00);
   const uint64_t prepare(0x00);
   const uint64_t exclusive(0x00);
@@ -216,7 +230,8 @@ retry:
   }
 }
 
-bool ReadWriteLock::try_exclusive_lock(bool preUnset, int8_t shaDec) noexcept {
+bool
+ReadWriteLock::try_exclusive_lock(bool preUnset, int8_t shaDec) noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
   constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
@@ -253,7 +268,8 @@ retry:
   return false;
 }
 
-void ReadWriteLock::exclusive_unlock() noexcept {
+void
+ReadWriteLock::exclusive_unlock() noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
   constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
@@ -270,16 +286,20 @@ retry:
   print_state("\e[44m \e[0meager_exclusive_unlock_before", cmp);
   print_state("\e[44m \e[0meager_exclusive_unlock_after", try_unexclusive);
 }
-// void ReadWriteLock::prepare_lock() noexcept {
-// }
+void
+ReadWriteLock::prepare_lock(int8_t shared_dec) noexcept {
+  while (!try_prepare_lock(shared_dec))
+    ;
+}
 
-bool ReadWriteLock::try_prepare_lock(int8_t shared_dec) noexcept {
+bool
+ReadWriteLock::try_prepare_lock(int8_t shared_dec) noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
 retry:
   if (!is_exclusive(cmp) && !is_prepare(cmp)) {
     const uint64_t shared(cmp & shared_mask);
-    // assert no overflow?
+    // TODO assert no overflow?
     assert((get_shared(shared) - shared_dec) <= get_shared(shared));
     const uint64_t new_shared = add_shared(shared, -shared_dec);
 
@@ -300,7 +320,8 @@ retry:
   }
   return false;
 }
-void ReadWriteLock::prepare_unlock() noexcept {
+void
+ReadWriteLock::prepare_unlock() noexcept {
   uint64_t cmp = m_state.load(std::memory_order_acquire);
   constexpr uint64_t shared_mask = SP_RW_SHARED_MASK;
   constexpr uint64_t prep_mask = SP_RW_PREPARE_MASK;
@@ -323,15 +344,18 @@ retry:
   print_state("try_prepare_unlock_after", try_unprepare);
 }
 
-uint64_t ReadWriteLock::shared_locks() const noexcept {
+uint64_t
+ReadWriteLock::shared_locks() const noexcept {
   return get_shared(m_state.load(std::memory_order_acquire));
 }
 
-bool ReadWriteLock::has_prepare_lock() const noexcept {
+bool
+ReadWriteLock::has_prepare_lock() const noexcept {
   return is_prepare(m_state.load(std::memory_order_acquire));
 }
 
-bool ReadWriteLock::has_exclusive_lock() const noexcept {
+bool
+ReadWriteLock::has_exclusive_lock() const noexcept {
   return is_exclusive(m_state.load(std::memory_order_acquire));
 }
 
@@ -350,8 +374,6 @@ SharedLock::~SharedLock() noexcept {
   if (m_lock) {
     m_lock->shared_unlock();
     m_lock = nullptr;
-  } else {
-    assert(false);
   }
 }
 
@@ -382,10 +404,56 @@ TrySharedLock::operator bool() const noexcept {
   return m_lock != nullptr;
 }
 
-void TrySharedLock::swap(TrySharedLock &o) noexcept {
+void
+TrySharedLock::swap(TrySharedLock &o) noexcept {
   std::swap(m_lock, o.m_lock);
 }
 
+} // namespace sp
+
+/*
+ * PrepareLock
+ */
+namespace sp {
+PrepareLock::PrepareLock(ReadWriteLock &p_lock) noexcept //
+    : m_lock(&p_lock) {
+  p_lock.prepare_lock();
+}
+
+PrepareLock::PrepareLock(TrySharedLock &p_lock) noexcept //
+    : m_lock(p_lock.m_lock) {
+  if (p_lock) {
+    // Decrement shared count and set prepare flag
+    int8_t shared_dec = 1;
+    p_lock.m_lock->prepare_lock(shared_dec);
+    p_lock.m_lock = nullptr;
+  } else {
+    assert(false);
+  }
+}
+
+PrepareLock::PrepareLock(SharedLock &p_lock) noexcept //
+    : m_lock(p_lock.m_lock) {
+  if (p_lock) {
+    // Decrement shared count and set prepare flag
+    int8_t shared_dec = 1;
+    p_lock.m_lock->prepare_lock(shared_dec);
+    p_lock.m_lock = nullptr;
+  } else {
+    assert(false);
+  }
+}
+
+PrepareLock::~PrepareLock() noexcept {
+  if (m_lock) {
+    m_lock->prepare_unlock();
+    m_lock = nullptr;
+  }
+}
+
+PrepareLock::operator bool() const noexcept {
+  return m_lock != nullptr;
+}
 } // namespace sp
 
 /*
@@ -400,6 +468,20 @@ TryPrepareLock::TryPrepareLock(ReadWriteLock &p_lock) noexcept //
 }
 
 TryPrepareLock::TryPrepareLock(TrySharedLock &p_lock) noexcept //
+    : m_lock(nullptr) {
+  if (p_lock) {
+    // Decrement shared count and set prepare flag
+    int8_t shared_dec = 1;
+    if (p_lock.m_lock->try_prepare_lock(shared_dec)) {
+      m_lock = p_lock.m_lock;
+      p_lock.m_lock = nullptr;
+    }
+  } else {
+    assert(false);
+  }
+}
+
+TryPrepareLock::TryPrepareLock(SharedLock &p_lock) noexcept //
     : m_lock(nullptr) {
   if (p_lock) {
     // Decrement shared count and set prepare flag
@@ -439,6 +521,8 @@ EagerExclusiveLock::EagerExclusiveLock(TryPrepareLock &p_lock) noexcept //
     p_lock.m_lock->eager_exclusive_lock(false, true);
     m_lock = p_lock.m_lock;
     p_lock.m_lock = nullptr;
+  } else {
+    assert(false);
   }
 }
 

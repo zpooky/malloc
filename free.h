@@ -33,6 +33,7 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
       if (nodeIdx != -1) {
         assert(extent != nullptr);
         index += nodeIdx;
+        assert(index < header::Extent::MAX_BUCKETS);
 
         return util::maybe<Res>(f(extent, index, arg));
       }

@@ -6,55 +6,66 @@
 
 using namespace sp;
 
-void assert_shared(ReadWriteLock &lock) {
+void
+assert_shared(ReadWriteLock &lock) {
   ASSERT_TRUE(lock.shared_locks() > 0);
 }
 
-void assert_not_shared(ReadWriteLock &lock) {
+void
+assert_not_shared(ReadWriteLock &lock) {
   ASSERT_FALSE(lock.shared_locks() > 0);
 }
 
-void assert_prepare(ReadWriteLock &lock) {
+void
+assert_prepare(ReadWriteLock &lock) {
   ASSERT_TRUE(lock.has_prepare_lock());
 }
 
-void assert_not_prepare(ReadWriteLock &lock) {
+void
+assert_not_prepare(ReadWriteLock &lock) {
   ASSERT_FALSE(lock.has_prepare_lock());
 }
 
-void assert_exclusive(ReadWriteLock &lock) {
+void
+assert_exclusive(ReadWriteLock &lock) {
   ASSERT_TRUE(lock.has_exclusive_lock());
 }
 
-void assert_not_exclusive(ReadWriteLock &lock) {
+void
+assert_not_exclusive(ReadWriteLock &lock) {
   ASSERT_FALSE(lock.has_exclusive_lock());
 }
 
-void assert_only_shared(ReadWriteLock &lock) {
+void
+assert_only_shared(ReadWriteLock &lock) {
   assert_shared(lock);
   assert_not_prepare(lock);
   assert_not_exclusive(lock);
 }
 
-void assert_only_prepare(ReadWriteLock &lock) {
+void
+assert_only_prepare(ReadWriteLock &lock) {
   assert_not_shared(lock);
   assert_prepare(lock);
   assert_not_exclusive(lock);
 }
 
-void assert_only_exclusive(ReadWriteLock &lock) {
+void
+assert_only_exclusive(ReadWriteLock &lock) {
   assert_not_shared(lock);
   assert_not_prepare(lock);
   assert_exclusive(lock);
 }
 
-void assert_only_shared_prepare(ReadWriteLock &lock) {
+void
+assert_only_shared_prepare(ReadWriteLock &lock) {
   assert_shared(lock);
   assert_prepare(lock);
   assert_not_exclusive(lock);
 }
 
-void assert_acq(ReadWriteLock &lock) {
+void
+assert_acq(ReadWriteLock &lock) {
   assert_not_shared(lock);
   assert_not_prepare(lock);
   assert_not_exclusive(lock);
@@ -289,11 +300,13 @@ TEST(ReadWriteLockTest, test_shared_prepare) {
   assert_acq(lock);
 }
 
-TEST(ReadWriteLockTest, test_prepare_exclusive) {
+template <typename PLock>
+static void
+test_prepare_exclusive() {
   ReadWriteLock lock;
   assert_acq(lock);
   { //
-    TryPrepareLock pl(lock);
+    PLock pl(lock);
     ASSERT_TRUE(pl);
     assert_only_prepare(lock);
 
@@ -306,7 +319,7 @@ TEST(ReadWriteLockTest, test_prepare_exclusive) {
     ASSERT_FALSE(pl);
     assert_only_exclusive(lock);
 
-    TryPrepareLock pl2(lock);
+    PLock pl2(lock);
     ASSERT_FALSE(pl2);
     assert_only_exclusive(lock);
   }
@@ -316,7 +329,7 @@ TEST(ReadWriteLockTest, test_prepare_exclusive) {
     ASSERT_TRUE(el);
     assert_only_exclusive(lock);
 
-    TryPrepareLock pl(lock);
+    PLock pl(lock);
     ASSERT_FALSE(pl);
     assert_only_exclusive(lock);
 
@@ -330,7 +343,7 @@ TEST(ReadWriteLockTest, test_prepare_exclusive) {
     ASSERT_TRUE(el);
     assert_only_exclusive(lock);
 
-    TryPrepareLock pl(lock);
+    PLock pl(lock);
     ASSERT_FALSE(pl);
     assert_only_exclusive(lock);
 
@@ -344,7 +357,7 @@ TEST(ReadWriteLockTest, test_prepare_exclusive) {
     ASSERT_TRUE(el);
     assert_only_exclusive(lock);
 
-    TryPrepareLock pl(lock);
+    PLock pl(lock);
     ASSERT_FALSE(pl);
     assert_only_exclusive(lock);
 
@@ -353,6 +366,10 @@ TEST(ReadWriteLockTest, test_prepare_exclusive) {
     assert_only_exclusive(lock);
   }
   assert_acq(lock);
+}
+
+TEST(ReadWriteLockTest, test_try_prepare_exclusive) {
+  test_prepare_exclusive<sp::TryPrepareLock>();
 }
 
 TEST(ReadWriteLockTest, test_shared_prepare_exclusive) {
@@ -460,7 +477,8 @@ class ReadWriteLockThreadTest : public ::testing::TestWithParam<std::size_t> {};
 INSTANTIATE_TEST_CASE_P(Default, ReadWriteLockThreadTest,
                         ::testing::Range(size_t(1), size_t(15)));
 
-static void exclusive_test(size_t thCnt, void *(*worker)(void *)) {
+static void
+exclusive_test(size_t thCnt, void *(*worker)(void *)) {
   constexpr size_t thUpdate = 1024;
   const size_t final_update = thCnt * thUpdate;
 
@@ -490,7 +508,8 @@ static void exclusive_test(size_t thCnt, void *(*worker)(void *)) {
 }
 
 //==================================================
-static void *threaded_EagerExclusive(void *a) {
+static void *
+threaded_EagerExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
   size_t i = 0;
@@ -510,7 +529,8 @@ TEST_P(ReadWriteLockThreadTest, threaded_EagerExclusive) {
 }
 
 //==================================================
-static void *threaded_TryPrepareEagerExclusive(void *a) {
+static void *
+threaded_TryPrepareEagerExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
   size_t i = 0;
@@ -537,7 +557,8 @@ TEST_P(ReadWriteLockThreadTest, threaded_TryPrepareEagerExclusive) {
 }
 
 //==================================================
-static void *threaded_LazyExclusive(void *a) {
+static void *
+threaded_LazyExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
 
@@ -561,7 +582,8 @@ TEST_P(ReadWriteLockThreadTest, threaded_LazyExclusive) {
 }
 
 //==================================================
-static void *threaded_TryExclusive(void *a) {
+static void *
+threaded_TryExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
 
@@ -607,7 +629,8 @@ TEST_P(ReadWriteLockThreadTest, threaded_TryExclusive) {
 // }
 
 //==================================================
-static void *threaded_TryPrepareTryExclusive(void *a) {
+static void *
+threaded_TryPrepareTryExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
   size_t i = 0;
@@ -634,7 +657,32 @@ TEST_P(ReadWriteLockThreadTest, threaded_TryPrepareTryExclusive) {
 }
 
 //==================================================
-static void *threaded_TryPrepare(void *a) {
+static void *
+threaded_Prepare(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+
+    sp::PrepareLock prep_guard(arg->lock);
+    if (prep_guard) {
+      assert_prepare(arg->lock);
+
+      arg->toUpdate++;
+      i++;
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_Prepare) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_Prepare);
+}
+
+//==================================================
+static void *
+threaded_TryPrepare(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
   size_t i = 0;
@@ -657,7 +705,62 @@ TEST_P(ReadWriteLockThreadTest, threaded_TryPrepare) {
 }
 
 //==================================================
-static void *threaded_TrySharedTryPrepare(void *a) {
+static void *
+threaded_TrySharedPrepare(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+
+    sp::TrySharedLock shared_guard(arg->lock);
+    if (shared_guard) {
+      assert_shared(arg->lock);
+
+      sp::PrepareLock prep_guard(shared_guard);
+      if (prep_guard) {
+        assert_prepare(arg->lock);
+        arg->toUpdate++;
+        i++;
+      }
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_TrySharedPrepare) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_TrySharedPrepare);
+}
+//==================================================
+static void *
+threaded_SharedPrepare(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+
+    sp::SharedLock shared_guard(arg->lock);
+    if (shared_guard) {
+      assert_shared(arg->lock);
+
+      sp::PrepareLock prep_guard(shared_guard);
+      if (prep_guard) {
+        assert_prepare(arg->lock);
+        arg->toUpdate++;
+        i++;
+      }
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_SharedPrepare) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_SharedPrepare);
+}
+//==================================================
+static void *
+threaded_TrySharedTryPrepare(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
   size_t i = 0;
@@ -682,9 +785,59 @@ TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepare) {
   const size_t thCnt = GetParam();
   exclusive_test(thCnt, threaded_TrySharedTryPrepare);
 }
+//
+//==================================================
+static void *
+threaded_SharedTryPrepare(void *a) {
+  auto arg = reinterpret_cast<ThreadedTestArg *>(a);
+  arg->b->await();
+  size_t i = 0;
+  while (i < arg->it) {
+
+    sp::SharedLock shared_guard(arg->lock);
+    if (shared_guard) {
+      assert_shared(arg->lock);
+
+      sp::TryPrepareLock prep_guard(shared_guard);
+      if (prep_guard) {
+        assert_prepare(arg->lock);
+        arg->toUpdate++;
+        i++;
+      }
+    }
+  }
+  return nullptr;
+}
+
+TEST_P(ReadWriteLockThreadTest, threaded_SharedTryPrepare) {
+  const size_t thCnt = GetParam();
+  exclusive_test(thCnt, threaded_SharedTryPrepare);
+}
 
 //==================================================
-static void *threaded_TrySharedTryPrepareEagerExclusive(void *a) {
+template <std::size_t BS>
+class Brute {
+private:
+  std::size_t buckets[BS];
+
+public:
+  Brute() //
+      : buckets() {
+  }
+
+  bool
+  next(std::size_t max) {
+    return true;
+  }
+  const std::size_t *
+  get() const {
+    return buckets;
+  }
+};
+
+//==================================================
+static void *
+threaded_TrySharedTryPrepareEagerExclusive(void *a) {
   auto arg = reinterpret_cast<ThreadedTestArg *>(a);
   arg->b->await();
   size_t i = 0;
@@ -710,32 +863,16 @@ static void *threaded_TrySharedTryPrepareEagerExclusive(void *a) {
   return nullptr;
 }
 
-template <std::size_t BS>
-class Brute {
-private:
-  std::size_t buckets[BS];
-
-public:
-  Brute() //
-      : buckets() {
-  }
-
-  bool next(std::size_t max) {
-    return true;
-  }
-  const std::size_t *get() const {
-    return buckets;
-  }
-};
-
-//==================================================
 TEST_P(ReadWriteLockThreadTest, threaded_TrySharedTryPrepareEagerExclusive) {
   const size_t thCnt = GetParam();
   exclusive_test(thCnt, threaded_TrySharedTryPrepareEagerExclusive);
 }
+//==================================================
+
 // max:1[,,,,,]
 // max:2[,,,,,]
-static void tests(std::initializer_list<void *(*)(void *)> workers) {
+static void
+tests(std::initializer_list<void *(*)(void *)> workers) {
   size_t workerThreads[100] = {1}; // TODO
 
   constexpr size_t thUpdate = 1024;
