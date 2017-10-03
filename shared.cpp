@@ -109,29 +109,27 @@ is_empty(Extent *const ext) noexcept {
 static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-Node::Node(std::size_t nodeSz, std::size_t bucketSz,
+Node::Node(NodeType t, std::size_t nodeSz, std::size_t bucketSz,
            std::size_t p_buckets) noexcept //
-    : type(NodeType::HEAD)
+    : type(t)
     , next{nullptr}
     , bucket_size(bucketSz)
     , node_size(nodeSz)
     , buckets(p_buckets) {
-  assert(this->bucket_size > 0);
-  assert(this->node_size > 0);
-  assert(this->buckets > 0);
 } // Node()
 
 Node *
 init_node(void *const raw, std::size_t size, std::size_t bucketSz) noexcept {
   assert(raw != nullptr);
   assert(size >= header::SIZE);
+  assert(bucketSz > 0);
   const std::size_t buckets = calc_buckets(size, bucketSz);
   assert(buckets > 0);
   // printf("init_node(ptr,size(%zu),bucketSz(%zu),buckets(%zu))\n", //
   // size, bucketSz, buckets);
 
   Node *const nHdr = node(raw);
-  new (nHdr) Node(size, bucketSz, buckets);
+  new (nHdr) Node(NodeType::HEAD, size, bucketSz, buckets);
   // printf("node(size(%zu),bucketSz(%zu),buckets(%zu))\n", //
   //        nHdr->node_size, nHdr->bucket_size, nHdr->buckets);
 
@@ -182,7 +180,7 @@ node_data_start(Node *node) noexcept {
 namespace local {
 // class Pool {{{
 Pool::Pool() noexcept
-    : start{nullptr}
+    : start{}
     , lock{} {
 }
 // }}}

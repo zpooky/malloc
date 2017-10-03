@@ -72,6 +72,9 @@
 //  * allow externally to register a callback to control allocation strategy
 //    * hint of how much memory will be needed generally or specific bucketSz
 //    * hint to over allocate by haveing a % in local free list
+//
+// 11. memory leaks detect
+//  * print statistics for all non-freed memory
 
 // TODO optimizations
 // - Some kind of TL cache with a reference to the most referenced Pools used
@@ -152,7 +155,7 @@ node_start:
 
   if (buckets > 0) {
     assert(next != nullptr);
-    assert(next->type == header::NodeType::INTERMEDIATE);
+    assert(next->type == header::NodeType::LINK);
 
     start = next;
     // the same extent but a new node
@@ -189,14 +192,14 @@ node_start:
     hdrSz = sizeof(header::Node);
 
     assert(next != nullptr);
-    assert(next->type == header::NodeType::INTERMEDIATE);
+    assert(next->type == header::NodeType::LINK);
 
     start = next;
 
     goto node_start;
   } else {
     if (next) {
-      if (next->type == header::NodeType::INTERMEDIATE) {
+      if (next->type == header::NodeType::LINK) {
         // We get here because a concurrent expand of this extent is going on by
         // the allocating thread.
 

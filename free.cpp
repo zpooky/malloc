@@ -1,4 +1,5 @@
 #include "free.h"
+#include <cassert>
 
 namespace shared {
 
@@ -41,17 +42,43 @@ perform_free(header::Extent *ext, std::size_t idx) noexcept {
     // double free is a runtime fault
     assert(false);
   }
+
   return true;
 }
 
-static bool
+static header::Node *
+find_parent(header::Node *start, header::Node *const child) {
+start:
+  if (start) {
+    header::Node *tmp = start->next.load();
+    if (tmp == child) {
+      return start;
+    }
+    start = tmp;
+    goto start;
+  }
+
+  assert(false);
+  return nullptr;
+}
+static void
+unlink_extent(header::Node *parent, header::Node *head) {
+}
+
+static void
+reclaim_extent(header::Node *head) {
+}
+
+enum class FreeLogic { FREED, NOT_FOUND, FREED_RECLAIMED };
+static FreeLogic
 free_logic(local::Pool &pool, void *const search) noexcept {
   sp::SharedLock shared_guard(pool.lock);
   if (shared_guard) {
-    header::Node *current = pool.start.load(std::memory_order_acquire);
+    header::Node *parent = nullptr;
     header::Node *head = nullptr;
     std::size_t index{0};
   start:
+    header::Node *current = parent->next.load(std::memory_order_acquire);
     if (current) {
       if (current->type == header::NodeType::HEAD) {
         head = current;
@@ -72,12 +99,25 @@ free_logic(local::Pool &pool, void *const search) noexcept {
               sp::EagerExclusiveLock ex_guard(pre_guard);
               if (ex_guard) {
                 if (header::is_empty(extent)) {
+                  // we need to consider that malloc can insert new extent and
+                  // nodes concurrently when this is performed. This means that
+                  // parent read during the shared lock can be different now
+                  // during the exclusive lock. Solve this by iterating from
+                  // parent until head is next, this work since during an
+                  // exclusive lock there can not be any new extents or nodes.
+
+                  parent = find_parent(parent, head);
+                  unlink_extent(parent, head);
+                  reclaim_extent(head);
+
+                  return FreeLogic::FREED_RECLAIMED;
                 }
               } else {
                 // should always succeed
                 assert(false);
               }
             } else {
+              assert(false);
               // TODO what now?
               // - retry
               // - store in NodeHead that the node should be reclaimed
@@ -85,24 +125,33 @@ free_logic(local::Pool &pool, void *const search) noexcept {
             }
           }
         }
-        return true;
+
+        return FreeLogic::FREED;
       }
       index += node_indecies_in(current);
 
-      current = current->next.load(std::memory_order_acquire);
+      parent = current;
       goto start;
     }
   }
-  return false;
+
+  return FreeLogic::NOT_FOUND;
 } // local::extent_for()
 
+// should return enum
+// [FREED,
+// NOT_FOUND,
+// FREED_EXTENT_RECLAIMED/FREED_POOL_EMPTY(if we have sum size of allocs&it's 0)
+// ]
+
+enum class FeeCode { FREED, NOT_FOUND };
 bool
 free(local::PoolsRAII &pools, void *const ptr) noexcept {
   auto arg = nullptr;
   auto res = local::pools_find<bool, std::nullptr_t>(
       pools, ptr, //
       [](local::Pool &p, void *search, std::nullptr_t &) -> util::maybe<bool> {
-        if (free_logic(p, search)) {
+        if (free_logic(p, search) != FreeLogic::NOT_FOUND) {
           return util::maybe<bool>{true};
         }
         return {};

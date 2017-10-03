@@ -42,22 +42,6 @@ struct Node;
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
   static constexpr std::size_t MAX_BUCKETS = 512;
-  // const uint8_t block_size;
-  // fill out bitset so it occopies the whole cache_line
-  // bitset
-  // # block_size(uint32) + 4byte bitset_block(uint32)
-  // cache_line - sizeof(block_size) = 60
-  // 60/bitset_block = 15
-  // 15 * bits_in_bitset_bloc(32) = 480
-  // page_size(4k) - header_size(64B) = 4032
-  // 4032 / 480 = 8.4Byte
-  //
-  //# block_size(uint8) + 1byte bitset_block(uint8)
-  // cache_line - sizeof(block_size) = 63
-  // 63/bitset_block = 63
-  // 63 * bits_in_bitset_bloc(8) = 504
-  // page_size(4k) - header_size(64B) = 4032
-  // 4032 / 504 = 8Byte
   sp::Bitset<MAX_BUCKETS, std::uint64_t> reserved;
 
   Extent() noexcept;
@@ -72,7 +56,8 @@ is_empty(Extent *) noexcept;
 /*Node*/
 enum class NodeType { //
   HEAD,
-  INTERMEDIATE
+  LINK,
+  SPECIAL
 };
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
@@ -97,7 +82,7 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   // TODO const std::size_t offset; for where the first bucket start
   // TODO padding of bytes to avoid -1 errors sizeof Node should still be 64
 
-  Node(std::size_t node_size, std::size_t bucket_size,
+  Node(NodeType, std::size_t node_size, std::size_t bucket_size,
        std::size_t buckets) noexcept;
 };
 Node *
@@ -125,8 +110,6 @@ namespace local {
 struct Pool { //
   std::atomic<header::Node *> start;
   sp::ReadWriteLock lock;
-  // std::shared_mutex lock;
-  // std::mutex lock;
 
   Pool() noexcept;
 
