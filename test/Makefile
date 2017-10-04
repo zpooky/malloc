@@ -1,7 +1,7 @@
 # Makefile
 # Declaration of variables
 CXX = g++
-CXXFLAGS = -enable-frame-pointers -std=gnu++14 -Wall -Wextra -ggdb -fno-strict-aliasing -Wpointer-arith
+override CXXFLAGS += -enable-frame-pointers -std=gnu++14 -Wall -Wextra -ggdb -fno-strict-aliasing -Wpointer-arith
 PROJECT_ROOT = ..
 GTEST_ROOT = $(PROJECT_ROOT)/external/googletest/googletest
 HEADER_DIRS = -I$(GTEST_ROOT)/include -I$(PROJECT_ROOT) -I$(PROJECT_ROOT)/external

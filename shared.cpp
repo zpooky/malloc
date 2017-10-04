@@ -78,7 +78,7 @@ static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
 Extent::Extent() noexcept //
-    : reserved(false) {
+    : reserved{false} {
 }
 
 static std::size_t
@@ -102,20 +102,22 @@ extent(Node *const start) noexcept {
 
 bool
 is_empty(Extent *const ext) noexcept {
-  return false;
+  return ext->reserved.all(0);
 }
 
 /*Node*/
-static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
+// static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
 Node::Node(NodeType t, std::size_t nodeSz, std::size_t bucketSz,
            std::size_t p_buckets) noexcept //
-    : type(t)
+    : pad0()
     , next{nullptr}
     , bucket_size(bucketSz)
     , node_size(nodeSz)
-    , buckets(p_buckets) {
+    , buckets(p_buckets)
+    , type(t)
+    , pad1() {
 } // Node()
 
 Node *
@@ -144,7 +146,7 @@ Node *
 node(void *const start) noexcept {
   assert(start != nullptr);
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
-  assert(startPtr % alignof(Node) == 0);
+  assert(startPtr % Node::ALIGNMENT == 0);
   return reinterpret_cast<Node *>(start);
 } // node()
 
@@ -154,7 +156,7 @@ node_data_size(Node *node) noexcept {
   if (node->type == NodeType::HEAD) {
     assert(result >= header::SIZE);
     result -= header::SIZE;
-  } else {
+  } else if (node->type == NodeType::LINK) {
     assert(result >= sizeof(Node));
     result -= sizeof(Node);
   }
@@ -180,7 +182,7 @@ node_data_start(Node *node) noexcept {
 namespace local {
 // class Pool {{{
 Pool::Pool() noexcept
-    : start{}
+    : start{header::NodeType::SPECIAL, 0, 0, 0}
     , lock{} {
 }
 // }}}

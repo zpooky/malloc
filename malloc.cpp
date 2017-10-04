@@ -175,40 +175,16 @@ node_start:
 static header::Node *
 next_extent(header::Node *start) noexcept {
   assert(start != nullptr);
-  assert(start->type == header::NodeType::HEAD);
-
-  size_t hdrSz(header::SIZE);
-  size_t buckets = start->buckets;
-node_start:
-  const size_t dataSz(start->node_size - hdrSz);
-
-  assert(start->bucket_size > 0);
-  size_t nodeBuckets = std::min(dataSz / start->bucket_size, buckets);
-  buckets = buckets - nodeBuckets;
-
+start:
   header::Node *const next = next_node(start);
-
-  if (buckets > 0) {
-    hdrSz = sizeof(header::Node);
-
-    assert(next != nullptr);
-    assert(next->type == header::NodeType::LINK);
-
-    start = next;
-
-    goto node_start;
-  } else {
-    if (next) {
-      if (next->type == header::NodeType::LINK) {
-        // We get here because a concurrent expand of this extent is going on by
-        // the allocating thread.
-
-        // TODO will this work?
-        goto node_start;
-      }
+  if (next) {
+    if (next->type == header::NodeType::HEAD) {
+      return next;
     }
-    return next;
+    start = next;
+    goto start;
   }
+  return nullptr;
 } // local::next_intent()
 
 /*
@@ -217,14 +193,16 @@ node_start:
  */
 static void *
 reserve(header::Node *const node) noexcept {
-  header::Extent *const eHdr = header::extent(node);
+  if (node->type == header::NodeType::HEAD) {
+    header::Extent *const eHdr = header::extent(node);
 
-  auto &reservations = eHdr->reserved;
-  // printf("reservations.swap_first(true,buckets(%zu))\n", nHdr->buckets);
-  const std::size_t limit = node->buckets;
-  const std::size_t index = reservations.swap_first(true, limit);
-  if (index != reservations.npos) {
-    return pointer_at(node, index);
+    auto &reservations = eHdr->reserved;
+    // printf("reservations.swap_first(true,buckets(%zu))\n", nHdr->buckets);
+    const std::size_t limit = node->buckets;
+    const std::size_t index = reservations.swap_first(true, limit);
+    if (index != reservations.npos) {
+      return pointer_at(node, index);
+    }
   }
   return nullptr;
 } // local::reserve()
@@ -295,7 +273,7 @@ node_for(Pool &pool, void *const search, NodeFor<Res, Arg> f,
          Arg &arg) noexcept {
   sp::SharedLock guard(pool.lock);
   if (guard) {
-    header::Node *current = pool.start.load(std::memory_order_acquire);
+    header::Node *current = &pool.start;
   start:
     if (current) {
       if (node_in_range(current, search)) {
@@ -377,7 +355,7 @@ malloc_count_alloc(std::size_t sz) {
   local::Pool &pool = local::pool_for(local_pools, sz);
   sp::SharedLock guard(pool.lock);
   if (guard) {
-    header::Node *current = pool.start.load();
+    header::Node *current = pool.start.next.load();
   start:
     if (current) {
       assert(current->type == header::NodeType::HEAD);
@@ -410,7 +388,7 @@ sp_malloc(std::size_t length) noexcept {
   sp::SharedLock guard{pool.lock};
   if (guard) {
 
-    header::Node *start = pool.start.load(std::memory_order_acquire);
+    header::Node *start = &pool.start;
     if (start) {
 
     reserve_start:
@@ -441,7 +419,8 @@ sp_malloc(std::size_t length) noexcept {
       }
     } else {
       // only TL allowed to malloc meaning no alloc contention
-      header::Node *current = local::enqueue_new_extent(pool.start, bucketSz);
+      header::Node *current =
+          local::enqueue_new_extent(pool.start.next, bucketSz);
       if (current) {
         void *const result = local::reserve(current);
         // since only one allocator this must succeed

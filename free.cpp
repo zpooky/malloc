@@ -1,4 +1,5 @@
 #include "free.h"
+#include "global.h"
 #include <cassert>
 
 namespace shared {
@@ -29,8 +30,13 @@ node_index_of(header::Node *node, void *ptr) noexcept {
 
 std::size_t
 node_indecies_in(header::Node *node) noexcept {
-  std::size_t result = header::node_data_size(node);
-  return std::size_t(result / node->bucket_size);
+  if (node->type != header::NodeType::SPECIAL) {
+    std::size_t result = header::node_data_size(node);
+
+    return std::size_t(result / node->bucket_size);
+  }
+
+  return std::size_t(0);
 }
 
 bool
@@ -61,12 +67,37 @@ start:
   assert(false);
   return nullptr;
 }
-static void
-unlink_extent(header::Node *parent, header::Node *head) {
-}
 
 static void
-reclaim_extent(header::Node *head) {
+unlink_extent(header::Node *parent, header::Node *head) {
+  assert(parent);
+  assert(head);
+start:
+  header::Node *current = head->next.load(std::memory_order_acquire);
+  if (current) {
+    if (current->type == header::NodeType::LINK) {
+      head = current;
+      goto start;
+    }
+    head->next.store(nullptr, std::memory_order_relaxed);
+  }
+  parent->next.store(current);
+}
+
+static std::size_t
+recycle_extent(header::Node *head) {
+  // TODO This can and should be done when the pool lock is not held.
+  // TODO local::free_list support
+  std::size_t recycled(0);
+start:
+  header::Node *next = head->next.load();
+  recycled += head->node_size;
+  global::dealloc(head, head->node_size);
+  if (next) {
+    head = next;
+    goto start;
+  }
+  return recycled;
 }
 
 enum class FreeLogic { FREED, NOT_FOUND, FREED_RECLAIMED };
@@ -74,7 +105,7 @@ static FreeLogic
 free_logic(local::Pool &pool, void *const search) noexcept {
   sp::SharedLock shared_guard(pool.lock);
   if (shared_guard) {
-    header::Node *parent = nullptr;
+    header::Node *parent = &pool.start;
     header::Node *head = nullptr;
     std::size_t index{0};
   start:
@@ -108,23 +139,29 @@ free_logic(local::Pool &pool, void *const search) noexcept {
 
                   parent = find_parent(parent, head);
                   unlink_extent(parent, head);
-                  reclaim_extent(head);
+                  std::size_t recycled = recycle_extent(head);
 
+                  // TODO return size of recycled nodes & decrement sum of
+                  // allocated
                   return FreeLogic::FREED_RECLAIMED;
-                }
-              } else {
+                } /*is_empty*/
+              } /*exclusive*/ else {
                 // should always succeed
                 assert(false);
               }
-            } else {
+            } /*prepare*/ else {
               assert(false);
               // TODO what now?
               // - retry
               // - store in NodeHead that the node should be reclaimed
-              //  - how is done atomically with malloc+concurrent free?
+              //  - set extent_reclaim true on the head node
+              //  - malloc thread sees extent_reclaim and ignores the extent
+              //  - freeing thread sees extent_reclaim and checks
+              //    is_empty(extent) if not true unset flag, if true free to
+              //    reclaim
             }
-          }
-        }
+          } /*is_empty*/
+        }   /*perform_free*/
 
         return FreeLogic::FREED;
       }
@@ -133,7 +170,7 @@ free_logic(local::Pool &pool, void *const search) noexcept {
       parent = current;
       goto start;
     }
-  }
+  } /*shared*/
 
   return FreeLogic::NOT_FOUND;
 } // local::extent_for()

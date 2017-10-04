@@ -54,15 +54,16 @@ bool
 is_empty(Extent *) noexcept;
 
 /*Node*/
-enum class NodeType { //
+enum class NodeType : uint8_t { //
   HEAD,
   LINK,
   SPECIAL
 };
 
-struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
-  // TODO padding of bytes to avoid +1 errors sizeof Node should still be 64
-  const NodeType type;
+struct /*alignas(SP_MALLOC_CACHE_LINE_SIZE)*/ Node { //
+  static constexpr std::size_t ALIGNMENT = 64;
+  //TODO padding based on arch(for pointer size)
+  uint8_t pad0[16];
   // next node
   std::atomic<Node *> next;
   // size of bucket
@@ -79,8 +80,9 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Node { //
   // struct {
   // } intermediate;
   // };
+  const NodeType type;
   // TODO const std::size_t offset; for where the first bucket start
-  // TODO padding of bytes to avoid -1 errors sizeof Node should still be 64
+  uint8_t pad1[15];
 
   Node(NodeType, std::size_t node_size, std::size_t bucket_size,
        std::size_t buckets) noexcept;
@@ -108,7 +110,7 @@ node_data_start(Node *) noexcept;
 namespace local {
 /*Pool*/
 struct Pool { //
-  std::atomic<header::Node *> start;
+  header::Node start;
   sp::ReadWriteLock lock;
 
   Pool() noexcept;

@@ -40,10 +40,10 @@ free(void *ptr) noexcept {
 local::PoolsRAII *
 alloc_pool() noexcept {
   using PoolType = local::PoolsRAII;
-  static_assert(sizeof(PoolType) <= SP_MALLOC_PAGE_SIZE, "");
+  static_assert(sizeof(PoolType) <= SP_MALLOC_PAGE_SIZE * 2, "");
 
   PoolType *result = nullptr;
-  void *const memory = global::alloc(SP_MALLOC_PAGE_SIZE);
+  void *const memory = global::alloc(SP_MALLOC_PAGE_SIZE * 2);
   if (memory) {
     result = new (memory) PoolType;
 

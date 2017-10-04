@@ -119,12 +119,8 @@ malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
   allocs.reserve(iterations);
 
   const std::size_t rndAllocSz = roundAlloc(allocSz);
-  time("malloc_count_alloc()", [&] { //
-    ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
-  });
-  time("malloc_count_alloc(specific)", [&] { //
-    ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc(rndAllocSz));
-  });
+  ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
+  ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc(rndAllocSz));
 
   time("malloc", [&] { //
     for (size_t i = 0; i < iterations; ++i) {
@@ -139,13 +135,8 @@ malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
     }
   });
 
-  time("malloc_count_alloc(specific)", [&] { //
-    ASSERT_EQ(iterations, debug::malloc_count_alloc(rndAllocSz));
-  });
-
-  time("malloc_count_alloc()", [&] { //
-    ASSERT_EQ(iterations, debug::malloc_count_alloc());
-  });
+  ASSERT_EQ(iterations, debug::malloc_count_alloc(rndAllocSz));
+  ASSERT_EQ(iterations, debug::malloc_count_alloc());
 
   time("assert_no_overlap", [&] { //
     assert_no_overlap(allocs);
@@ -159,9 +150,7 @@ malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
     }
   });
 
-  time("malloc_count_alloc_everything_freed", [&] { //
-    ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
-  });
+  ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
 }
 using ThreadArg = std::tuple<std::size_t, std::size_t>;
 
@@ -191,9 +180,7 @@ test_range(std::size_t it) {
   Points allocs;
   allocs.reserve(it);
 
-  time("malloc_count_alloc()", [&] { //
-    ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
-  });
+  ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
 
   time("malloc", [&] { //
     for (size_t i = 1; i < it; ++i) {
@@ -226,9 +213,7 @@ test_range(std::size_t it) {
     }
   });
 
-  time("malloc_count_alloc()", [&] { //
-    ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
-  });
+  ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
 }
 
 static void *

@@ -19,7 +19,7 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
            Arg &arg) noexcept {
   sp::SharedLock guard(pool.lock);
   if (guard) {
-    header::Node *current = pool.start.load(std::memory_order_acquire);
+    header::Node *current = &pool.start;
     header::Node *extent = nullptr;
     std::size_t index{0};
   start:
