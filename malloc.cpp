@@ -92,6 +92,43 @@ static thread_local local::Pools local_pools;
 
 namespace local {
 
+template <typename Res, typename Arg>
+using ExtFor = Res (*)(header::Node *, std::size_t, Arg &);
+
+template <typename Res, typename Arg>
+static util::maybe<Res>
+extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
+           Arg &arg) noexcept {
+  sp::SharedLock guard(pool.lock);
+  if (guard) {
+    header::Node *current = &pool.start;
+    header::Node *extent = nullptr;
+    std::size_t index{0};
+  start:
+    if (current) {
+      if (current->type == header::NodeType::HEAD) {
+        extent = current;
+        index = 0;
+      }
+
+      int nodeIdx = shared::node_index_of(current, search);
+      if (nodeIdx != -1) {
+        assert(extent != nullptr);
+        index += nodeIdx;
+        assert(index < header::Extent::MAX_BUCKETS);
+
+        return util::maybe<Res>(f(extent, index, arg));
+      }
+      index += shared::node_indecies_in(current);
+
+      current = current->next.load(std::memory_order_acquire);
+      goto start;
+    }
+  }
+
+  return {};
+} // local::extent_for()
+
 static std::size_t
 pool_index(std::size_t size) noexcept {
   assert(size % 8 == 0);
@@ -497,7 +534,7 @@ sp_realloc(void *ptr, std::size_t length) noexcept {
   auto result = local::pools_find<void *, Arg>(
       local_pools, ptr, //
       [](local::Pool &pool, void *search, Arg &arg) {
-        return shared::extent_for<void *, Arg>(
+        return local::extent_for<void *, Arg>(
             pool, search, //
             [](header::Node *head, std::size_t idx, Arg &arg) {
 

@@ -173,7 +173,7 @@ free_logic(local::Pool &pool, void *const search) noexcept {
   } /*shared*/
 
   return FreeLogic::NOT_FOUND;
-} // local::extent_for()
+}
 
 // should return enum
 // [FREED,
