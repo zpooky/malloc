@@ -13,10 +13,10 @@ node_indecies_in(header::Node *node) noexcept;
 bool
 perform_free(header::Extent *ext, std::size_t idx) noexcept;
 
-bool
+enum class FreeCode { FREED, FREED_RECLAIM, NOT_FOUND };
+FreeCode
 free(local::PoolsRAII &pools, void *const ptr) noexcept;
-
-bool
+FreeCode
 free(local::Pools &pools, void *const ptr) noexcept;
 } // namespace shared
 

@@ -142,10 +142,14 @@ pool_for(local::Pools &pools, std::size_t sz) noexcept {
 } // local::pool_for()
 
 static void *
-alloc(std::size_t sz) noexcept {
+alloc(local::Pools &pools, std::size_t sz) noexcept {
   // printf("local::alloc(%zu)\n", sz);
   // TODO local alloc
-  return global::alloc(sz);
+  void *const result = global::alloc(sz);
+  if (result) {
+    pools.pools->total_alloc.fetch_add(sz);
+  }
+  return result;
 } // local::alloc()
 
 /*
@@ -279,10 +283,10 @@ calc_min_node(std::size_t bucketSz) noexcept {
  * desc  - Used by malloc
  */
 static header::Node *
-alloc_extent(std::size_t bucketSz) noexcept {
+alloc_extent(local::Pools &pools, std::size_t bucketSz) noexcept {
   // printf("alloc_extent(%zu)\n", bucketSz);
   std::size_t nodeSz = calc_min_node(bucketSz);
-  void *const raw = alloc(nodeSz);
+  void *const raw = alloc(pools, nodeSz);
   if (raw) {
     return header::init_node(raw, nodeSz, bucketSz);
   }
@@ -291,13 +295,13 @@ alloc_extent(std::size_t bucketSz) noexcept {
 
 static bool
 node_in_range(const header::Node *const node, void *const ptr) noexcept {
-  assert(node != nullptr);
-  assert(ptr != nullptr);
+  assert(node);
+  assert(ptr);
 
-  uintptr_t start = reinterpret_cast<uintptr_t>(node);
-  uintptr_t end = start + node->node_size;
+  const uintptr_t start = reinterpret_cast<uintptr_t>(node);
+  const uintptr_t end = start + node->node_size;
 
-  uintptr_t compare = reinterpret_cast<uintptr_t>(ptr);
+  const uintptr_t compare = reinterpret_cast<uintptr_t>(ptr);
   return compare >= start && compare < end;
 } // local::in_node_range()
 
@@ -329,9 +333,9 @@ should_expand_extent(header::Node *) {
 }
 
 static header::Node *
-enqueue_new_extent(std::atomic<header::Node *> &w,
+enqueue_new_extent(local::Pools &pools, std::atomic<header::Node *> &w,
                    std::size_t bucketSz) noexcept {
-  header::Node *const current = local::alloc_extent(bucketSz);
+  header::Node *const current = local::alloc_extent(pools, bucketSz);
   if (current) {
     // TODO some kind of fence to ensure construction before publication
     // std::atomic_thread_fence(std::memory_order_release);
@@ -444,7 +448,8 @@ sp_malloc(std::size_t length) noexcept {
           if (local::should_expand_extent(start)) {
             local::expand_extent(start);
           } else {
-            start = local::enqueue_new_extent(start->next, bucketSz);
+            start =
+                local::enqueue_new_extent(local_pools, start->next, bucketSz);
           }
           if (start) {
             goto reserve_start;
@@ -457,7 +462,7 @@ sp_malloc(std::size_t length) noexcept {
     } else {
       // only TL allowed to malloc meaning no alloc contention
       header::Node *current =
-          local::enqueue_new_extent(pool.start.next, bucketSz);
+          local::enqueue_new_extent(local_pools, pool.start.next, bucketSz);
       if (current) {
         void *const result = local::reserve(current);
         // since only one allocator this must succeed
@@ -481,7 +486,8 @@ sp_free(void *const ptr) noexcept {
     return true;
   }
 
-  if (!shared::free(local_pools, ptr)) {
+  auto result = shared::free(local_pools, ptr);
+  if (result == shared::FreeCode::NOT_FOUND) {
     // not the same free:ing as malloc:ing thread
     if (!global::free(ptr)) {
       // unknown address

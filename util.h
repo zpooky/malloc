@@ -93,6 +93,14 @@ public:
     }
     return def;
   }
+
+  T
+  get_or(T &&def) noexcept {
+    if (present) {
+      return get();
+    }
+    return def;
+  }
 };
 
 } // namespace util

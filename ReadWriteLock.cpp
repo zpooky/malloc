@@ -104,6 +104,8 @@ print_state(const char *ctx, const uint64_t state) {
          // #<{(|C[p % sizeof(C)],|)}># p, //
          cshared, cprepare, cex);
 #endif
+  (void)ctx;
+  (void)state;
 }
 
 /*

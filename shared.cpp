@@ -191,7 +191,8 @@ Pool::Pool() noexcept
 PoolsRAII::PoolsRAII() noexcept
     : buckets{}
     , total_alloc{0}
-    , global{nullptr}
+    , priv{nullptr}
+    , next{nullptr}
     , reclaim{false} {
   // TODO std::atomic_thread_fence(std::memory_order_release);?
 }

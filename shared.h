@@ -62,7 +62,7 @@ enum class NodeType : uint8_t { //
 
 struct /*alignas(SP_MALLOC_CACHE_LINE_SIZE)*/ Node { //
   static constexpr std::size_t ALIGNMENT = 64;
-  //TODO padding based on arch(for pointer size)
+  // TODO padding based on arch(for pointer size)
   uint8_t pad0[16];
   // next node
   std::atomic<Node *> next;
@@ -130,10 +130,11 @@ struct PoolsRAII { //
   std::array<Pool, BUCKETS> buckets;
   std::atomic<std::size_t> total_alloc;
 
-  //{
-  std::atomic<PoolsRAII *> global;
-  std::atomic<bool> reclaim;
+  // global{
+  PoolsRAII *priv;
+  PoolsRAII *next;
   //}
+  std::atomic<bool> reclaim;
 
   PoolsRAII() noexcept;
 

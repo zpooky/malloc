@@ -31,12 +31,12 @@ node_index_of(header::Node *node, void *ptr) noexcept {
 std::size_t
 node_indecies_in(header::Node *node) noexcept {
   if (node->type != header::NodeType::SPECIAL) {
-    std::size_t result = header::node_data_size(node);
+    const std::size_t result = header::node_data_size(node);
 
     return std::size_t(result / node->bucket_size);
   }
 
-  return std::size_t(0);
+  return 0;
 }
 
 bool
@@ -86,12 +86,13 @@ start:
 
 static std::size_t
 recycle_extent(header::Node *head) {
-  // TODO This can and should be done when the pool lock is not held.
+  assert(head);
   // TODO local::free_list support
   std::size_t recycled(0);
 start:
   header::Node *next = head->next.load();
   recycled += head->node_size;
+
   global::dealloc(head, head->node_size);
   if (next) {
     head = next;
@@ -100,9 +101,8 @@ start:
   return recycled;
 }
 
-enum class FreeLogic { FREED, NOT_FOUND, FREED_RECLAIMED };
-static FreeLogic
-free_logic(local::Pool &pool, void *const search) noexcept {
+static FreeCode
+free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
   sp::SharedLock shared_guard(pool.lock);
   if (shared_guard) {
     header::Node *parent = &pool.start;
@@ -139,11 +139,9 @@ free_logic(local::Pool &pool, void *const search) noexcept {
 
                   parent = find_parent(parent, head);
                   unlink_extent(parent, head);
-                  std::size_t recycled = recycle_extent(head);
+                  recycled = head;
 
-                  // TODO return size of recycled nodes & decrement sum of
-                  // allocated
-                  return FreeLogic::FREED_RECLAIMED;
+                  return FreeCode::FREED_RECLAIM;
                 } /*is_empty*/
               } /*exclusive*/ else {
                 // should always succeed
@@ -163,7 +161,7 @@ free_logic(local::Pool &pool, void *const search) noexcept {
           } /*is_empty*/
         }   /*perform_free*/
 
-        return FreeLogic::FREED;
+        return FreeCode::FREED;
       }
       index += node_indecies_in(current);
 
@@ -172,36 +170,53 @@ free_logic(local::Pool &pool, void *const search) noexcept {
     }
   } /*shared*/
 
-  return FreeLogic::NOT_FOUND;
+  return FreeCode::NOT_FOUND;
 }
 
-// should return enum
-// [FREED,
-// NOT_FOUND,
-// FREED_EXTENT_RECLAIMED/FREED_POOL_EMPTY(if we have sum size of allocs&it's 0)
-// ]
-
-enum class FeeCode { FREED, NOT_FOUND };
-bool
+FreeCode
 free(local::PoolsRAII &pools, void *const ptr) noexcept {
-  auto arg = nullptr;
-  auto res = local::pools_find<bool, std::nullptr_t>(
+  assert(ptr);
+  header::Node *recycledExtent = nullptr;
+  auto res = local::pools_find<FreeCode, header::Node *>(
       pools, ptr, //
-      [](local::Pool &p, void *search, std::nullptr_t &) -> util::maybe<bool> {
-        if (free_logic(p, search) != FreeLogic::NOT_FOUND) {
-          return util::maybe<bool>{true};
+      [](local::Pool &p, void *search,
+         header::Node *&recycled) -> util::maybe<FreeCode> {
+        auto result = free_logic(p, search, recycled);
+        if (result == FreeCode::NOT_FOUND) {
+          return {};
         }
-        return {};
-      },
-      arg);
 
-  bool def = false;
-  return res.get_or(def);
+        return util::maybe<FreeCode>(result);
+      },
+      recycledExtent);
+
+  FreeCode result = res.get_or(FreeCode::NOT_FOUND);
+  if (result == FreeCode::NOT_FOUND) {
+    return FreeCode::NOT_FOUND;
+  }
+
+  // FREED_RECLAIM in this context means that the Extent was reclaimed
+  if (result == FreeCode::FREED_RECLAIM) {
+    assert(recycledExtent);
+    std::size_t recycled = recycle_extent(recycledExtent);
+
+    std::size_t total = pools.total_alloc.fetch_sub(recycled);
+    if (total == recycled) {
+      if (pools.reclaim.load()) {
+        // TODO recycle local::free_list
+
+        // FREE_RECLAIM in this context means Pool can be reclaimed
+        return FreeCode::FREED_RECLAIM;
+      }
+    }
+  }
+
+  return FreeCode::FREED;
 }
 
-bool
+FreeCode
 free(local::Pools &pools, void *const ptr) noexcept {
-  assert(pools.pools != nullptr);
+  assert(pools.pools);
   return free(*pools.pools, ptr);
 } // free()
 
