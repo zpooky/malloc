@@ -498,7 +498,7 @@ produce_malloc_result(std::size_t iterations, std::size_t allocSz,
       ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
     }
   });
-  ASSERT_TRUE(result.size() > iterations);
+  ASSERT_TRUE(result.size() >= iterations);
   std::atomic_thread_fence(std::memory_order_release);
 }
 
