@@ -12,7 +12,7 @@
 // TODO large range 1-XXX to see that we get the right bucket
 //
 // TODO Cartesian product[allocSZ,iterations,threads[consumer,producer]]
-// TODO concurrent producer concurrent consumer
+// TODO mutliple producer multiple consumer (realloc+free+usable_size)
 
 //==================================================================================================
 //==================================================================================================
@@ -131,7 +131,7 @@ malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
       ASSERT_FALSE(ptr == nullptr);
       allocs.emplace_back(ptr, rndAllocSz);
 
-      ASSERT_EQ(rndAllocSz, sp_sizeof(ptr));
+      ASSERT_EQ(rndAllocSz, sp_usable_size(ptr));
       ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
     }
   });
@@ -147,7 +147,7 @@ malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
   time("free", [&] { //
     for (auto c : allocs) {
       void *ptr = std::get<0>(c);
-      ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
+      ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
     }
   });
@@ -262,7 +262,7 @@ overlap_malloc_check(std::size_t iterations, std::size_t allocSz,
       ASSERT_FALSE(ptr == nullptr);
       allocs.emplace_back(ptr, rndAllocSz);
 
-      ASSERT_EQ(rndAllocSz, sp_sizeof(ptr));
+      ASSERT_EQ(rndAllocSz, sp_usable_size(ptr));
       ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
     }
   });
@@ -282,7 +282,7 @@ overlap_malloc_check(std::size_t iterations, std::size_t allocSz,
   time("free", [&] { //
     for (auto c : allocs) {
       void *ptr = std::get<0>(c);
-      ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
+      ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
     }
   });
@@ -379,7 +379,7 @@ malloc_random_free(std::size_t iterations, std::size_t allocSz) {
         ASSERT_FALSE(ptr == nullptr);
         allocs.emplace_back(ptr, rndAllocSz);
 
-        ASSERT_EQ(rndAllocSz, sp_sizeof(ptr));
+        ASSERT_EQ(rndAllocSz, sp_usable_size(ptr));
         ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
       }
 
@@ -390,7 +390,7 @@ malloc_random_free(std::size_t iterations, std::size_t allocSz) {
         allocs.pop_back();
 
         void *ptr = std::get<0>(c);
-        ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
+        ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
         ASSERT_TRUE(sp_free(ptr));
         --active;
         ASSERT_EQ(active, debug::malloc_count_alloc());
@@ -405,7 +405,7 @@ malloc_random_free(std::size_t iterations, std::size_t allocSz) {
   time("free the rest", [&] { //
     for (auto c : allocs) {
       void *ptr = std::get<0>(c);
-      ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
+      ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
       --active;
       ASSERT_EQ(active, debug::malloc_count_alloc());
@@ -438,7 +438,7 @@ test_range(std::size_t it) {
       std::size_t roundSz = roundAlloc(allocSz);
       allocs.emplace_back(ptr, roundSz);
 
-      ASSERT_EQ(roundSz, sp_sizeof(ptr));
+      ASSERT_EQ(roundSz, sp_usable_size(ptr));
       ASSERT_EQ(ptr, sp_realloc(ptr, roundSz));
       ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
     }
@@ -456,7 +456,7 @@ test_range(std::size_t it) {
       void *ptr = std::get<0>(c);
       ASSERT_FALSE(ptr == nullptr);
 
-      ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
+      ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
     }
   });
@@ -493,7 +493,7 @@ produce_malloc_result(std::size_t iterations, std::size_t allocSz,
       std::size_t roundSz = roundAlloc(allocSz);
       result.emplace_back(ptr, roundSz);
 
-      ASSERT_EQ(roundSz, sp_sizeof(ptr));
+      ASSERT_EQ(roundSz, sp_usable_size(ptr));
       ASSERT_EQ(ptr, sp_realloc(ptr, roundSz));
       ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
     }
@@ -526,7 +526,7 @@ TEST_P(MallocTestAllocSizePFixture, test_producer_die_main_dealloc) {
     std::atomic_thread_fence(std::memory_order_acquire);
   }
 
-  ASSERT_TRUE(result.size() == passes * NUMBER_OF_IT);
+  ASSERT_EQ(result.size(), passes * NUMBER_OF_IT);
 
   time("assert_no_overlap", [&] { //
     assert_no_overlap(result);
@@ -538,7 +538,7 @@ TEST_P(MallocTestAllocSizePFixture, test_producer_die_main_dealloc) {
       void *ptr = std::get<0>(c);
       ASSERT_FALSE(ptr == nullptr);
 
-      ASSERT_EQ(std::get<1>(c), sp_sizeof(ptr));
+      ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
     }
   });
@@ -554,13 +554,13 @@ test_realloc() {
   for (auto it = sizes.begin(); it != sizes.end(); ++it) {
     void *ptr = sp_malloc(*it);
     ASSERT_FALSE(ptr == nullptr);
-    ASSERT_EQ(*it, sp_sizeof(ptr));
+    ASSERT_EQ(*it, sp_usable_size(ptr));
 
     for (auto rszIt = it + 1; rszIt != sizes.end(); ++rszIt) {
       ASSERT_EQ(std::size_t(1), debug::malloc_count_alloc());
       void *nptr = sp_realloc(ptr, *rszIt);
       ASSERT_FALSE(ptr == nptr);
-      ASSERT_EQ(*rszIt, sp_sizeof(nptr));
+      ASSERT_EQ(*rszIt, sp_usable_size(nptr));
       ptr = nptr;
     }
 

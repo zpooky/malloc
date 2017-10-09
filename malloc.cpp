@@ -294,40 +294,6 @@ alloc_extent(local::Pools &pools, std::size_t bucketSz) noexcept {
 } // local::alloc_extent()
 
 static bool
-node_in_range(const header::Node *const node, void *const ptr) noexcept {
-  assert(node);
-  assert(ptr);
-
-  const uintptr_t start = reinterpret_cast<uintptr_t>(node);
-  const uintptr_t end = start + node->node_size;
-
-  const uintptr_t compare = reinterpret_cast<uintptr_t>(ptr);
-  return compare >= start && compare < end;
-} // local::in_node_range()
-
-template <typename Res, typename Arg>
-using NodeFor = Res (*)(header::Node *, Arg &);
-
-template <typename Res, typename Arg>
-static util::maybe<Res>
-node_for(Pool &pool, void *const search, NodeFor<Res, Arg> f,
-         Arg &arg) noexcept {
-  sp::SharedLock guard(pool.lock);
-  if (guard) {
-    header::Node *current = &pool.start;
-  start:
-    if (current) {
-      if (node_in_range(current, search)) {
-        return util::maybe<Res>(f(current, arg));
-      }
-      current = current->next.load(std::memory_order_acquire);
-      goto start;
-    }
-  }
-  return {};
-} // local::node_for()
-
-static bool
 should_expand_extent(header::Node *) {
   return false;
 }
@@ -465,8 +431,8 @@ sp_malloc(std::size_t length) noexcept {
           local::enqueue_new_extent(local_pools, pool.start.next, bucketSz);
       if (current) {
         void *const result = local::reserve(current);
-        // since only one allocator this must succeed
-        assert(result != nullptr);
+        // Since only one allocator this must succeed.
+        assert(result);
         return result;
       }
 
@@ -475,7 +441,7 @@ sp_malloc(std::size_t length) noexcept {
     }
   } // SharedLock
 
-  // should never get to here
+  // We should never get to here
   assert(false);
   return nullptr;
 } // ::sp_malloc()
@@ -499,32 +465,18 @@ sp_free(void *const ptr) noexcept {
 } // ::sp_free()
 
 std::size_t
-sp_sizeof(void *const ptr) noexcept {
-  // TODO support global sizeof
-  if (ptr) {
-    using Arg = std::nullptr_t;
-    Arg arg = nullptr;
-    auto &pools = local_pools;
-
-    auto res = local::pools_find<std::size_t, Arg>(
-        pools, ptr, //
-        [](local::Pool &pool, void *search,
-           Arg &a) -> util::maybe<std::size_t> { //
-          return local::node_for<std::size_t, Arg>(
-              pool, search, //
-              [](header::Node *current, Arg &) -> std::size_t {
-                //
-                return current->bucket_size;
-              },
-              a);
-        },
-        arg);
-    if (res) {
-      return res.get();
-    }
+sp_usable_size(void *const ptr) noexcept {
+  if (!ptr) {
+    return 0;
   }
-  return 0;
-} // ::sp_sizeof()
+
+  std::size_t result = shared::usable_size(local_pools, ptr);
+  if (result == 0) {
+    result = global::usable_size(ptr);
+  }
+
+  return result;
+} // ::sp_usable_size()
 
 void *
 sp_realloc(void *ptr, std::size_t length) noexcept {

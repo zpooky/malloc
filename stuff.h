@@ -8,6 +8,9 @@ namespace global {
 bool
 free(void *) noexcept;
 
+std::size_t
+usable_size(void *const) noexcept;
+
 local::PoolsRAII *
 alloc_pool() noexcept;
 

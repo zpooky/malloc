@@ -93,7 +93,7 @@ enqueue(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
 namespace global {
 
 bool
-free(void *ptr) noexcept {
+free(void *const ptr) noexcept {
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
@@ -119,6 +119,24 @@ free(void *ptr) noexcept {
 
   return false;
 } // global::free()
+
+std::size_t
+usable_size(void *const ptr) noexcept {
+  sp::SharedLock shared_guard{internal_a.lock};
+  if (shared_guard) {
+    local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
+  next:
+    if (current) {
+      std::size_t result = shared::usable_size(*current, ptr);
+      if (result != 0) {
+        return result;
+      }
+      current = current->next;
+      goto next;
+    }
+  }
+  return 0;
+}
 
 local::PoolsRAII *
 alloc_pool() noexcept {
