@@ -1,6 +1,7 @@
 #include "free.h"
 #include "global.h"
 #include <cassert>
+#include <cstring>
 
 namespace shared {
 
@@ -38,7 +39,7 @@ node_for(local::Pool &pool, void *search, NodeFor<Res, Arg> f,
   return {};
 } // node_for()
 
-std::int32_t
+static std::int32_t
 node_index_of(header::Node *node, void *ptr) noexcept {
   const std::size_t data_size = header::node_data_size(node);
   const uintptr_t data_start = header::node_data_start(node);
@@ -62,7 +63,7 @@ node_index_of(header::Node *node, void *ptr) noexcept {
   return -1;
 }
 
-std::size_t
+static std::size_t
 node_indecies_in(header::Node *node) noexcept {
   if (node->type != header::NodeType::SPECIAL) {
     const std::size_t result = header::node_data_size(node);
@@ -73,7 +74,44 @@ node_indecies_in(header::Node *node) noexcept {
   return 0;
 }
 
-bool
+template <typename Res, typename Arg>
+using ExtFor = Res (*)(header::Node *, std::size_t, Arg &);
+
+template <typename Res, typename Arg>
+static util::maybe<Res>
+extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
+           Arg &arg) noexcept {
+  sp::SharedLock guard(pool.lock);
+  if (guard) {
+    header::Node *current = &pool.start;
+    header::Node *extent = nullptr;
+    std::size_t index{0};
+  start:
+    if (current) {
+      if (current->type == header::NodeType::HEAD) {
+        extent = current;
+        index = 0;
+      }
+
+      int nodeIdx = node_index_of(current, search);
+      if (nodeIdx != -1) {
+        assert(extent != nullptr);
+        index += nodeIdx;
+        assert(index < header::Extent::MAX_BUCKETS);
+
+        return util::maybe<Res>(f(extent, index, arg));
+      }
+      index += node_indecies_in(current);
+
+      current = current->next.load(std::memory_order_acquire);
+      goto start;
+    }
+  }
+
+  return {};
+} // extent_for()
+
+static bool
 perform_free(header::Extent *ext, std::size_t idx) noexcept {
   assert(ext != nullptr);
   assert(idx < header::Extent::MAX_BUCKETS);
@@ -273,17 +311,52 @@ usable_size(local::PoolsRAII &pools, void *const ptr) noexcept {
       },
       arg);
   return res.get_or(std::size_t(0));
-}
+} // shared::usable_size()
 
 std::size_t
 usable_size(local::Pools &pools, void *const ptr) noexcept {
   assert(pools.pools);
   return usable_size(*pools.pools, ptr);
+} // shared::usable_size()
+
+util::maybe<void *>
+realloc(local::PoolsRAII &pools, void *const ptr, std::size_t length) noexcept {
+  using Arg = std::tuple<void *, std::size_t>;
+  Arg arg(ptr, length);
+
+  return local::pools_find<void *, Arg>(
+      pools, ptr, //
+      [](local::Pool &pool, void *search, Arg &arg) {
+        return extent_for<void *, Arg>(
+            pool, search, //
+            [](header::Node *head, std::size_t idx, Arg &arg) {
+
+              std::size_t length = std::get<1>(arg);
+              void *ptr = std::get<0>(arg);
+
+              header::Extent *ext = header::extent(head);
+              if (head->bucket_size < length) {
+
+                void *nptr = malloc(length); // TODO deadlock!
+                if (nptr) {
+                  memcpy(nptr, ptr, head->bucket_size);
+                }
+                perform_free(ext, idx);
+
+                return nptr;
+              }
+
+              return ptr;
+            },
+            arg);
+      },
+      arg);
 }
 
-void *
-sp_realloc(local::Pools &pools, void *, std::size_t) noexcept {
-  return nullptr;
-}
+util::maybe<void *>
+realloc(local::Pools &pools, void *const ptr, std::size_t length) noexcept {
+  assert(pools.pools);
+  return realloc(*pools.pools, ptr, length);
+} // shared::realloc()
 
 } // namespace shared

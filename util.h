@@ -36,7 +36,7 @@ private:
   bool present;
 
 public:
-  maybe() noexcept //
+  maybe() noexcept
       : data{}
       , present{false} {
   }
@@ -46,7 +46,24 @@ public:
       , present(true) {
     new (&data) T{std::forward<I>(d)};
   }
+
   // TODO inplace construction
+  maybe(const maybe &) = delete;
+
+  maybe(maybe &&o) // noexcept(T(std::move(o.data)))
+      : data{}
+      , present{o.present} {
+    if (present) {
+      T *ptr = reinterpret_cast<T *>(&data);
+      new (&data) T{std::move(*ptr)};
+    }
+    o.present = false;
+  }
+
+  maybe &
+  operator=(const maybe &) = delete;
+  maybe &
+  operator=(const maybe &&) = delete;
 
   ~maybe() noexcept {
     if (present) {

@@ -1,6 +1,7 @@
 #include "free.h"
 #include "global.h"
 #include "stuff.h"
+#include "stuff_debug.h"
 #include <atomic>
 #include <cassert>
 
@@ -138,6 +139,24 @@ usable_size(void *const ptr) noexcept {
   return 0;
 }
 
+util::maybe<void *>
+realloc(void *const ptr, std::size_t length) noexcept {
+  sp::SharedLock shared_guard{internal_a.lock};
+  if (shared_guard) {
+    local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
+  next:
+    if (current) {
+      auto result = shared::realloc(*current, ptr, length);
+      if (result) {
+        return result;
+      }
+      current = current->next;
+      goto next;
+    }
+  }
+  return {};
+}
+
 local::PoolsRAII *
 alloc_pool() noexcept {
   using PoolType = local::PoolsRAII;
@@ -174,3 +193,26 @@ release_pool(local::PoolsRAII *pool) noexcept {
 } // global::release_pool()
 
 } // namespace stuff
+
+#ifdef SP_TEST
+
+namespace debug {
+
+std::size_t
+count_unclaimed_pools() noexcept {
+  std::size_t result = 0;
+  sp::SharedLock shared_guard{internal_a.lock};
+  if (shared_guard) {
+    local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
+  next:
+    if (current) {
+      result++;
+      current = current->next;
+      goto next;
+    }
+  }
+  return result;
+} // debug::count_unclaimed_pools()
+
+} // namespace debug
+#endif

@@ -9,7 +9,10 @@ bool
 free(void *) noexcept;
 
 std::size_t
-usable_size(void *const) noexcept;
+usable_size(void *) noexcept;
+
+util::maybe<void *>
+realloc(void *, std::size_t) noexcept;
 
 local::PoolsRAII *
 alloc_pool() noexcept;

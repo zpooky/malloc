@@ -78,6 +78,8 @@ INSTANTIATE_TEST_CASE_P(DefaultInstance, MallocTestAllocSizePFixture,
 // INSTANTIATE_TEST_CASE_P(AnotherInstance, MallocTestAllocSizePFixture,
 //                         ::testing::Range(std::size_t(1), std::size_t(1026)));
 
+const size_t NUMBER_OF_IT = /*16 **/ 1025;
+
 //==================================================================================================
 //==================================================================================================
 /*util*/
@@ -149,6 +151,7 @@ malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
       void *ptr = std::get<0>(c);
       ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
+      ASSERT_FALSE(sp_free(ptr));
     }
   });
 
@@ -164,8 +167,6 @@ worker_malloc_test_uniform(void *argument) {
   malloc_test_uniform(it, allocSz);
   return nullptr;
 }
-
-const size_t NUMBER_OF_IT = 16 * 1025;
 
 TEST_P(MallocTestAllocSizePFixture, 1threads_test_uniform) {
   // create a thread and wait
@@ -284,6 +285,7 @@ overlap_malloc_check(std::size_t iterations, std::size_t allocSz,
       void *ptr = std::get<0>(c);
       ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
+      ASSERT_FALSE(sp_free(ptr));
     }
   });
 
@@ -392,6 +394,7 @@ malloc_random_free(std::size_t iterations, std::size_t allocSz) {
         void *ptr = std::get<0>(c);
         ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
         ASSERT_TRUE(sp_free(ptr));
+        ASSERT_FALSE(sp_free(ptr));
         --active;
         ASSERT_EQ(active, debug::malloc_count_alloc());
       }
@@ -407,6 +410,7 @@ malloc_random_free(std::size_t iterations, std::size_t allocSz) {
       void *ptr = std::get<0>(c);
       ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
+      ASSERT_FALSE(sp_free(ptr));
       --active;
       ASSERT_EQ(active, debug::malloc_count_alloc());
     }
@@ -458,6 +462,7 @@ test_range(std::size_t it) {
 
       ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
+      ASSERT_FALSE(sp_free(ptr));
     }
   });
 
@@ -532,14 +537,20 @@ TEST_P(MallocTestAllocSizePFixture, test_producer_die_main_dealloc) {
     assert_no_overlap(result);
   });
 
-  std::random_shuffle(result.begin(), result.end());
+  time("shuffle", [&] { //
+    std::random_shuffle(result.begin(), result.end());
+  });
+
   time("free", [&] { //
     for (auto c : result) {
       void *ptr = std::get<0>(c);
+      std::size_t actualSz = std::get<1>(c);
       ASSERT_FALSE(ptr == nullptr);
 
-      ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
+      ASSERT_EQ(actualSz, sp_usable_size(ptr));
+      ASSERT_EQ(ptr, sp_realloc(ptr, actualSz));
       ASSERT_TRUE(sp_free(ptr));
+      ASSERT_FALSE(sp_free(ptr));
     }
   });
 }
