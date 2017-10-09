@@ -2,21 +2,21 @@
 #http://www.puxan.com/web/howto-write-generic-makefiles/
 # Declaration of variables
 CXX = g++
-# ovrrides makes it possible to externaly append extra flags
-override CXXFLAGS += -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -ggdb -fno-strict-aliasing -Wpointer-arith
-
 HEADER_DIRS = -Iexternal
+# ovrrides makes it possible to externaly append extra flags
+override CXXFLAGS += $(HEADER_DIRS) -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow
+
+LDFLAGS =
 LDLIBS = -lpthread
 PREFIX = /usr/local
+BUILD = build
 
 # File names
 EXEC = main
 LIB = lib$(EXEC)
 SOURCES = $(wildcard *.cpp)
-OBJECTS = $(SOURCES:.cpp=.o)
-
-#TODO dynamic link lib
-#TODO header dependant change rebuild
+OBJECTS = $(patsubst %.cpp, $(BUILD)/%.o, $(SOURCES))
+DEPENDS = $(OBJECTS:.o=.d)
 
 # PHONY targets is not file backed targets
 .PHONY: test all clean install uninstall bear
@@ -33,17 +33,20 @@ $(EXEC): $(OBJECTS)
 # }}}
 
 # object {{{
-# The "object" file target
-# An implicit conversion from a cpp file to a object file?
-%.o: %.cpp
+-include $(DEPENDS)
+
+$(BUILD)/%.o: %.cpp
+	mkdir -p $(BUILD)
 	# -c means to create an intermediary object file, rather than an executable
-	$(CXX) -c $(CXXFLAGS) $(HEADER_DIRS) $< -o $@
+	# -MMD means to create *object*.d depend file with its depending cpp & h files
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -MMD -c $< -o $@
 # }}}
 
 # clean {{{
 clean:
-	rm -f $(EXEC) $(OBJECTS) $(LIB).a $(LIB).so
-	rm -f *.stackdump
+	rm -f $(OBJECTS)
+	rm -f $(DEPENDS)
+	rm -f $(EXEC) $(BUILD)/$(LIB).a $(BUILD)/$(LIB).so
 	$(MAKE) -C test clean
 # }}}
 
@@ -57,24 +60,7 @@ staticlib: $(OBJECTS)
 	# 'r' means to insert with replacement
 	# 'c' means to create a new archive
 	# 's' means to write an index
-	$(AR) rcs $(LIB).a $(OBJECTS)
-# }}}
-
-# install {{{
-install: $(EXEC) staticlib
-	mkdir -p $(DESTDIR)$(PREFIX)/bin
-	mkdir -p $(DESTDIR)$(PREFIX)/lib
-	# mkdir -p $(DESTDIR)$(PREFIX)/share/man/man1
-	cp -f $(EXEC) $(DESTDIR)$(PREFIX)/bin
-	cp -f $(LIB).a $(DESTDIR)$(PREFIX)/lib
-	# gzip < $(EXEC).1 > $(DESTDIR)$(PREFIX)/share/man/man1/$(EXEC).1.gz
-# }}}
-
-# uninstall {{{
-uninstall:
-	rm $(DESTDIR)$(PREFIX)/bin/$(EXEC)
-	rm $(DESTDIR)$(PREFIX)/bin/$(lib).a
-	# rm $(DESTDIR)$(PREFIX)/share/man/man1/$(EXEC).1.gz
+	$(AR) rcs $(BUILD)/$(LIB).a $(OBJECTS)
 # }}}
 
 # bear {{{

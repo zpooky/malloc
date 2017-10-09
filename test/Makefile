@@ -1,16 +1,19 @@
 # Makefile
 # Declaration of variables
 CXX = g++
-override CXXFLAGS += -enable-frame-pointers -std=gnu++14 -Wall -Wextra -ggdb -fno-strict-aliasing -Wpointer-arith
 PROJECT_ROOT = ..
+SUT_DIR = build_test
 GTEST_ROOT = $(PROJECT_ROOT)/external/googletest/googletest
 HEADER_DIRS = -I$(GTEST_ROOT)/include -I$(PROJECT_ROOT) -I$(PROJECT_ROOT)/external
-LDLIBS = -L$(GTEST_ROOT)/make -lgtest_main -lpthread -L$(PROJECT_ROOT) -lsut
+LDLIBS = -L$(GTEST_ROOT)/make -lgtest_main -lpthread -L$(PROJECT_ROOT)/$(SUT_DIR) -lsut
+override CXXFLAGS += $(HEADER_DIRS) -enable-frame-pointers -std=gnu++14 -Wall -Wextra -ggdb -fno-strict-aliasing -Wpointer-arith
+BUILD = build
 
 # File names
 EXEC = thetest
 SOURCES = $(wildcard *.cpp)
-OBJECTS = $(SOURCES:.cpp=.o)
+OBJECTS = $(patsubst %.cpp, $(BUILD)/%.o, $(SOURCES))
+DEPENDS = $(OBJECTS:.o=.d)
 
 .PHONY: test all clean gtest sut
 
@@ -24,14 +27,27 @@ $(EXEC): gtest $(OBJECTS)
 # }}}
 
 # To obtain object files
-%.o: %.cpp
-	$(CXX) -c $(CXXFLAGS) $(HEADER_DIRS) $< -o $@
+-include $(DEPENDS)
+
+$(BUILD)/%.o: %.cpp
+	mkdir -p $(BUILD)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -MMD -c $< -o $@
 # }}}
 
 # clean {{{
 clean:
 	rm -f $(EXEC) $(OBJECTS)
 	rm -f $(PROJECT_ROOT)/libsut.a
+# }}}
+
+# clean {{{
+clean:
+	# clean test binaries
+	rm -f $(EXEC) $(OBJECTS) $(DEPENDS)
+	# Clean sut binaries
+	rm -f $(PROJECT_ROOT)/$(SUT_DIR)/*.a
+	rm -f $(PROJECT_ROOT)/$(SUT_DIR)/*.d
+	rm -f $(PROJECT_ROOT)/$(SUT_DIR)/*.o
 # }}}
 
 # gtest {{{
@@ -43,7 +59,10 @@ gtest:
 
 # sut {{{
 sut:
-	$(MAKE) LIB=libsut CXXFLAGS+=-DSP_TEST -C $(PROJECT_ROOT) staticlib
+	# Build sut binaries and put result in $(SUT_DIR) directory to differentiate the build for test binaries with regular binaries.
+	# Define the SP_TEST preprocessor macro
+	# The resulting static library will be called libsut
+	$(MAKE) BUILD=$(SUT_DIR) LIB=libsut CXXFLAGS+=-DSP_TEST -C $(PROJECT_ROOT) staticlib
 # }}}
 
 # test {{{
