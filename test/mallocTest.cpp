@@ -152,7 +152,6 @@ malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
       void *ptr = std::get<0>(c);
       ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
       ASSERT_TRUE(sp_free(ptr));
-      ASSERT_FALSE(sp_free(ptr));
     }
   });
 
