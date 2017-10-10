@@ -121,9 +121,7 @@ perform_free(header::Extent *ext, std::size_t idx) noexcept {
   // else concurrently made the same change, or a double free).
   // printf("reserved.set(%zu, false): ", idx);
   if (!ext->reserved.set(idx, false)) {
-    // printf("false\n");
     // double free is a runtime fault
-    assert(false);
     return false;
   }
   // printf("true\n");
