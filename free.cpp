@@ -53,6 +53,7 @@ node_index_of(header::Node *node, void *ptr) noexcept {
     // TODO make better
     while (it < data_end) {
       if (it == search) {
+        // TODO assert index < int32_t::max
         return index;
       }
       ++index;
@@ -113,13 +114,19 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
 
 static bool
 perform_free(header::Extent *ext, std::size_t idx) noexcept {
-  assert(ext != nullptr);
+  assert(ext);
   assert(idx < header::Extent::MAX_BUCKETS);
 
+  // TODO the set function should fail if the action was made no change(someone
+  // else concurrently made the same change, or a double free).
+  // printf("reserved.set(%zu, false): ", idx);
   if (!ext->reserved.set(idx, false)) {
+    // printf("false\n");
     // double free is a runtime fault
     assert(false);
+    return false;
   }
+  // printf("true\n");
 
   return true;
 }
@@ -188,9 +195,9 @@ free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
         index = 0;
       }
 
-      int nodeIdx = node_index_of(current, search);
+      const std::int32_t nodeIdx = node_index_of(current, search);
       if (nodeIdx != -1) {
-        assert(head != nullptr);
+        assert(head);
         index += nodeIdx;
 
         header::Extent *const extent = header::extent(head);
@@ -231,16 +238,18 @@ free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
               //    reclaim
             }
           } /*is_empty*/
-        }   /*perform_free*/
 
-        return FreeCode::FREED;
-      }
+          return FreeCode::FREED;
+        } /*perform_free*/
+
+        return FreeCode::DOUBLE_FREE;
+      } // nodeIdx
       index += node_indecies_in(current);
 
       parent = current;
       goto start;
-    }
-  } /*shared*/
+    } // current
+  }   /*shared*/
 
   return FreeCode::NOT_FOUND;
 }
@@ -263,8 +272,8 @@ free(local::PoolsRAII &pools, void *const ptr) noexcept {
       recycledExtent);
 
   FreeCode result = res.get_or(FreeCode::NOT_FOUND);
-  if (result == FreeCode::NOT_FOUND) {
-    return FreeCode::NOT_FOUND;
+  if (result == FreeCode::NOT_FOUND || result == FreeCode::DOUBLE_FREE) {
+    return result;
   }
 
   // FREED_RECLAIM in this context means that the Extent was reclaimed
@@ -292,7 +301,7 @@ free(local::Pools &pools, void *const ptr) noexcept {
   return free(*pools.pools, ptr);
 } // shared::free()
 
-std::size_t
+util::maybe<std::size_t>
 usable_size(local::PoolsRAII &pools, void *const ptr) noexcept {
   using Arg = std::nullptr_t;
   Arg arg = nullptr;
@@ -310,10 +319,10 @@ usable_size(local::PoolsRAII &pools, void *const ptr) noexcept {
             a);
       },
       arg);
-  return res.get_or(std::size_t(0));
+  return res;
 } // shared::usable_size()
 
-std::size_t
+util::maybe<std::size_t>
 usable_size(local::Pools &pools, void *const ptr) noexcept {
   assert(pools.pools);
   return usable_size(*pools.pools, ptr);

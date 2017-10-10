@@ -93,23 +93,25 @@ enqueue(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
 
 namespace global {
 
-bool
+shared::FreeCode
 free(void *const ptr) noexcept {
+  using shared::FreeCode;
+
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
   next:
     if (current) {
       const auto result = shared::free(*current, ptr);
-      if (result != shared::FreeCode::NOT_FOUND) {
-        if (result == shared::FreeCode::FREED_RECLAIM) {
+      if (result != FreeCode::NOT_FOUND) {
+        if (result == FreeCode::FREED_RECLAIM) {
           recycle_pool(internal_a, shared_guard, current);
         } else /*FreeCode::FREED*/ {
           // TODO enqueue frequently used Pool, but how to handle reference to
           // reclaimed pools?
         }
 
-        return true;
+        return result;
       }
       current = current->next;
       goto next;
@@ -118,25 +120,25 @@ free(void *const ptr) noexcept {
     assert(false);
   }
 
-  return false;
+  return FreeCode::NOT_FOUND;
 } // global::free()
 
-std::size_t
+util::maybe<std::size_t>
 usable_size(void *const ptr) noexcept {
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
   next:
     if (current) {
-      std::size_t result = shared::usable_size(*current, ptr);
-      if (result != 0) {
+      auto result = shared::usable_size(*current, ptr);
+      if (result) {
         return result;
       }
       current = current->next;
       goto next;
     }
   }
-  return 0;
+  return {};
 }
 
 util::maybe<void *>

@@ -401,6 +401,7 @@ sp_malloc(std::size_t length) noexcept {
         return result;
       }
 
+      assert(false);
       // out of memory
       return nullptr;
     }
@@ -417,16 +418,14 @@ sp_free(void *const ptr) noexcept {
     return true;
   }
 
+  using shared::FreeCode;
+
   auto result = shared::free(local_pools, ptr);
-  if (result == shared::FreeCode::NOT_FOUND) {
-    // not the same free:ing as malloc:ing thread
-    if (!global::free(ptr)) {
-      // unknown address
-      assert(false);
-      return false;
-    }
+  if (result == FreeCode::NOT_FOUND) {
+    result = global::free(ptr);
   }
-  return true;
+
+  return result == FreeCode::FREED || result == FreeCode::FREED_RECLAIM;
 } // ::sp_free()
 
 std::size_t
@@ -435,12 +434,13 @@ sp_usable_size(void *const ptr) noexcept {
     return 0;
   }
 
-  std::size_t result = shared::usable_size(local_pools, ptr);
-  if (result == 0) {
-    result = global::usable_size(ptr);
+  auto lresult = shared::usable_size(local_pools, ptr);
+  if (lresult) {
+    return lresult.get();
   }
 
-  return result;
+  auto result = global::usable_size(ptr);
+  return result.get_or(0);
 } // ::sp_usable_size()
 
 void *
@@ -454,10 +454,11 @@ sp_realloc(void *const ptr, std::size_t length) noexcept {
     return nullptr;
   }
 
-  util::maybe<void *> result = shared::realloc(local_pools, ptr, length);
-  if (result) {
-    return result.get();
+  auto lresult = shared::realloc(local_pools, ptr, length);
+  if (lresult) {
+    return lresult.get();
   }
 
-  return global::realloc(ptr, length).get_or(nullptr);
-}
+  auto result = global::realloc(ptr, length);
+  return result.get_or(nullptr);
+} //::sp_realloc

@@ -36,12 +36,6 @@ $(BUILD)/%.o: %.cpp
 
 # clean {{{
 clean:
-	rm -f $(EXEC) $(OBJECTS)
-	rm -f $(PROJECT_ROOT)/libsut.a
-# }}}
-
-# clean {{{
-clean:
 	# clean test binaries
 	rm -f $(EXEC) $(OBJECTS) $(DEPENDS)
 	# Clean sut binaries

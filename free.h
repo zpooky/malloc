@@ -5,15 +5,14 @@
 
 namespace shared {
 
-enum class FreeCode { FREED, FREED_RECLAIM, NOT_FOUND };
 FreeCode
 free(local::PoolsRAII &, void *) noexcept;
 FreeCode
 free(local::Pools &, void *) noexcept;
 
-std::size_t
+util::maybe<std::size_t>
 usable_size(local::PoolsRAII &, void *) noexcept;
-std::size_t
+util::maybe<std::size_t>
 usable_size(local::Pools &, void *) noexcept;
 
 util::maybe<void *>

@@ -3,12 +3,14 @@
 
 #include "shared.h"
 
+/*
+ * non-Thread local operations
+ */
 namespace global {
-/*non-Thread local free*/
-bool
+shared::FreeCode
 free(void *) noexcept;
 
-std::size_t
+util::maybe<std::size_t>
 usable_size(void *) noexcept;
 
 util::maybe<void *>

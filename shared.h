@@ -199,4 +199,9 @@ pools_find(Pools &pools, void *search, PFind<Res, Arg> f, Arg &arg) noexcept {
 }
 } // namespace local
 
+namespace shared {
+
+enum class FreeCode { FREED, FREED_RECLAIM, NOT_FOUND, DOUBLE_FREE };
+} // namespace shared
+
 #endif
