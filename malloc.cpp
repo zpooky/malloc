@@ -23,6 +23,7 @@
 // - from a pointer get the node header and in the node header get a pointer to
 // the extent header to support random access free(). Maybe have a tag in the
 // node header like Thread id to make global::free easier.
+// `node::Header header_for(ptr);`
 
 // - use memmap instead of sbrk to more freely allow for reclamation of
 // large unused ranges of global free-list memory. Without being blocked by a
@@ -85,8 +86,9 @@
 // necessary to walk through the Nodes
 //    - on PoolsRAII level
 //    - on Pool level
-// - a optimized collections of Pool:s used for free:ing in addition to the
-// Pool[60] used for allocating
+// - An optimized collections of Pool:s used for free:ing in addition to the
+//   Pool[60] used for allocating
+// - skip `this` when global::free()
 
 // {{{
 static thread_local local::Pools local_pools;
