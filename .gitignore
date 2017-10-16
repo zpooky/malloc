@@ -40,7 +40,6 @@ GRTAGS
 GTAGS
 main
 tmp.*
-compile_commands.json
 *.stackdump
 thetest
 .clang_complete
