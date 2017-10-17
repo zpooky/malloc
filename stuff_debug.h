@@ -4,7 +4,7 @@
 namespace debug {
 
 std::size_t
-count_unclaimed_pools() noexcept;
+stuff_count_unclaimed_pools() noexcept;
 
 }
 

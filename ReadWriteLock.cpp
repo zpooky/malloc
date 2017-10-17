@@ -97,9 +97,9 @@ print_state(const char *ctx, const uint64_t state) {
   // printf("s%lu,%d,%d",get_shared(state))
   printf("%s"
          // "[%p]:"
-         "s[\e[95m%s\e[0m]"
-         "pre[\e[92m%s\e[0m]"
-         "ex[\e[93m%s\e[0m]\n",
+         "s[\033[95m%s\033[0m]"
+         "pre[\033[92m%s\033[0m]"
+         "ex[\033[93m%s\033[0m]\n",
          context, //
          // #<{(|C[p % sizeof(C)],|)}># p, //
          cshared, cprepare, cex);
@@ -149,11 +149,11 @@ retry:
     if (!m_state.compare_exchange_weak(cmp, try_share)) {
       goto retry;
     }
-    print_state("\e[41m \e[0mtry_shared_lock_before", cmp);
-    print_state("\e[41m \e[0mtry_shared_lock_after[sucess]", try_share);
+    print_state("\033[41m \033[0mtry_shared_lock_before", cmp);
+    print_state("\033[41m \033[0mtry_shared_lock_after[sucess]", try_share);
     return true;
   }
-  print_state("\e[41m \e[0mtry_shared_lock_after[failed]", cmp);
+  print_state("\033[41m \033[0mtry_shared_lock_after[failed]", cmp);
   return false;
 }
 
@@ -176,11 +176,11 @@ retry:
   const uint64_t try_unshare = new_shared | prepare | exclusive;
 
   if (!m_state.compare_exchange_weak(cmp, try_unshare)) {
-    print_state("\e[41m \e[0mtry_shared_unlock_retry", cmp);
+    print_state("\033[41m \033[0mtry_shared_unlock_retry", cmp);
     goto retry;
   }
-  print_state("\e[41m \e[0mtry_shared_unlock_before", cmp);
-  print_state("\e[41m \e[0mtry_shared_unlock_after", try_unshare);
+  print_state("\033[41m \033[0mtry_shared_unlock_before", cmp);
+  print_state("\033[41m \033[0mtry_shared_unlock_after", try_unshare);
 }
 
 void
@@ -207,11 +207,11 @@ retry:
   uint64_t try_exclusive = new_shared | uint64_t(0x00) | uint64_t(0x01);
 
   if (!m_state.compare_exchange_weak(cmp, try_exclusive)) {
-    print_state("\e[44m \e[0meager_exclusive_lock_retry", cmp);
+    print_state("\033[44m \033[0meager_exclusive_lock_retry", cmp);
     goto retry;
   }
-  print_state("\e[44m \e[0meager_exclusive_lock_before", cmp);
-  print_state("\e[44m \e[0meager_exclusive_lock_after", try_exclusive);
+  print_state("\033[44m \033[0meager_exclusive_lock_before", cmp);
+  print_state("\033[44m \033[0meager_exclusive_lock_after", try_exclusive);
 
   while (m_state.load(std::memory_order_acquire) != uint64_t(0x01))
     ;
@@ -282,11 +282,11 @@ retry:
   const uint64_t try_unexclusive = shared | prepare | uint64_t(0x00);
 
   if (!m_state.compare_exchange_weak(cmp, try_unexclusive)) {
-    print_state("\e[44m \e[0meager_exclusive_unlock_retry", cmp);
+    print_state("\033[44m \033[0meager_exclusive_unlock_retry", cmp);
     goto retry;
   }
-  print_state("\e[44m \e[0meager_exclusive_unlock_before", cmp);
-  print_state("\e[44m \e[0meager_exclusive_unlock_after", try_unexclusive);
+  print_state("\033[44m \033[0meager_exclusive_unlock_before", cmp);
+  print_state("\033[44m \033[0meager_exclusive_unlock_after", try_unexclusive);
 }
 void
 ReadWriteLock::prepare_lock(int8_t shared_dec) noexcept {
@@ -316,8 +316,8 @@ retry:
     if (!m_state.compare_exchange_weak(cmp, try_prepare)) {
       goto retry;
     }
-    print_state("\e[42m \e[0mtry_prepare_lock_before", cmp);
-    print_state("\e[42m \e[0mtry_prepare_lock_after[success]", try_prepare);
+    print_state("\033[42m \033[0mtry_prepare_lock_before", cmp);
+    print_state("\033[42m \033[0mtry_prepare_lock_after[success]", try_prepare);
     return true;
   }
   return false;

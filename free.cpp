@@ -347,6 +347,9 @@ realloc(local::PoolsRAII &pools, void *const ptr, std::size_t length) noexcept {
                 void *nptr = malloc(length); // TODO deadlock!
                 if (nptr) {
                   memcpy(nptr, ptr, head->bucket_size);
+                } else {
+                  // runtime fault
+                  assert(false);
                 }
                 perform_free(ext, idx);
 

@@ -201,7 +201,7 @@ release_pool(local::PoolsRAII *pool) noexcept {
 namespace debug {
 
 std::size_t
-count_unclaimed_pools() noexcept {
+stuff_count_unclaimed_pools() noexcept {
   std::size_t result = 0;
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {

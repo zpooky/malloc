@@ -135,7 +135,6 @@ next_node(header::Node *const start) noexcept {
  */
 static void *
 pointer_at(header::Node *start, std::size_t index) noexcept {
-  // printf("pointer_at(start,index(%zu))\n", index);
   // Pool[Extent[Node[nodeHDR,extHDR],Node[nodeHDR]...]...]
   // The first NodeHeader in the extent contains data while intermediate
   // NodeHeader does not containt this data.
