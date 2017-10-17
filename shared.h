@@ -11,6 +11,47 @@
 #define SP_MALLOC_CACHE_LINE_SIZE 64
 #define SP_ALLOC_INITIAL_ALLOC std::size_t(SP_MALLOC_PAGE_SIZE)
 
+namespace sp {
+#define SIZE_TYPE(NAME)                                                        \
+  struct NAME {                                                                \
+    const std::size_t data;                                                    \
+    constexpr NAME(std::size_t d) noexcept                                     \
+        : data(d) {                                                            \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator==(const std::size_t &o) const noexcept {                          \
+      return data == o;                                                        \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator!=(const std::size_t &o) const noexcept {                          \
+      return !operator==(o);                                                   \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator+(const std::size_t &o) const noexcept {                           \
+      return NAME{data + o};                                                   \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator>(const std::size_t &o) const noexcept {                           \
+      return data > o;                                                         \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator>=(const std::size_t &o) const noexcept {                          \
+      return data >= o;                                                        \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator%(const std::size_t &o) const noexcept {                           \
+      return data % o;                                                         \
+    }                                                                          \
+    constexpr NAME operator*(const std::size_t &o) const noexcept {            \
+      return data * o;                                                         \
+    }                                                                          \
+  }
+
+SIZE_TYPE(bucket_size);
+SIZE_TYPE(node_size);
+
+} // namespace sp
+
 /*
  *===========================================================
  *========HEADER=============================================

@@ -97,26 +97,20 @@ static thread_local local::Pools local_pools;
 namespace local {
 
 static std::size_t
-pool_index(std::size_t size) noexcept {
-  assert(size % 8 == 0);
-  return util::trailing_zeros(size) - std::size_t(3);
+pool_index(sp::bucket_size sz) noexcept {
+  assert(sz % 8 == 0);
+  return util::trailing_zeros(sz) - std::size_t(3);
 } // local::pool_index()
 
 static local::Pool &
-pool_for(local::Pools &pools, std::size_t sz) noexcept {
+pool_for(local::Pools &pools, std::bucket_size sz) noexcept {
   const std::size_t index = pool_index(sz);
   return pools[index];
 } // local::pool_for()
 
 static void *
-alloc(local::Pools &pools, std::size_t sz) noexcept {
-  // printf("local::alloc(%zu)\n", sz);
-  // TODO local alloc
-  void *const result = global::alloc(sz);
-  if (result) {
-    pools.pools->total_alloc.fetch_add(sz);
-  }
-  return result;
+alloc(local::Pools &pools, sp::node_size sz) noexcept {
+  return nullptr;
 } // local::alloc()
 
 /*
@@ -214,18 +208,20 @@ reserve(header::Node *const node) noexcept {
   return nullptr;
 } // local::reserve()
 
-static std::size_t
-calc_min_node(std::size_t bucketSz) noexcept {
+static sp::node_size
+calc_min_node(sp::bucket_size bucketSz) noexcept {
   assert(bucketSz >= 8);
   assert(bucketSz % 8 == 0);
 
-  constexpr std::size_t min_alloc = SP_MALLOC_PAGE_SIZE;
-  constexpr std::size_t max_alloc = min_alloc * 4;
-  if (bucketSz + header::SIZE > max_alloc) {
-    return util::round_up(bucketSz + header::SIZE, min_alloc);
+  constexpr sp::node_size min_alloc(SP_MALLOC_PAGE_SIZE);
+  constexpr sp::node_size max_alloc(min_alloc * 4);
+
+  constexpr sp::bucket_size atLeast(bucketSz + header::SIZE);
+  if (atLeast > max_alloc) {
+    return util::round_up(atLeast, min_alloc);
   }
 
-  constexpr std::size_t lookup[] = //
+  constexpr sp::node_size lookup[] = //
       {
           //
           /*___8:*/ min_alloc,
@@ -249,9 +245,9 @@ calc_min_node(std::size_t bucketSz) noexcept {
  * desc  - Used by malloc
  */
 static header::Node *
-alloc_extent(local::Pools &pools, std::size_t bucketSz) noexcept {
+alloc_extent(local::Pools &pools, sp::bucket_size bucketSz) noexcept {
   // printf("alloc_extent(%zu)\n", bucketSz);
-  std::size_t nodeSz = calc_min_node(bucketSz);
+  sp::node_size nodeSz = calc_min_node(bucketSz);
   void *const raw = alloc(pools, nodeSz);
   if (raw) {
     return header::init_node(raw, nodeSz, bucketSz);
@@ -266,7 +262,7 @@ should_expand_extent(header::Node *) {
 
 static header::Node *
 enqueue_new_extent(local::Pools &pools, std::atomic<header::Node *> &w,
-                   std::size_t bucketSz) noexcept {
+                   sp::bucket_size bucketSz) noexcept {
   header::Node *const current = local::alloc_extent(pools, bucketSz);
   if (current) {
     // TODO some kind of fence to ensure construction before publication
@@ -344,6 +340,20 @@ malloc_count_alloc(std::size_t sz) {
 }
 } // namespace debug
 #endif
+/*
+ *===========================================================
+ */
+static void *
+alloc(local::Pools &pools, sp::bucket_size sz) noexcept {
+  sp::node_size nodeSz = void *result = local::alloc(pools, sz);
+  if (!result) {
+    result = global::alloc(sz);
+    if (result) {
+      pools.pools->total_alloc.fetch_add(sz);
+    }
+  }
+  return result;
+}
 /*
  *===========================================================
  *=======PUBLIC==============================================
