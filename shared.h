@@ -11,11 +11,15 @@
 #define SP_MALLOC_CACHE_LINE_SIZE 64
 #define SP_ALLOC_INITIAL_ALLOC std::size_t(SP_MALLOC_PAGE_SIZE)
 
+#define SP_TYPED_NUMERIC
+#ifdef SP_TYPED_NUMERIC
+
 namespace sp {
+
 #define SIZE_TYPE(NAME)                                                        \
   struct NAME {                                                                \
-    const std::size_t data;                                                    \
-    constexpr NAME(std::size_t d) noexcept                                     \
+    std::size_t data;                                                          \
+    explicit constexpr NAME(std::size_t d) noexcept                            \
         : data(d) {                                                            \
     }                                                                          \
     constexpr bool                                                             \
@@ -26,9 +30,22 @@ namespace sp {
     operator!=(const std::size_t &o) const noexcept {                          \
       return !operator==(o);                                                   \
     }                                                                          \
+    constexpr NAME &                                                           \
+    operator=(const std::size_t &o) noexcept {                                 \
+      data = o;                                                                \
+      return *this;                                                            \
+    }                                                                          \
     constexpr NAME                                                             \
     operator+(const std::size_t &o) const noexcept {                           \
       return NAME{data + o};                                                   \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator-(const std::size_t &o) const noexcept {                           \
+      return NAME{data - o};                                                   \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator-(const NAME &o) const noexcept {                                  \
+      return operator-(o.data);                                                \
     }                                                                          \
     constexpr bool                                                             \
     operator>(const std::size_t &o) const noexcept {                           \
@@ -38,19 +55,70 @@ namespace sp {
     operator>=(const std::size_t &o) const noexcept {                          \
       return data >= o;                                                        \
     }                                                                          \
+    constexpr bool                                                             \
+    operator<(const std::size_t &o) const noexcept {                           \
+      return data < o;                                                         \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator<(const NAME &o) const noexcept {                                  \
+      return operator<(o.data);                                                \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator<=(const std::size_t &o) const noexcept {                          \
+      return data <= o;                                                        \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator/(const std::size_t &o) const noexcept {                           \
+      return NAME{data / o};                                                   \
+    }                                                                          \
     constexpr NAME                                                             \
     operator%(const std::size_t &o) const noexcept {                           \
-      return data % o;                                                         \
+      return NAME{data % o};                                                   \
     }                                                                          \
     constexpr NAME operator*(const std::size_t &o) const noexcept {            \
-      return data * o;                                                         \
+      return NAME{data * o};                                                   \
     }                                                                          \
-  }
+    constexpr explicit operator std::size_t() const noexcept {                 \
+      return data;                                                             \
+    }                                                                          \
+  };                                                                           \
+  static_assert(sizeof(NAME) == sizeof(std::size_t), "");                      \
+  static_assert(alignof(NAME) == alignof(std::size_t), "")
 
 SIZE_TYPE(bucket_size);
 SIZE_TYPE(node_size);
+SIZE_TYPE(buckets);
+SIZE_TYPE(index);
 
 } // namespace sp
+
+bool
+operator<(const sp::index &, const sp::buckets &);
+
+sp::buckets
+operator/(const sp::node_size &, const sp::bucket_size &);
+
+std::ptrdiff_t operator*(const sp::index &, const sp::bucket_size &);
+
+sp::index
+operator-(const sp::index &, const sp::buckets &);
+
+sp::index
+operator+(const sp::index &, const sp::buckets &);
+
+bool
+operator>(const sp::bucket_size &, const sp::node_size &);
+
+#else
+
+namespace sp {
+using bucket_size = std::size_t;
+using node_size = std::size_t;
+using buckets = std::size_t;
+using index = std::size_t;
+} // namespace sp
+
+#endif
 
 /*
  *===========================================================
@@ -82,7 +150,8 @@ free(void *const start) noexcept;
 struct Node;
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
-  static constexpr std::size_t MAX_BUCKETS = 512;
+  static inline constexpr std::size_t MAX_BUCKETS = 512;
+
   sp::Bitset<MAX_BUCKETS, std::uint64_t> reserved;
 
   Extent() noexcept;
@@ -108,15 +177,15 @@ struct /*alignas(SP_MALLOC_CACHE_LINE_SIZE)*/ Node { //
   // next node
   std::atomic<Node *> next;
   // size of bucket
-  const std::size_t bucket_size;
+  const sp::bucket_size bucket_size;
   // size of the node include the header itself sizeof(Node[NodeHDR,...])
-  const std::size_t node_size;
+  const sp::node_size node_size;
   // union {
   //   struct {
   // number of buckets available
 
   // only present in NodeType::HEAD
-  std::size_t buckets;
+  sp::buckets buckets;
   // } head;
   // struct {
   // } intermediate;
@@ -125,18 +194,17 @@ struct /*alignas(SP_MALLOC_CACHE_LINE_SIZE)*/ Node { //
   // TODO const std::size_t offset; for where the first bucket start
   uint8_t pad1[15];
 
-  Node(NodeType, std::size_t node_size, std::size_t bucket_size,
-       std::size_t buckets) noexcept;
+  Node(NodeType, sp::node_size, sp::bucket_size, sp::buckets) noexcept;
 };
 Node *
-init_node(void *const raw, std::size_t size, std::size_t bucketSz) noexcept;
+init_extent(void *const, sp::node_size, sp::bucket_size) noexcept;
 Node *
 node(void *const start) noexcept;
 
 static constexpr std::size_t SIZE(sizeof(header::Node) +
                                   sizeof(header::Extent));
 
-std::size_t
+sp::node_size
 node_data_size(Node *) noexcept;
 std::uintptr_t
 node_data_start(Node *) noexcept;

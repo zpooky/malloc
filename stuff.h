@@ -10,7 +10,7 @@ namespace global {
 shared::FreeCode
 free(void *) noexcept;
 
-util::maybe<std::size_t>
+util::maybe<sp::bucket_size>
 usable_size(void *) noexcept;
 
 util::maybe<void *>

@@ -122,10 +122,11 @@ public:
     return def;
   }
 
-  T
-  get_or(T &&def) noexcept {
+  template <typename Out>
+  Out
+  get_or(Out &&def) noexcept {
     if (present) {
-      return get();
+      return static_cast<Out>(get());
     }
     return def;
   }

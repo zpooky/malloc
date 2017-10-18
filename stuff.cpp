@@ -123,7 +123,7 @@ free(void *const ptr) noexcept {
   return FreeCode::NOT_FOUND;
 } // global::free()
 
-util::maybe<std::size_t>
+util::maybe<sp::bucket_size>
 usable_size(void *const ptr) noexcept {
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {

@@ -14,11 +14,11 @@ node_in_range(const header::Node *const node, void *const ptr) noexcept {
   assert(ptr);
 
   const uintptr_t start = reinterpret_cast<uintptr_t>(node);
-  const uintptr_t end = start + node->node_size;
+  const uintptr_t end = start + std::size_t(node->node_size);
 
   const uintptr_t compare = reinterpret_cast<uintptr_t>(ptr);
   return compare >= start && compare < end;
-} // in_node_range()
+} // node_in_range()
 
 template <typename Res, typename Arg>
 static util::maybe<Res>
@@ -40,14 +40,14 @@ node_for(local::Pool &pool, void *search, NodeFor<Res, Arg> f,
 } // node_for()
 
 static std::int32_t
-node_index_of(header::Node *node, void *ptr) noexcept {
-  const std::size_t data_size = header::node_data_size(node);
-  const uintptr_t data_start = header::node_data_start(node);
-  const uintptr_t data_end = data_start + data_size;
-  const uintptr_t search = reinterpret_cast<uintptr_t>(ptr);
+node_index_of(header::Node *const node, void *const ptr) noexcept {
+  const sp::node_size data_size = header::node_data_size(node);
+  const std::uintptr_t data_start = header::node_data_start(node);
+  const std::uintptr_t data_end = data_start + std::size_t(data_size);
+  const std::uintptr_t search = reinterpret_cast<uintptr_t>(ptr);
 
   if (search >= data_start && search < data_end) {
-    uintptr_t it = data_start;
+    std::uintptr_t it = data_start;
     std::size_t index = 0;
 
     // TODO make better
@@ -57,26 +57,26 @@ node_index_of(header::Node *node, void *ptr) noexcept {
         return index;
       }
       ++index;
-      it += node->bucket_size;
+      it += std::size_t(node->bucket_size);
     }
     assert(false);
   }
   return -1;
 }
 
-static std::size_t
-node_indecies_in(header::Node *node) noexcept {
+static sp::buckets
+node_buckets(header::Node *const node) noexcept {
   if (node->type != header::NodeType::SPECIAL) {
-    const std::size_t result = header::node_data_size(node);
+    const sp::node_size result = header::node_data_size(node);
 
-    return std::size_t(result / node->bucket_size);
+    return result / node->bucket_size;
   }
 
-  return 0;
+  return sp::buckets(0);
 }
 
 template <typename Res, typename Arg>
-using ExtFor = Res (*)(header::Node *, std::size_t, Arg &);
+using ExtFor = Res (*)(header::Node *, sp::index, Arg &);
 
 template <typename Res, typename Arg>
 static util::maybe<Res>
@@ -86,23 +86,23 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
   if (guard) {
     header::Node *current = &pool.start;
     header::Node *extent = nullptr;
-    std::size_t index{0};
+    sp::index index{0};
   start:
     if (current) {
       if (current->type == header::NodeType::HEAD) {
         extent = current;
-        index = 0;
+        index = std::size_t(0);
       }
 
-      int nodeIdx = node_index_of(current, search);
+      std::int32_t nodeIdx = node_index_of(current, search);
       if (nodeIdx != -1) {
         assert(extent != nullptr);
-        index += nodeIdx;
+        index = index + nodeIdx;
         assert(index < header::Extent::MAX_BUCKETS);
 
         return util::maybe<Res>(f(extent, index, arg));
       }
-      index += node_indecies_in(current);
+      index = index + node_buckets(current);
 
       current = current->next.load(std::memory_order_acquire);
       goto start;
@@ -113,21 +113,17 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
 } // extent_for()
 
 static bool
-perform_free(header::Extent *ext, std::size_t idx) noexcept {
+perform_free(header::Extent *ext, sp::index idx) noexcept {
   assert(ext);
   assert(idx < header::Extent::MAX_BUCKETS);
 
-  // TODO the set function should fail if the action was made no change(someone
-  // else concurrently made the same change, or a double free).
-  // printf("reserved.set(%zu, false): ", idx);
-  if (!ext->reserved.set(idx, false)) {
+  if (!ext->reserved.set(std::size_t(idx), false)) {
     // double free is a runtime fault
     return false;
   }
-  // printf("true\n");
 
   return true;
-}
+} // shared::perform_free()
 
 static header::Node *
 find_parent(header::Node *start, header::Node *const child) noexcept {
@@ -168,9 +164,10 @@ recycle_extent(header::Node *head) noexcept {
   std::size_t recycled(0);
 start:
   header::Node *next = head->next.load();
-  recycled += head->node_size;
+  const std::size_t node_size(head->node_size);
+  recycled += node_size;
 
-  global::dealloc(head, head->node_size);
+  global::dealloc(head, node_size);
   if (next) {
     head = next;
     goto start;
@@ -184,7 +181,7 @@ free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
   if (shared_guard) {
     header::Node *parent = &pool.start;
     header::Node *head = nullptr;
-    std::size_t index{0};
+    sp::index index{0};
   start:
     header::Node *current = parent->next.load(std::memory_order_acquire);
     if (current) {
@@ -193,10 +190,10 @@ free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
         index = 0;
       }
 
-      const std::int32_t nodeIdx = node_index_of(current, search);
+      std::int32_t nodeIdx = node_index_of(current, search);
       if (nodeIdx != -1) {
         assert(head);
-        index += nodeIdx;
+        index = index + nodeIdx;
 
         header::Extent *const extent = header::extent(head);
         if (perform_free(extent, index)) {
@@ -242,7 +239,7 @@ free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
 
         return FreeCode::DOUBLE_FREE;
       } // nodeIdx
-      index += node_indecies_in(current);
+      index = index + node_buckets(current);
 
       parent = current;
       goto start;
@@ -299,19 +296,18 @@ free(local::Pools &pools, void *const ptr) noexcept {
   return free(*pools.pools, ptr);
 } // shared::free()
 
-util::maybe<std::size_t>
+util::maybe<sp::bucket_size>
 usable_size(local::PoolsRAII &pools, void *const ptr) noexcept {
   using Arg = std::nullptr_t;
   Arg arg = nullptr;
 
-  auto res = local::pools_find<std::size_t, Arg>(
+  auto res = local::pools_find<sp::bucket_size, Arg>(
       pools, ptr, //
       [](local::Pool &pool, void *search,
-         Arg &a) -> util::maybe<std::size_t> { //
-        return node_for<std::size_t, Arg>(
+         Arg &a) -> util::maybe<sp::bucket_size> { //
+        return node_for<sp::bucket_size, Arg>(
             pool, search, //
-            [](header::Node *current, Arg &) -> std::size_t {
-              //
+            [](header::Node *current, Arg &) -> sp::bucket_size {
               return current->bucket_size;
             },
             a);
@@ -320,7 +316,7 @@ usable_size(local::PoolsRAII &pools, void *const ptr) noexcept {
   return res;
 } // shared::usable_size()
 
-util::maybe<std::size_t>
+util::maybe<sp::bucket_size>
 usable_size(local::Pools &pools, void *const ptr) noexcept {
   assert(pools.pools);
   return usable_size(*pools.pools, ptr);
@@ -336,7 +332,7 @@ realloc(local::PoolsRAII &pools, void *const ptr, std::size_t length) noexcept {
       [](local::Pool &pool, void *search, Arg &arg) {
         return extent_for<void *, Arg>(
             pool, search, //
-            [](header::Node *head, std::size_t idx, Arg &arg) {
+            [](header::Node *head, sp::index idx, Arg &arg) {
 
               std::size_t length = std::get<1>(arg);
               void *ptr = std::get<0>(arg);
@@ -346,7 +342,7 @@ realloc(local::PoolsRAII &pools, void *const ptr, std::size_t length) noexcept {
 
                 void *nptr = malloc(length); // TODO deadlock!
                 if (nptr) {
-                  memcpy(nptr, ptr, head->bucket_size);
+                  memcpy(nptr, ptr, std::size_t(head->bucket_size));
                 } else {
                   // runtime fault
                   assert(false);

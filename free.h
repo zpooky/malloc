@@ -10,9 +10,9 @@ free(local::PoolsRAII &, void *) noexcept;
 FreeCode
 free(local::Pools &, void *) noexcept;
 
-util::maybe<std::size_t>
+util::maybe<sp::bucket_size>
 usable_size(local::PoolsRAII &, void *) noexcept;
-util::maybe<std::size_t>
+util::maybe<sp::bucket_size>
 usable_size(local::Pools &, void *) noexcept;
 
 util::maybe<void *>

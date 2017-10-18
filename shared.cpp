@@ -6,6 +6,40 @@
 
 /*
  *===========================================================
+ *========SP=================================================
+ *===========================================================
+ */
+bool
+operator<(const sp::index &i, const sp::buckets &b) {
+  return i.operator<(b.data);
+}
+
+sp::buckets
+operator/(const sp::node_size &node, const sp::bucket_size &bucket) {
+  return sp::buckets((node.operator/(bucket.data)).data);
+}
+
+std::ptrdiff_t operator*(const sp::index &idx, const sp::bucket_size &bucket) {
+  return idx.operator*(bucket.data).data;
+}
+
+sp::index
+operator-(const sp::index &idx, const sp::buckets &b) {
+  return idx.operator-(b.data);
+}
+
+sp::index
+operator+(const sp::index &idx, const sp::buckets &b) {
+  return idx.operator+(b.data);
+}
+
+bool
+operator>(const sp::bucket_size &bs, const sp::node_size &ns) {
+  return bs.operator>(ns.data);
+}
+
+/*
+ *===========================================================
  *========HEADER=============================================
  *===========================================================
  */
@@ -81,12 +115,12 @@ Extent::Extent() noexcept //
     : reserved{false} {
 }
 
-static std::size_t
-calc_buckets(std::size_t extentSz, std::size_t bucketSz) noexcept {
+static sp::buckets
+calc_buckets(sp::node_size nodeSz, sp::bucket_size bucketSz) noexcept {
   assert(bucketSz > 0);
-  assert(extentSz > header::SIZE);
+  assert(nodeSz > header::SIZE);
 
-  return (extentSz - header::SIZE) / bucketSz;
+  return (nodeSz - header::SIZE) / bucketSz;
 }
 
 Extent *
@@ -109,8 +143,8 @@ is_empty(Extent *const ext) noexcept {
 // static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(sizeof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-Node::Node(NodeType t, std::size_t nodeSz, std::size_t bucketSz,
-           std::size_t p_buckets) noexcept //
+Node::Node(NodeType t, sp::node_size nodeSz, sp::bucket_size bucketSz,
+           sp::buckets p_buckets) noexcept //
     : pad0()
     , next{nullptr}
     , bucket_size(bucketSz)
@@ -121,19 +155,16 @@ Node::Node(NodeType t, std::size_t nodeSz, std::size_t bucketSz,
 } // Node()
 
 Node *
-init_node(void *const raw, std::size_t size, std::size_t bucketSz) noexcept {
+init_extent(void *const raw, sp::node_size size,
+            sp::bucket_size bucketSz) noexcept {
   assert(raw != nullptr);
   assert(size >= header::SIZE);
   assert(bucketSz > 0);
-  const std::size_t buckets = calc_buckets(size, bucketSz);
+  const sp::buckets buckets = calc_buckets(size, bucketSz);
   assert(buckets > 0);
-  // printf("init_node(ptr,size(%zu),bucketSz(%zu),buckets(%zu))\n", //
-  // size, bucketSz, buckets);
 
   Node *const nHdr = node(raw);
   new (nHdr) Node(NodeType::HEAD, size, bucketSz, buckets);
-  // printf("node(size(%zu),bucketSz(%zu),buckets(%zu))\n", //
-  //        nHdr->node_size, nHdr->bucket_size, nHdr->buckets);
 
   Extent *const eHdr = extent(nHdr);
   // memset(raw, 0, length);
@@ -150,15 +181,15 @@ node(void *const start) noexcept {
   return reinterpret_cast<Node *>(start);
 } // node()
 
-std::size_t
+sp::node_size
 node_data_size(Node *node) noexcept {
-  std::size_t result = node->node_size;
+  sp::node_size result = node->node_size;
   if (node->type == NodeType::HEAD) {
     assert(result >= header::SIZE);
-    result -= header::SIZE;
+    result = result - header::SIZE;
   } else if (node->type == NodeType::LINK) {
     assert(result >= sizeof(Node));
-    result -= sizeof(Node);
+    result = result - sizeof(Node);
   }
   return result;
 }
@@ -182,7 +213,8 @@ node_data_start(Node *node) noexcept {
 namespace local {
 // class Pool {{{
 Pool::Pool() noexcept
-    : start{header::NodeType::SPECIAL, 0, 0, 0}
+    : start{header::NodeType::SPECIAL, sp::node_size(0), sp::bucket_size(0),
+            sp::buckets(0)}
     , lock{} {
 }
 // }}}

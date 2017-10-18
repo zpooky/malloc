@@ -96,21 +96,39 @@ static thread_local local::Pools local_pools;
 
 namespace local {
 
+static sp::bucket_size
+bucket_size_for(std::size_t sz) noexcept {
+  return sp::bucket_size{util::round_even(sz)};
+}
+
 static std::size_t
 pool_index(sp::bucket_size sz) noexcept {
   assert(sz % 8 == 0);
-  return util::trailing_zeros(sz) - std::size_t(3);
+  return util::trailing_zeros(std::size_t(sz)) - std::size_t(3);
 } // local::pool_index()
 
 static local::Pool &
-pool_for(local::Pools &pools, std::bucket_size sz) noexcept {
+pool_for(local::Pools &pools, sp::bucket_size sz) noexcept {
   const std::size_t index = pool_index(sz);
   return pools[index];
 } // local::pool_for()
 
 static void *
-alloc(local::Pools &pools, sp::node_size sz) noexcept {
+local_alloc(local::Pools &pools, sp::node_size sz) noexcept {
   return nullptr;
+} // local::alloc()
+
+static void *
+alloc(local::Pools &pools, sp::node_size sz) noexcept {
+  void *result = local_alloc(pools, sz);
+  if (!result) {
+    const std::size_t size(sz);
+    result = global::alloc(size);
+    if (result) {
+      pools.pools->total_alloc.fetch_add(size);
+    }
+  }
+  return result;
 } // local::alloc()
 
 /*
@@ -128,23 +146,24 @@ next_node(header::Node *const start) noexcept {
  * @desc  -
  */
 static void *
-pointer_at(header::Node *start, std::size_t index) noexcept {
+pointer_at(header::Node *start, sp::index index) noexcept {
   // Pool[Extent[Node[nodeHDR,extHDR],Node[nodeHDR]...]...]
   // The first NodeHeader in the extent contains data while intermediate
   // NodeHeader does not containt this data.
   assert(start->type == header::NodeType::HEAD);
-  size_t hdrSz(header::SIZE);
-  size_t buckets = start->buckets;
-  const size_t bucket_size = start->bucket_size;
+  size_t header_size(header::SIZE);
+  sp::buckets buckets = start->buckets;
+  const sp::bucket_size bucket_size = start->bucket_size;
 node_start:
-  const size_t node_size = start->node_size;
-  const size_t data_size(node_size - hdrSz);
+  const sp::node_size node_size = start->node_size;
+  const sp::node_size data_area_size(node_size - header_size);
 
-  size_t nodeBuckets = std::min(data_size / start->bucket_size, buckets);
+  sp::buckets nodeBuckets =
+      std::min(data_area_size / start->bucket_size, buckets);
   if (index < nodeBuckets) {
     // the index is in range of current node
     uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
-    uintptr_t data_start = startPtr + hdrSz;
+    uintptr_t data_start = startPtr + header_size;
 
     return reinterpret_cast<void *>(data_start + (index * bucket_size));
   }
@@ -160,7 +179,7 @@ node_start:
 
     start = next;
     // the same extent but a new node
-    hdrSz = sizeof(header::Node);
+    header_size = sizeof(header::Node);
     goto node_start;
   } else {
     // out of bound
@@ -199,8 +218,8 @@ reserve(header::Node *const node) noexcept {
 
     auto &reservations = eHdr->reserved;
     // printf("reservations.swap_first(true,buckets(%zu))\n", nHdr->buckets);
-    const std::size_t limit = node->buckets;
-    const std::size_t index = reservations.swap_first(true, limit);
+    const std::size_t limit(node->buckets);
+    const sp::index index(reservations.swap_first(true, limit));
     if (index != reservations.npos) {
       return pointer_at(node, index);
     }
@@ -216,9 +235,10 @@ calc_min_node(sp::bucket_size bucketSz) noexcept {
   constexpr sp::node_size min_alloc(SP_MALLOC_PAGE_SIZE);
   constexpr sp::node_size max_alloc(min_alloc * 4);
 
-  constexpr sp::bucket_size atLeast(bucketSz + header::SIZE);
+  const sp::bucket_size atLeast(bucketSz + header::SIZE);
   if (atLeast > max_alloc) {
-    return util::round_up(atLeast, min_alloc);
+    return sp::node_size{
+        util::round_up(std::size_t(atLeast), std::size_t(min_alloc))};
   }
 
   constexpr sp::node_size lookup[] = //
@@ -250,7 +270,7 @@ alloc_extent(local::Pools &pools, sp::bucket_size bucketSz) noexcept {
   sp::node_size nodeSz = calc_min_node(bucketSz);
   void *const raw = alloc(pools, nodeSz);
   if (raw) {
-    return header::init_node(raw, nodeSz, bucketSz);
+    return header::init_extent(raw, nodeSz, bucketSz);
   }
   return nullptr;
 } // local::alloc_extent()
@@ -306,10 +326,10 @@ malloc_count_alloc() {
 }
 
 static std::size_t
-count_reserved(header::Extent &ext, std::size_t buckets) {
+count_reserved(header::Extent &ext, sp::buckets buckets) {
   std::size_t result(0);
   auto &b = ext.reserved;
-  for (std::size_t idx(0); idx < buckets; ++idx) {
+  for (std::size_t idx(0); idx < std::size_t(buckets); ++idx) {
     if (b.test(idx)) {
       result++;
     }
@@ -321,7 +341,8 @@ count_reserved(header::Extent &ext, std::size_t buckets) {
 std::size_t
 malloc_count_alloc(std::size_t sz) {
   std::size_t result(0);
-  local::Pool &pool = local::pool_for(local_pools, sz);
+  sp::bucket_size bsz = local::bucket_size_for(sz);
+  local::Pool &pool = local::pool_for(local_pools, bsz);
   sp::SharedLock guard(pool.lock);
   if (guard) {
     header::Node *current = pool.start.next.load();
@@ -342,20 +363,6 @@ malloc_count_alloc(std::size_t sz) {
 #endif
 /*
  *===========================================================
- */
-static void *
-alloc(local::Pools &pools, sp::bucket_size sz) noexcept {
-  sp::node_size nodeSz = void *result = local::alloc(pools, sz);
-  if (!result) {
-    result = global::alloc(sz);
-    if (result) {
-      pools.pools->total_alloc.fetch_add(sz);
-    }
-  }
-  return result;
-}
-/*
- *===========================================================
  *=======PUBLIC==============================================
  *===========================================================
  */
@@ -365,7 +372,7 @@ sp_malloc(std::size_t length) noexcept {
     return nullptr;
   }
 
-  const std::size_t bucketSz = util::round_even(length);
+  const auto bucketSz = local::bucket_size_for(length);
   local::Pool &pool = pool_for(local_pools, bucketSz);
 
   sp::SharedLock guard{pool.lock};
@@ -447,11 +454,13 @@ sp_usable_size(void *const ptr) noexcept {
 
   auto lresult = shared::usable_size(local_pools, ptr);
   if (lresult) {
-    return lresult.get();
+    // printf("lresult\n");
+    return std::size_t(lresult.get());
   }
 
   auto result = global::usable_size(ptr);
-  return result.get_or(0);
+  // printf("rresult\n");
+  return result.get_or(std::size_t(0));
 } // ::sp_usable_size()
 
 void *
@@ -471,5 +480,6 @@ sp_realloc(void *const ptr, std::size_t length) noexcept {
   }
 
   auto result = global::realloc(ptr, length);
-  return result.get_or(nullptr);
+  void *const def = nullptr;
+  return result.get_or(def);
 } //::sp_realloc
