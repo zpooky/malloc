@@ -11,10 +11,14 @@
 
 // TODO allocate increasing and wrap around
 // TODO large range 1-XXX to see that we get the right bucket
-//
+
 // TODO Cartesian product[allocSZ,iterations,threads[consumer,producer]]
 // TODO mutliple producer multiple consumer (realloc+free+usable_size)
 // TODO realloc from other thread then the malloc thread
+
+// TODO think of fixeing the case when memory mapped to specific pool but
+// the bucket is not currenctly reserved then "usuable_size" still returns
+// its pool size when infact it should be 0 since it is not reserved?
 
 //==================================================================================================
 //==================================================================================================
@@ -574,14 +578,14 @@ test_realloc() {
 
     for (auto rszIt = it + 1; rszIt != sizes.end(); ++rszIt) {
       ASSERT_EQ(std::size_t(1), debug::malloc_count_alloc());
-      void *nptr = sp_realloc(ptr, *rszIt);
+      void *const nptr = sp_realloc(ptr, *rszIt);
+
       ASSERT_FALSE(nptr == nullptr);
       ASSERT_FALSE(ptr == nptr);
-      // TODO think of fixeing the case when memory mapped to specific pool but
-      // the bucket is not currenctly reserved then "usuable_size" still returns
-      // its pool size when infact it should be 0 since it is not reserved?
+
       // ASSERT_EQ(std::size_t(0), sp_usable_size(ptr));
       ASSERT_EQ(*rszIt, sp_usable_size(nptr));
+
       ptr = nptr;
     }
 

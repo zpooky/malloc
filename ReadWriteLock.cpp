@@ -71,6 +71,7 @@ add_shared(uint64_t shared, int8_t amount) noexcept {
   return shared;
 }
 } // namespace
+
 static void
 print_state(const char *ctx, const uint64_t state) {
 #ifdef SP_DEBUG_RW
@@ -245,7 +246,7 @@ retry:
   const uint64_t shared(cmp & shared_mask);
   // assert no overflow?
   assert((get_shared(shared) - shaDec) <= get_shared(shared));
-  const uint64_t new_shared = add_shared(shared, -shaDec);
+  const uint64_t new_shared = add_shared(shared, int8_t(-shaDec));
 
   const uint64_t prepare(cmp & prep_mask);
   const uint64_t new_prepare = preUnset ? 0x00 : prepare;
@@ -303,7 +304,7 @@ retry:
     const uint64_t shared(cmp & shared_mask);
     // TODO assert no overflow?
     assert((get_shared(shared) - shared_dec) <= get_shared(shared));
-    const uint64_t new_shared = add_shared(shared, -shared_dec);
+    const uint64_t new_shared = add_shared(shared, int8_t(-shared_dec));
 
     const uint64_t prepare(0x00);
     const uint64_t exclusive(0x00);

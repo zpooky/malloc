@@ -11,15 +11,13 @@
  */
 namespace global {
 struct State {
-  // brk
-  // {{{
+  // brk{{{
   std::mutex brk_lock;
   void *brk_position; // not used for now
   std::size_t brk_alloc;
   // }}}
 
-  // free
-  // {{{
+  // free{{{
   header::Free free;
   // }}}
 

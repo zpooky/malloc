@@ -9,18 +9,19 @@
  *========SP=================================================
  *===========================================================
  */
+#ifdef SP_TYPED_NUMERIC
 bool
 operator<(const sp::index &i, const sp::buckets &b) {
   return i.operator<(b.data);
 }
 
 sp::buckets
-operator/(const sp::node_size &node, const sp::bucket_size &bucket) {
-  return sp::buckets((node.operator/(bucket.data)).data);
+operator/(const sp::node_size &n, const sp::bucket_size &b) {
+  return sp::buckets((n.operator/(b.data)).data);
 }
 
-std::ptrdiff_t operator*(const sp::index &idx, const sp::bucket_size &bucket) {
-  return idx.operator*(bucket.data).data;
+std::ptrdiff_t operator*(const sp::index &idx, const sp::bucket_size &b) {
+  return idx.operator*(b.data).data;
 }
 
 sp::index
@@ -34,9 +35,10 @@ operator+(const sp::index &idx, const sp::buckets &b) {
 }
 
 bool
-operator>(const sp::bucket_size &bs, const sp::node_size &ns) {
-  return bs.operator>(ns.data);
+operator>(const sp::bucket_size &b, const sp::node_size &n) {
+  return b.operator>(n.data);
 }
+#endif
 
 /*
  *===========================================================
@@ -259,3 +261,23 @@ Pool &Pools::operator[](std::size_t idx) noexcept {
 // }}}
 
 } // namespace local
+
+namespace shared {
+sp::bucket_size
+bucket_size_for(std::size_t sz) noexcept {
+  return sp::bucket_size{util::round_even(sz)};
+}
+
+std::size_t
+pool_index(sp::bucket_size sz) noexcept {
+  assert(sz % 8 == 0);
+  return util::trailing_zeros(std::size_t(sz)) - std::size_t(3);
+} // ::pool_index()
+
+local::Pool &
+pool_for(local::PoolsRAII &pools, sp::bucket_size sz) noexcept {
+  const std::size_t index = pool_index(sz);
+  return pools[index];
+} // ::pool_for()
+
+} // namespace shared

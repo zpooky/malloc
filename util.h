@@ -84,7 +84,7 @@ public:
     }
   }
 
-  operator bool() const noexcept {
+  explicit operator bool() const noexcept {
     return present;
   }
 

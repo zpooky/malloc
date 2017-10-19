@@ -30,15 +30,15 @@ $(EXEC): gtest $(OBJECTS)
 -include $(DEPENDS)
 
 $(BUILD)/%.o: %.cpp
-	mkdir -p $(BUILD)
+	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -MMD -c $< -o $@
 # }}}
 
 # clean {{{
 clean:
-	# clean test binaries
+# clean test binaries
 	rm -f $(EXEC) $(OBJECTS) $(DEPENDS)
-	# Clean sut binaries
+# Clean sut binaries
 	rm -f $(PROJECT_ROOT)/$(SUT_DIR)/*.a
 	rm -f $(PROJECT_ROOT)/$(SUT_DIR)/*.d
 	rm -f $(PROJECT_ROOT)/$(SUT_DIR)/*.o
@@ -53,9 +53,9 @@ gtest:
 
 # sut {{{
 sut:
-	# Build sut binaries and put result in $(SUT_DIR) directory to differentiate the build for test binaries with regular binaries.
-	# Define the SP_TEST preprocessor macro
-	# The resulting static library will be called libsut
+# Build sut binaries and put result in $(SUT_DIR) directory to differentiate the build for test binaries with regular binaries.
+# Define the SP_TEST preprocessor macro
+# The resulting static library will be called libsut
 	$(MAKE) BUILD=$(SUT_DIR) LIB=libsut CXXFLAGS+=-DSP_TEST -C $(PROJECT_ROOT) staticlib
 # }}}
 

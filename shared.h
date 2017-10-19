@@ -23,40 +23,40 @@ namespace sp {
         : data(d) {                                                            \
     }                                                                          \
     constexpr bool                                                             \
-    operator==(const std::size_t &o) const noexcept {                          \
+    operator==(std::size_t o) const noexcept {                                 \
       return data == o;                                                        \
     }                                                                          \
     constexpr bool                                                             \
-    operator!=(const std::size_t &o) const noexcept {                          \
+    operator!=(std::size_t o) const noexcept {                                 \
       return !operator==(o);                                                   \
     }                                                                          \
     constexpr NAME &                                                           \
-    operator=(const std::size_t &o) noexcept {                                 \
+    operator=(std::size_t o) noexcept {                                        \
       data = o;                                                                \
       return *this;                                                            \
     }                                                                          \
     constexpr NAME                                                             \
-    operator+(const std::size_t &o) const noexcept {                           \
+    operator+(std::size_t o) const noexcept {                                  \
       return NAME{data + o};                                                   \
     }                                                                          \
     constexpr NAME                                                             \
-    operator-(const std::size_t &o) const noexcept {                           \
+    operator-(std::size_t o) const noexcept {                                  \
       return NAME{data - o};                                                   \
     }                                                                          \
     constexpr NAME                                                             \
-    operator-(const NAME &o) const noexcept {                                  \
+    operator-(NAME o) const noexcept {                                         \
       return operator-(o.data);                                                \
     }                                                                          \
     constexpr bool                                                             \
-    operator>(const std::size_t &o) const noexcept {                           \
+    operator>(std::size_t o) const noexcept {                                  \
       return data > o;                                                         \
     }                                                                          \
     constexpr bool                                                             \
-    operator>=(const std::size_t &o) const noexcept {                          \
+    operator>=(std::size_t o) const noexcept {                                 \
       return data >= o;                                                        \
     }                                                                          \
     constexpr bool                                                             \
-    operator<(const std::size_t &o) const noexcept {                           \
+    operator<(std::size_t o) const noexcept {                                  \
       return data < o;                                                         \
     }                                                                          \
     constexpr bool                                                             \
@@ -64,18 +64,18 @@ namespace sp {
       return operator<(o.data);                                                \
     }                                                                          \
     constexpr bool                                                             \
-    operator<=(const std::size_t &o) const noexcept {                          \
+    operator<=(std::size_t o) const noexcept {                                 \
       return data <= o;                                                        \
     }                                                                          \
     constexpr NAME                                                             \
-    operator/(const std::size_t &o) const noexcept {                           \
+    operator/(std::size_t o) const noexcept {                                  \
       return NAME{data / o};                                                   \
     }                                                                          \
     constexpr NAME                                                             \
-    operator%(const std::size_t &o) const noexcept {                           \
+    operator%(std::size_t o) const noexcept {                                  \
       return NAME{data % o};                                                   \
     }                                                                          \
-    constexpr NAME operator*(const std::size_t &o) const noexcept {            \
+    constexpr NAME operator*(std::size_t o) const noexcept {                   \
       return NAME{data * o};                                                   \
     }                                                                          \
     constexpr explicit operator std::size_t() const noexcept {                 \
@@ -135,6 +135,7 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
 
   Free(std::size_t sz, Free *nxt) noexcept;
 };
+
 bool
 is_consecutive(const Free *const head, const Free *const tail) noexcept;
 void
@@ -150,7 +151,7 @@ free(void *const start) noexcept;
 struct Node;
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
-  static inline constexpr std::size_t MAX_BUCKETS = 512;
+  static constexpr std::size_t MAX_BUCKETS = 512;
 
   sp::Bitset<MAX_BUCKETS, std::uint64_t> reserved;
 
@@ -284,7 +285,7 @@ pools_find(PoolsRAII &pools, void *const search, PFind<Res, Arg> f,
 
   const std::size_t offset = 1 << trail0;
   if (offset < 8) {
-    // should be a runtime fault, the minimum alignment is 8
+    // runtime fault, the minimum alignment is 8
     assert(false);
     return {};
   }
@@ -311,6 +312,14 @@ pools_find(Pools &pools, void *search, PFind<Res, Arg> f, Arg &arg) noexcept {
 namespace shared {
 
 enum class FreeCode { FREED, FREED_RECLAIM, NOT_FOUND, DOUBLE_FREE };
+
+sp::bucket_size bucket_size_for(std::size_t) noexcept;
+
+std::size_t pool_index(sp::bucket_size) noexcept;
+
+local::Pool &
+pool_for(local::PoolsRAII &, sp::bucket_size) noexcept;
+
 } // namespace shared
 
 #endif

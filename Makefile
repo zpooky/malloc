@@ -36,9 +36,9 @@ $(EXEC): $(OBJECTS)
 -include $(DEPENDS)
 
 $(BUILD)/%.o: %.cpp
-	mkdir -p $(BUILD)
-	# -c means to create an intermediary object file, rather than an executable
-	# -MMD means to create *object*.d depend file with its depending cpp & h files
+	@mkdir -p $(BUILD)
+# -c means to create an intermediary object file, rather than an executable
+# -MMD means to create *object*.d depend file with its depending cpp & h files
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -MMD -c $< -o $@
 # }}}
 
@@ -57,9 +57,9 @@ test:
 
 # staticlib {{{
 staticlib: $(OBJECTS)
-	# 'r' means to insert with replacement
-	# 'c' means to create a new archive
-	# 's' means to write an index
+# 'r' means to insert with replacement
+# 'c' means to create a new archive
+# 's' means to write an index
 	$(AR) rcs $(BUILD)/$(LIB).a $(OBJECTS)
 # }}}
 
