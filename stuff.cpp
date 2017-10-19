@@ -107,6 +107,7 @@ retry:
       const auto result = shared::free(*current, ptr);
       if (result != FreeCode::NOT_FOUND) {
         if (result == FreeCode::FREED_RECLAIM) {
+          printf("free()=FREED_RECLAIM\n");
           if (!recycle_pool(internal_a, shared_guard, current)) {
             // TODO this sucks
             goto retry;
