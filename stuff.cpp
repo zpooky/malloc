@@ -27,7 +27,7 @@ struct asd {
 
 static asd internal_a;
 
-static void
+static bool
 recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   assert(subject);
   sp::TryPrepareLock pre_guard{lock};
@@ -58,10 +58,12 @@ recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
     // TODO maybe add /subject/ to Treiber stack. No ABA since the add is done
     // during the shared lock, and no entry can be deleted and re-enqueued
     // during a shared lock?
-    assert(false);
+    // assert(false);
+    return false;
   }
   subject->priv = nullptr;
   subject->next = nullptr;
+  return true;
 }
 
 static bool
@@ -96,7 +98,7 @@ namespace global {
 shared::FreeCode
 free(void *const ptr) noexcept {
   using shared::FreeCode;
-
+retry:
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
@@ -105,7 +107,10 @@ free(void *const ptr) noexcept {
       const auto result = shared::free(*current, ptr);
       if (result != FreeCode::NOT_FOUND) {
         if (result == FreeCode::FREED_RECLAIM) {
-          recycle_pool(internal_a, shared_guard, current);
+          if (!recycle_pool(internal_a, shared_guard, current)) {
+            // TODO this sucks
+            goto retry;
+          }
         } else /*FreeCode::FREED*/ {
           // TODO enqueue frequently used Pool, but how to handle reference to
           // reclaimed pools?
@@ -187,14 +192,17 @@ release_pool(local::PoolsRAII *pool) noexcept {
   pool->reclaim.store(true);
   std::size_t allocs = pool->total_alloc.load();
   if (allocs == 0) {
+  retry:
     sp::SharedLock lock{internal_a.lock};
     if (lock) {
-      recycle_pool(internal_a, lock, pool);
+      if (!recycle_pool(internal_a, lock, pool)) {
+        goto retry;
+      }
     }
   }
 } // global::release_pool()
 
-} // namespace stuff
+} // namespace global
 
 #ifdef SP_TEST
 

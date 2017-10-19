@@ -65,7 +65,7 @@ public:
   explicit SharedLock(ReadWriteLock &) noexcept;
   ~SharedLock() noexcept;
 
-  operator bool() const noexcept;
+  explicit operator bool() const noexcept;
 };
 
 /*
@@ -80,7 +80,7 @@ public:
   explicit TrySharedLock(ReadWriteLock &) noexcept;
   ~TrySharedLock() noexcept;
 
-  operator bool() const noexcept;
+  explicit operator bool() const noexcept;
   void
   swap(TrySharedLock &) noexcept;
 };
@@ -98,7 +98,7 @@ public:
   explicit PrepareLock(TrySharedLock &) noexcept;
   explicit PrepareLock(SharedLock &) noexcept;
   ~PrepareLock() noexcept;
-  operator bool() const noexcept;
+  explicit operator bool() const noexcept;
 };
 
 /*
@@ -115,7 +115,7 @@ public:
   explicit TryPrepareLock(SharedLock &) noexcept;
 
   ~TryPrepareLock() noexcept;
-  operator bool() const noexcept;
+  explicit operator bool() const noexcept;
 };
 
 /*
@@ -130,7 +130,7 @@ public:
   explicit EagerExclusiveLock(TryPrepareLock &) noexcept;
   ~EagerExclusiveLock() noexcept;
 
-  operator bool() const noexcept;
+  explicit operator bool() const noexcept;
 };
 
 /*
@@ -144,7 +144,7 @@ public:
   explicit LazyExclusiveLock(ReadWriteLock &) noexcept;
   ~LazyExclusiveLock();
 
-  operator bool() const noexcept;
+  explicit operator bool() const noexcept;
 };
 
 /*
@@ -160,7 +160,7 @@ public:
   explicit TryExclusiveLock(TryPrepareLock &) noexcept;
   ~TryExclusiveLock() noexcept;
 
-  operator bool() const noexcept;
+  explicit operator bool() const noexcept;
 };
 }
 

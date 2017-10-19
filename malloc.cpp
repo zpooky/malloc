@@ -68,9 +68,9 @@
 // 10. local::free_list allocation strategy
 //  * allow externally to register a callback to control allocation strategy
 //    * hint of how much memory will be needed generally or specific bucketSz
-//    * hint to over allocate by haveing a % in local free list
-//    * hint that current allocation usage is baseline and should be keept
-//      atleast current available memory
+//    * hint to over allocate by having a % in local free list
+//    * hint that current allocation usage is baseline and should be kept
+//      at least current available memory
 //
 // 11. memory leaks detect
 //  * print statistics for all non-freed memory
@@ -91,6 +91,7 @@
 // - An optimized collections of Pool:s used for free:ing in addition to the
 //   Pool[60] used for allocating
 // - skip `this` when global::free()
+// - delay creating PoolsRAII until necessary(malloc)
 
 // {{{
 static thread_local local::Pools local_pools;
@@ -141,7 +142,7 @@ malloc_count_alloc(std::size_t sz) {
       assert(ext != nullptr);
       result += count_reserved(*ext, current->buckets);
 
-      current = current->next.load();//TODO next_extent
+      current = current->next.load(); // TODO next_extent
       goto start;
     }
   }

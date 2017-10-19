@@ -30,7 +30,7 @@ public:
 
   virtual void
   SetUp() {
-    ASSERT_EQ(std::size_t(0), debug::stuff_count_unclaimed_pools());
+    // ASSERT_EQ(std::size_t(0), debug::stuff_count_unclaimed_pools());
   }
   virtual void
   TearDown() {
@@ -512,6 +512,7 @@ produce_malloc_result(std::size_t iterations, std::size_t allocSz,
       ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
     }
   });
+
   ASSERT_TRUE(result.size() >= iterations);
   std::atomic_thread_fence(std::memory_order_release);
 }
@@ -558,11 +559,13 @@ TEST_P(MallocTestAllocSizePFixture, test_producer_die_main_dealloc) {
 
       ASSERT_EQ(actualSz, sp_usable_size(ptr));
       ASSERT_EQ(ptr, sp_realloc(ptr, actualSz));
+
       ASSERT_TRUE(sp_free(ptr));
       ASSERT_FALSE(sp_free(ptr));
     }
   });
 }
+
 //-----------------------------------------
 static void
 test_realloc() {
