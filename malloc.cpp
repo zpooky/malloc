@@ -3,7 +3,10 @@
 // #include <tuple>
 // #include <utility>
 
+#ifdef SP_TEST
+#include "alloc_debug.h"
 #include "malloc_debug.h"
+#endif
 
 #include <array>
 #include <atomic>
@@ -106,47 +109,12 @@ static thread_local local::Pools local_pools;
 namespace debug {
 std::size_t
 malloc_count_alloc() {
-  std::size_t result(0);
-  for (std::size_t i(8); i > 0; i <<= 1) {
-    result += malloc_count_alloc(i);
-  }
-  return result;
-}
-
-static std::size_t
-count_reserved(header::Extent &ext, sp::buckets buckets) {
-  std::size_t result(0);
-  auto &b = ext.reserved;
-  for (std::size_t idx(0); idx < std::size_t(buckets); ++idx) {
-    if (b.test(idx)) {
-      result++;
-    }
-  }
-
-  return result;
+  return alloc_count_alloc(*local_pools.pools);
 }
 
 std::size_t
 malloc_count_alloc(std::size_t sz) {
-  std::size_t result(0);
-  sp::bucket_size bsz = shared::bucket_size_for(sz);
-  local::Pool &pool = shared::pool_for(*local_pools.pools, bsz);
-
-  sp::SharedLock guard(pool.lock);
-  if (guard) {
-    header::Node *current = pool.start.next.load();
-  start:
-    if (current) {
-      assert(current->type == header::NodeType::HEAD);
-      auto ext = header::extent(current);
-      assert(ext != nullptr);
-      result += count_reserved(*ext, current->buckets);
-
-      current = current->next.load(); // TODO next_extent
-      goto start;
-    }
-  }
-  return result;
+  return alloc_count_alloc(*local_pools.pools, sz);
 }
 
 } // namespace debug

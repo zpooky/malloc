@@ -1,4 +1,7 @@
 #include "alloc.h"
+#ifdef SP_TEST
+#include "alloc_debug.h"
+#endif
 
 #include "ReadWriteLock.h"
 #include "bitset/Bitset.h"
@@ -267,3 +270,54 @@ alloc(local::Pools &pools, std::size_t length) noexcept {
 }
 
 } // namespace shared
+
+#ifdef SP_TEST
+
+namespace debug {
+std::size_t
+alloc_count_alloc(local::PoolsRAII &p) {
+  std::size_t result(0);
+  for (std::size_t i(8); i > 0; i <<= 1) {
+    result += alloc_count_alloc(p, i);
+  }
+  return result;
+}
+
+static std::size_t
+count_reserved(header::Extent &ext, sp::buckets buckets) {
+  std::size_t result(0);
+  auto &b = ext.reserved;
+  for (std::size_t idx(0); idx < std::size_t(buckets); ++idx) {
+    if (b.test(idx)) {
+      result++;
+    }
+  }
+
+  return result;
+}
+
+std::size_t
+alloc_count_alloc(local::PoolsRAII &p, std::size_t sz) {
+  std::size_t result(0);
+  sp::bucket_size bsz = shared::bucket_size_for(sz);
+  local::Pool &pool = shared::pool_for(p, bsz);
+
+  sp::SharedLock guard(pool.lock);
+  if (guard) {
+    header::Node *current = pool.start.next.load();
+  start:
+    if (current) {
+      assert(current->type == header::NodeType::HEAD);
+      auto ext = header::extent(current);
+      assert(ext != nullptr);
+      result += count_reserved(*ext, current->buckets);
+
+      current = current->next.load(); // TODO next_extent
+      goto start;
+    }
+  }
+  return result;
+}
+
+} // namespace debug
+#endif

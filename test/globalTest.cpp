@@ -10,7 +10,7 @@
 /*Gtest*/
 static size_t
 free_entries(global::State &state) {
-  auto free = debug::watch_free(&state);
+  auto free = debug::global_get_free(&state);
   return free.size();
 }
 
@@ -125,13 +125,13 @@ assert_dummy_dealloc_no_abs_size(const std::vector<Ts> &free, Range &range) {
 
 static void
 assert_dummy_dealloc_no_abs_size(global::State &s, Range &r) {
-  auto free = debug::watch_free(&s);
+  auto free = debug::global_get_free(&s);
   assert_dummy_dealloc_no_abs_size(free, r);
 }
 
 static void
 assert_dummy_dealloc(global::State &state, Range &range) {
-  auto free = debug::watch_free(&state);
+  auto free = debug::global_get_free(&state);
 
   ASSERT_EQ(range.length, size_of_free(free));
   ASSERT_EQ(size_t(1), free.size()); // free pages should be coalesced
@@ -155,24 +155,6 @@ assert_dummy_alloc(global::State &state, size_t size, Range &range, size_t bSz,
     assert_in_range(range, current, bSz);
     result.emplace_back(current, bSz);
   }
-}
-
-static void assert_consecutive_range(Points &free, Range range) { // spz
-  // printf("assert_consecutive_range\n");
-  uint8_t *const startR = range.start;
-
-  auto cmp = [](const auto &first, const auto &second) -> bool {
-    return std::get<0>(first) < std::get<0>(second);
-  };
-  std::sort(free.begin(), free.end(), cmp);
-
-  void *first = startR;
-  for (auto it = free.begin(); it != free.end(); ++it) {
-    ASSERT_EQ(std::get<0>(*it), first);
-
-    first = pmath(std::get<0>(*it), std::get<1>(*it));
-  }
-  ASSERT_EQ(first, pmath(range.start, +range.length));
 }
 
 /*Test*/
@@ -385,7 +367,7 @@ threaded_dealloc_test(global::State &state, size_t sz, void *(*f)(void *)) {
   // debug::print_free(&state);
   assert_dummy_dealloc_no_abs_size(state, range);
 
-  auto frees = debug::watch_free(&state);
+  auto frees = debug::global_get_free(&state);
   assert_consecutive_range(frees, range);
 
   free(startR);

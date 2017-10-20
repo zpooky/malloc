@@ -1,9 +1,15 @@
 #include "free.h"
 #include "global.h"
 #include "stuff.h"
+#ifdef SP_TEST
+#include "alloc_debug.h"
 #include "stuff_debug.h"
+#endif
 #include <atomic>
 #include <cassert>
+#include <cstring>
+
+#define SP_MALLOC_POOL_SIZE SP_MALLOC_PAGE_SIZE * 2
 
 struct asd {
   // {
@@ -28,7 +34,7 @@ struct asd {
 static asd internal_a;
 
 static bool
-recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
+unlink_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   assert(subject);
   sp::TryPrepareLock pre_guard{lock};
   if (pre_guard) {
@@ -64,6 +70,16 @@ recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   subject->priv = nullptr;
   subject->next = nullptr;
   return true;
+}
+
+static bool
+recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
+  if (unlink_pool(a, lock, subject)) {
+    std::memset(subject, 0, SP_MALLOC_POOL_SIZE);
+    global::dealloc(subject, SP_MALLOC_POOL_SIZE);
+    return true;
+  }
+  return false;
 }
 
 static bool
@@ -107,7 +123,7 @@ retry:
       const auto result = shared::free(*current, ptr);
       if (result != FreeCode::NOT_FOUND) {
         if (result == FreeCode::FREED_RECLAIM) {
-          printf("free()=FREED_RECLAIM\n");
+          // printf("free()=FREED_RECLAIM\n");
           if (!recycle_pool(internal_a, shared_guard, current)) {
             // TODO this sucks
             goto retry;
@@ -168,10 +184,10 @@ realloc(void *const ptr, std::size_t length) noexcept {
 local::PoolsRAII *
 alloc_pool() noexcept {
   using PoolType = local::PoolsRAII;
-  static_assert(sizeof(PoolType) <= SP_MALLOC_PAGE_SIZE * 2, "");
+  static_assert(sizeof(PoolType) <= SP_MALLOC_POOL_SIZE, "");
 
   PoolType *result = nullptr;
-  void *const memory = global::alloc(SP_MALLOC_PAGE_SIZE * 2);
+  void *const memory = global::alloc(SP_MALLOC_POOL_SIZE);
   if (memory) {
     result = new (memory) PoolType;
 
@@ -210,20 +226,71 @@ release_pool(local::PoolsRAII *pool) noexcept {
 namespace debug {
 
 std::size_t
-stuff_count_unclaimed_pools() noexcept {
+stuff_count_unclaimed_orphan_pools() noexcept {
   std::size_t result = 0;
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
   next:
     if (current) {
-      result++;
+      if (current->reclaim.load()) {
+        result++;
+      }
       current = current->next;
       goto next;
     }
   }
   return result;
 } // debug::count_unclaimed_pools()
+
+std::size_t
+stuff_count_alloc() {
+  std::size_t result = 0;
+  sp::SharedLock shared_guard{internal_a.lock};
+  if (shared_guard) {
+    local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
+  next:
+    if (current) {
+      result += alloc_count_alloc(*current);
+      current = current->next;
+      goto next;
+    }
+  }
+  return result;
+} // debug::stuff_count_alloc()
+
+std::size_t
+stuff_count_alloc(std::size_t sz) {
+  std::size_t result = 0;
+  sp::SharedLock shared_guard{internal_a.lock};
+  if (shared_guard) {
+    local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
+  next:
+    if (current) {
+      result += alloc_count_alloc(*current, sz);
+      current = current->next;
+      goto next;
+    }
+  }
+  return result;
+} // debug::stuff_count_alloc()
+
+void
+stuff_force_reclaim_orphan() {
+  sp::SharedLock lock{internal_a.lock};
+  if (lock) {
+    local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
+  next:
+    if (current) {
+      if (current->reclaim.load()) {
+        // TODO reclaim extents
+        recycle_pool(internal_a, lock, current);
+      }
+      current = current->next;
+      goto next;
+    }
+  }
+} // debug::stuff_force_reclaim()
 
 } // namespace debug
 #endif

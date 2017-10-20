@@ -290,7 +290,7 @@ debug_print_free(header::Free *const head) {
 } // test::debug_print_free()
 
 std::vector<std::tuple<void *, std::size_t>>
-watch_free(global::State *state) {
+global_get_free(global::State *state) {
   if (state == nullptr) {
     state = &internal_state;
   }

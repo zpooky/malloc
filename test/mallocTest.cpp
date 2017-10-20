@@ -2,6 +2,7 @@
 #include "Util.h"
 #include "shared.h"
 #include "gtest/gtest.h"
+#include <global_debug.h>
 #include <malloc.h>
 #include <malloc_debug.h>
 #include <pthread.h>
@@ -30,14 +31,16 @@ public:
 
   virtual void
   SetUp() {
-    // ASSERT_EQ(std::size_t(0), debug::stuff_count_unclaimed_pools());
   }
+
   virtual void
   TearDown() {
-    // EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_pools());
-    printf("stuff_count_unclaimed_pools(): %zu\n",
-           debug::stuff_count_unclaimed_pools());
-    printf("x--------------\n");
+    EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_orphan_pools());
+    EXPECT_EQ(std::size_t(0), debug::stuff_count_alloc());
+    auto global_free = debug::global_get_free(nullptr);
+    assert_no_overlap(global_free);
+    // assert_no_gaps(global_free);
+    debug::stuff_force_reclaim_orphan();
   }
 };
 
@@ -67,6 +70,8 @@ INSTANTIATE_TEST_CASE_P(Default, MallocRangeSizeTest,
                             16384 * 4 //
                             ,
                             16384 * 8 //
+                            ,
+                            16384 * 16 //
                             ));
 
 class MallocTestAllocSizePFixture : public testing::TestWithParam<size_t> {
@@ -76,14 +81,17 @@ public:
 
   virtual void
   SetUp() {
-    // ASSERT_EQ(std::size_t(0), debug::stuff_count_unclaimed_pools());
   }
+
   virtual void
   TearDown() {
-    // EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_pools());
-    printf("stuff_count_unclaimed_pools(): %zu\n",
-           debug::stuff_count_unclaimed_pools());
-    printf("x--------------\n");
+    EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_orphan_pools());
+    EXPECT_EQ(std::size_t(0), debug::stuff_count_alloc());
+    auto global_free = debug::global_get_free(nullptr);
+    assert_no_overlap(global_free);
+    // assert_no_gaps(global_free); // TODO this wont work since TL pool is
+                                // allocated
+    debug::stuff_force_reclaim_orphan();
   }
 };
 
@@ -94,7 +102,8 @@ INSTANTIATE_TEST_CASE_P(DefaultInstance, MallocTestAllocSizePFixture,
 // INSTANTIATE_TEST_CASE_P(AnotherInstance, MallocTestAllocSizePFixture,
 //                         ::testing::Range(std::size_t(1), std::size_t(1026)));
 
-const size_t NUMBER_OF_IT = /*16 **/ 1025;
+// const size_t NUMBER_OF_IT = 16 * 1025;
+const size_t NUMBER_OF_IT = 1025;
 
 //==================================================================================================
 //==================================================================================================
@@ -291,6 +300,8 @@ overlap_malloc_check(std::size_t iterations, std::size_t allocSz,
     sp::EagerExclusiveLock guard{*lock};
     if (guard) {
       result->insert(result->end(), allocs.begin(), allocs.end());
+    } else {
+      ASSERT_FALSE(true);
     }
   }
   overlap_stop->await();
@@ -314,6 +325,7 @@ worker_overlap_malloc_check(void *arg) {
 
   overlap_malloc_check(std::get<0>(*a), std::get<1>(*a), &std::get<2>(*a),
                        &std::get<3>(*a), &std::get<4>(*a), &std::get<5>(*a));
+  std::atomic_thread_fence(std::memory_order_release);
   return nullptr;
 }
 
@@ -332,6 +344,7 @@ test_overlap_malloc_check(std::size_t ths, std::size_t allocSz) {
 
   Arg arg(NUMBER_OF_IT, allocSz, initial, stop, result, lock);
   threads(ths, arg, worker_overlap_malloc_check<decltype(arg)>);
+  std::atomic_thread_fence(std::memory_order_acquire);
 
   time("assert_no_overlap", [&] { //
     assert_no_overlap(result);
@@ -408,9 +421,12 @@ malloc_random_free(std::size_t iterations, std::size_t allocSz) {
 
         void *ptr = std::get<0>(c);
         ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
+
         ASSERT_TRUE(sp_free(ptr));
-        ASSERT_FALSE(sp_free(ptr));
         --active;
+        ASSERT_EQ(active, debug::malloc_count_alloc());
+
+        ASSERT_FALSE(sp_free(ptr));
         ASSERT_EQ(active, debug::malloc_count_alloc());
       }
     }
@@ -422,11 +438,14 @@ malloc_random_free(std::size_t iterations, std::size_t allocSz) {
 
   time("free the rest", [&] { //
     for (auto c : allocs) {
-      void *ptr = std::get<0>(c);
+      void *const ptr = std::get<0>(c);
       ASSERT_EQ(std::get<1>(c), sp_usable_size(ptr));
+
       ASSERT_TRUE(sp_free(ptr));
-      ASSERT_FALSE(sp_free(ptr));
       --active;
+      ASSERT_EQ(active, debug::malloc_count_alloc());
+
+      ASSERT_FALSE(sp_free(ptr));
       ASSERT_EQ(active, debug::malloc_count_alloc());
     }
   });
@@ -557,6 +576,7 @@ TEST_P(MallocTestAllocSizePFixture, test_producer_die_main_dealloc) {
     std::random_shuffle(result.begin(), result.end());
   });
 
+  std::size_t res = result.size();
   time("free", [&] { //
     for (auto c : result) {
       void *ptr = std::get<0>(c);
@@ -567,10 +587,12 @@ TEST_P(MallocTestAllocSizePFixture, test_producer_die_main_dealloc) {
       ASSERT_EQ(ptr, sp_realloc(ptr, actualSz));
 
       ASSERT_TRUE(sp_free(ptr));
+      ASSERT_EQ(--res, debug::stuff_count_alloc());
+
       ASSERT_FALSE(sp_free(ptr));
+      ASSERT_EQ(res, debug::stuff_count_alloc());
     }
   });
-  printf("--------------\n");
 }
 
 //-----------------------------------------
