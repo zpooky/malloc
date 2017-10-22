@@ -227,7 +227,8 @@ PoolsRAII::PoolsRAII() noexcept
     , total_alloc{0}
     , priv{nullptr}
     , next{nullptr}
-    , reclaim{false} {
+    , reclaim{false}
+    , base_free(0, nullptr) {
   // TODO std::atomic_thread_fence(std::memory_order_release);?
 }
 

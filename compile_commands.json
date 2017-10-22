@@ -10,9 +10,9 @@
         "file": "/home/spooky/development/repos/malloc/ReadWriteLock.cpp"
     },
     {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/free.o free.cpp",
+        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/alloc.o alloc.cpp",
         "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/free.cpp"
+        "file": "/home/spooky/development/repos/malloc/alloc.cpp"
     },
     {
         "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/stuff.o stuff.cpp",
@@ -23,6 +23,11 @@
         "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/shared.o shared.cpp",
         "directory": "/home/spooky/development/repos/malloc",
         "file": "/home/spooky/development/repos/malloc/shared.cpp"
+    },
+    {
+        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/free.o free.cpp",
+        "directory": "/home/spooky/development/repos/malloc",
+        "file": "/home/spooky/development/repos/malloc/free.cpp"
     },
     {
         "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/main.o main.cpp",

@@ -75,8 +75,9 @@ unlink_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
 static bool
 recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   if (unlink_pool(a, lock, subject)) {
-    std::memset(subject, 0, SP_MALLOC_POOL_SIZE);
-    global::dealloc(subject, SP_MALLOC_POOL_SIZE);
+    void *const target = reinterpret_cast<void *>(subject);
+    std::memset(target, 0, SP_MALLOC_POOL_SIZE);
+    global::dealloc(target, SP_MALLOC_POOL_SIZE);
     return true;
   }
   return false;

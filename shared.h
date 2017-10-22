@@ -236,15 +236,23 @@ struct Pool { //
 
 /*Pools*/
 struct PoolsRAII { //
+  // TODO restructure for tighter alignment
   static constexpr std::size_t BUCKETS = (sizeof(std::size_t) * 8) - 3;
   std::array<Pool, BUCKETS> buckets;
   std::atomic<std::size_t> total_alloc;
 
-  // global{
+  // global list of pools {
   PoolsRAII *priv;
   PoolsRAII *next;
   //}
+
+  // reclaim flag {
   std::atomic<bool> reclaim;
+  //}
+
+  // local free list {
+  header::Free base_free;
+  // }
 
   PoolsRAII() noexcept;
 
