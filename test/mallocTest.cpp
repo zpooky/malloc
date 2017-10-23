@@ -3,6 +3,7 @@
 #include "shared.h"
 #include "gtest/gtest.h"
 #include <global_debug.h>
+#include <initializer_list>
 #include <malloc.h>
 #include <malloc_debug.h>
 #include <pthread.h>
@@ -90,7 +91,7 @@ public:
     auto global_free = debug::global_get_free(nullptr);
     assert_no_overlap(global_free);
     // assert_no_gaps(global_free); // TODO this wont work since TL pool is
-                                // allocated
+    // allocated
     debug::stuff_force_reclaim_orphan();
   }
 };
@@ -98,6 +99,12 @@ public:
 INSTANTIATE_TEST_CASE_P(DefaultInstance, MallocTestAllocSizePFixture,
                         ::testing::Values(8, 16, 32, 64, 128, 256, 512, 1024,
                                           2048, 4096, 8192));
+
+static const std::vector<std::size_t> SIZES{
+    8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192 /*, ... */};
+
+static const std::vector<std::size_t> SIZES2{32,   64,   128,  256, 512,
+                                             1024, 2048, 4096, 8192 /*, ... */};
 
 // INSTANTIATE_TEST_CASE_P(AnotherInstance, MallocTestAllocSizePFixture,
 //                         ::testing::Range(std::size_t(1), std::size_t(1026)));
@@ -118,6 +125,24 @@ roundAlloc(std::size_t sz) {
   }
   assert(false);
   return 0;
+}
+
+template <typename Argument>
+static void
+threads(Argument &arg, std::vector<void *(*)(void *)> workers) {
+  std::vector<pthread_t> tids;
+  for (auto worker : workers) {
+    pthread_t tid = 0;
+    int ret = pthread_create(&tid, nullptr, worker, &arg);
+    ASSERT_EQ(0, ret);
+    ASSERT_FALSE(tid == 0);
+    tids.push_back(tid);
+  }
+
+  for (auto tid : tids) {
+    int ret = pthread_join(tid, nullptr);
+    ASSERT_EQ(0, ret);
+  }
 }
 
 template <typename Argument>
@@ -538,7 +563,6 @@ produce_malloc_result(std::size_t iterations, std::size_t allocSz,
     }
   });
 
-  ASSERT_TRUE(result.size() >= iterations);
   std::atomic_thread_fence(std::memory_order_release);
 }
 
@@ -598,17 +622,14 @@ TEST_P(MallocTestAllocSizePFixture, test_producer_die_main_dealloc) {
 //-----------------------------------------
 static void
 test_realloc() {
-  std::vector<std::size_t> sizes{8,   16,   32,   64,   128, 256,
-                                 512, 1024, 2048, 4096, 8192 /*, ... */};
-
   ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
 
-  for (auto it = sizes.begin(); it != sizes.end(); ++it) {
+  for (auto it = SIZES.begin(); it != SIZES.end(); ++it) {
     void *ptr = sp_malloc(*it);
     ASSERT_FALSE(ptr == nullptr);
     ASSERT_EQ(*it, sp_usable_size(ptr));
 
-    for (auto rszIt = it + 1; rszIt != sizes.end(); ++rszIt) {
+    for (auto rszIt = it + 1; rszIt != SIZES.end(); ++rszIt) {
       ASSERT_EQ(std::size_t(1), debug::malloc_count_alloc());
       void *const nptr = sp_realloc(ptr, *rszIt);
 
@@ -636,6 +657,97 @@ worker_test_realloc(void *) {
 TEST(MallocTest, test_realloc) {
   void *arg = nullptr;
   threads(1, arg, worker_test_realloc);
+}
+//-----------------------------------------
+using TestProducerConsumerReallocArg =
+    std::tuple<sp::Barrier *, std::size_t, const std::vector<std::size_t> *,
+               test::MemStack *, std::atomic<std::size_t>>;
+
+static void
+malloc_producer(std::size_t it, const std::vector<std::size_t> &sz,
+                test::MemStack &s) {
+  for (size_t i = 0; i < it; ++i) {
+    for (auto allocSz : sz) {
+      void *const ptr = sp_malloc(allocSz);
+      ASSERT_FALSE(ptr == nullptr);
+      std::size_t roundSz = roundAlloc(allocSz);
+
+      ASSERT_EQ(roundSz, sp_usable_size(ptr));
+      ASSERT_EQ(ptr, sp_realloc(ptr, roundSz));
+      ASSERT_EQ(ptr, sp_realloc(ptr, allocSz));
+
+      enqueue(s, ptr, roundSz);
+    }
+    // printf("produce(%zu<%zu)\n", i, it);
+  }
+  printf("producer done\n");
+}
+
+static void *
+worker_malloc_producer(void *a) {
+  auto *arg = (TestProducerConsumerReallocArg *)a;
+  std::get<0>(*arg)->await();
+  malloc_producer(std::get<1>(*arg), *std::get<2>(*arg), *std::get<3>(*arg));
+  return nullptr;
+}
+
+static void
+malloc_consumer_realloc(test::MemStack &s, std::atomic<std::size_t> &cnt) {
+  Points resized;
+  while (cnt > 0) {
+    auto res = dequeue(s);
+    if (bool(res)) {
+      --cnt;
+      void *p = std::get<0>(res.get());
+      std::size_t len = std::get<1>(res.get());
+      std::size_t newLen = roundAlloc(len + 1);
+      void *nptr = sp_realloc(p, newLen);
+      ASSERT_FALSE(p == nptr);
+      ASSERT_FALSE(nptr == nullptr);
+      // printf("cnt(%zu)\n", cnt.load());
+    }
+  }
+  printf("free\n");
+  time("free", [&] { //
+    for (auto c : resized) {
+      void *ptr = std::get<0>(c);
+      std::size_t actualSz = std::get<1>(c);
+      ASSERT_FALSE(ptr == nullptr);
+
+      ASSERT_EQ(actualSz, sp_usable_size(ptr));
+      ASSERT_EQ(ptr, sp_realloc(ptr, actualSz));
+
+      ASSERT_TRUE(sp_free(ptr));
+    }
+  });
+}
+
+static void *
+worker_malloc_consumer_realloc(void *a) {
+  auto *arg = (TestProducerConsumerReallocArg *)a;
+  std::get<0>(*arg)->await();
+  malloc_consumer_realloc(*std::get<3>(*arg), std::get<4>(*arg));
+  return nullptr;
+}
+
+TEST(MallocTest, test_1producer_1consumer_realloc) {
+  std::vector<void *(*)(void *)> thProd{worker_malloc_producer};
+  std::vector<void *(*)(void *)> thCon{worker_malloc_consumer_realloc};
+  const std::size_t th = thProd.size() + thCon.size();
+
+  const std::size_t it = NUMBER_OF_IT;
+  test::MemStack s;
+  sp::Barrier b(th);
+  std::size_t allocs = thProd.size() * (it * SIZES2.size());
+
+  TestProducerConsumerReallocArg a(&b, it, &SIZES2, &s, allocs);
+
+  std::vector<void *(*)(void *)> workers;
+  workers.insert(workers.end(), thProd.begin(), thProd.end());
+  workers.insert(workers.end(), thCon.begin(), thCon.end());
+  printf("workers:%zu\n", workers.size());
+  threads(a, workers);
+  printf("after join\n");
 }
 //-----------------------------------------
 

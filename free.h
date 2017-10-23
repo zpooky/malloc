@@ -16,9 +16,9 @@ util::maybe<sp::bucket_size>
 usable_size(local::Pools &, void *) noexcept;
 
 util::maybe<void *>
-realloc(local::PoolsRAII &, void *, std::size_t) noexcept;
+realloc(local::PoolsRAII &, local::PoolsRAII &, void *, std::size_t) noexcept;
 util::maybe<void *>
-realloc(local::Pools &, void *, std::size_t) noexcept;
+realloc(local::Pools &, local::Pools &, void *, std::size_t) noexcept;
 
 } // namespace shared
 

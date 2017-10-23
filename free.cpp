@@ -343,12 +343,13 @@ usable_size(local::Pools &pools, void *const ptr) noexcept {
 } // shared::usable_size()
 
 util::maybe<void *>
-realloc(local::PoolsRAII &pools, void *ptr, std::size_t length) noexcept {
+realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
+        std::size_t length) noexcept {
   auto maybeMemSz = usable_size(pools, ptr);
   if (maybeMemSz) {
     sp::bucket_size memSz = maybeMemSz.get();
     if (memSz < length) {
-      void *const nptr = alloc(pools, length);
+      void *const nptr = alloc(tl, length);
       if (nptr) {
         memcpy(nptr, ptr, std::size_t(memSz));
       } else {
@@ -366,9 +367,11 @@ realloc(local::PoolsRAII &pools, void *ptr, std::size_t length) noexcept {
 }
 
 util::maybe<void *>
-realloc(local::Pools &pools, void *const ptr, std::size_t length) noexcept {
+realloc(local::Pools &tl, local::Pools &pools, void *const ptr,
+        std::size_t length) noexcept {
+  assert(tl.pools);
   assert(pools.pools);
-  return realloc(*pools.pools, ptr, length);
+  return realloc(*tl.pools, *pools.pools, ptr, length);
 } // shared::realloc()
 
 } // namespace shared

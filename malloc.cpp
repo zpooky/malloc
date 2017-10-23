@@ -178,12 +178,12 @@ sp_realloc(void *const ptr, std::size_t length) noexcept {
     return nullptr;
   }
 
-  auto lresult = shared::realloc(local_pools, ptr, length);
+  auto lresult = shared::realloc(local_pools, local_pools, ptr, length);
   if (lresult) {
     return lresult.get();
   }
 
-  auto result = global::realloc(ptr, length);
+  auto result = global::realloc(local_pools, ptr, length);
   void *const def = nullptr;
   return result.get_or(def);
 } //::sp_realloc

@@ -126,7 +126,7 @@ retry:
         if (result == FreeCode::FREED_RECLAIM) {
           // printf("free()=FREED_RECLAIM\n");
           if (!recycle_pool(internal_a, shared_guard, current)) {
-            // TODO this sucks
+            // TODO !!! FIX does not work
             goto retry;
           }
         } else /*FreeCode::FREED*/ {
@@ -165,13 +165,17 @@ usable_size(void *const ptr) noexcept {
 }
 
 util::maybe<void *>
-realloc(void *const ptr, std::size_t length) noexcept {
+realloc(local::PoolsRAII &tl, void *const ptr, std::size_t length) noexcept {
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
   next:
     if (current) {
-      auto result = shared::realloc(*current, ptr, length);
+      auto code = shared::FreeCode::FREED;
+      auto result = shared::realloc(tl, *current, ptr, length, code);
+      if (code == shared::FreeCode::FREED_RECLAIM) {
+        //TODO
+      }
       if (result) {
         return result;
       }
@@ -180,6 +184,11 @@ realloc(void *const ptr, std::size_t length) noexcept {
     }
   }
   return {};
+}
+util::maybe<void *>
+realloc(local::Pools &tl, void *const ptr, std::size_t length) noexcept {
+  assert(tl.pools);
+  return realloc(*tl.pools, ptr, length);
 }
 
 local::PoolsRAII *

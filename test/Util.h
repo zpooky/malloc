@@ -2,12 +2,14 @@
 #define SP_MALLOC_TEST_UTIL_H
 
 #include "gtest/gtest.h"
+#include <ReadWriteLock.h>
 #include <cassert>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <tuple>
+#include <util.h>
 #include <vector>
 
 using Point = std::tuple<void *, std::size_t>;
@@ -191,6 +193,26 @@ time(const char *msg, Function f) {
       << msg << ":"
       << std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count()
       << "ms" << std::endl;
+}
+
+namespace test {
+struct StackHead {
+  StackHead *next;
+  std::size_t length;
+  StackHead(StackHead *, std::size_t);
+};
+
+struct MemStack {
+  sp::ReadWriteLock lock;
+  StackHead *head;
+  MemStack();
+};
+
+void
+enqueue(MemStack &s, void *data, std::size_t length);
+
+util::maybe<std::tuple<void *, std::size_t>>
+dequeue(MemStack &s);
 }
 
 #endif

@@ -14,7 +14,10 @@ util::maybe<sp::bucket_size>
 usable_size(void *) noexcept;
 
 util::maybe<void *>
-realloc(void *, std::size_t) noexcept;
+realloc(local::PoolsRAII &, void *, std::size_t) noexcept;
+
+util::maybe<void *>
+realloc(local::Pools &, void *, std::size_t) noexcept;
 
 local::PoolsRAII *
 alloc_pool() noexcept;
