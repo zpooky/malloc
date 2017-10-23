@@ -344,7 +344,7 @@ usable_size(local::Pools &pools, void *const ptr) noexcept {
 
 util::maybe<void *>
 realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
-        std::size_t length) noexcept {
+        std::size_t length, /*OUT*/ shared::FreeCode &result) noexcept {
   auto maybeMemSz = usable_size(pools, ptr);
   if (maybeMemSz) {
     sp::bucket_size memSz = maybeMemSz.get();
@@ -356,8 +356,8 @@ realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
         // runtime fault, out of memory
         assert(false);
       }
-      FreeCode result = free(pools, ptr, memSz);
-      assert(result == FreeCode::FREED);
+      result = free(pools, ptr, memSz);
+      assert(result == FreeCode::FREED || result == FreeCode::FREED_RECLAIM);
 
       ptr = nptr;
     }
@@ -368,10 +368,10 @@ realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
 
 util::maybe<void *>
 realloc(local::Pools &tl, local::Pools &pools, void *const ptr,
-        std::size_t length) noexcept {
+        std::size_t length, /*OUT*/ shared::FreeCode &code) noexcept {
   assert(tl.pools);
   assert(pools.pools);
-  return realloc(*tl.pools, *pools.pools, ptr, length);
+  return realloc(*tl.pools, *pools.pools, ptr, length, code);
 } // shared::realloc()
 
 } // namespace shared

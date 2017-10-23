@@ -115,7 +115,6 @@ namespace global {
 shared::FreeCode
 free(void *const ptr) noexcept {
   using shared::FreeCode;
-retry:
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
@@ -127,7 +126,7 @@ retry:
           // printf("free()=FREED_RECLAIM\n");
           if (!recycle_pool(internal_a, shared_guard, current)) {
             // TODO !!! FIX does not work
-            goto retry;
+            assert(false);
           }
         } else /*FreeCode::FREED*/ {
           // TODO enqueue frequently used Pool, but how to handle reference to
@@ -172,9 +171,12 @@ realloc(local::PoolsRAII &tl, void *const ptr, std::size_t length) noexcept {
   next:
     if (current) {
       auto code = shared::FreeCode::FREED;
-      auto result = shared::realloc(tl, *current, ptr, length, code);
+      auto result = shared::realloc(tl, *current, ptr, length, /*OUT*/ code);
       if (code == shared::FreeCode::FREED_RECLAIM) {
-        //TODO
+        if (!recycle_pool(internal_a, shared_guard, current)) {
+          // TODO
+          assert(false);
+        }
       }
       if (result) {
         return result;

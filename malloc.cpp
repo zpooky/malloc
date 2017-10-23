@@ -178,8 +178,10 @@ sp_realloc(void *const ptr, std::size_t length) noexcept {
     return nullptr;
   }
 
-  auto lresult = shared::realloc(local_pools, local_pools, ptr, length);
+  auto nop = shared::FreeCode::FREED;
+  auto lresult = shared::realloc(local_pools, local_pools, ptr, length, nop);
   if (lresult) {
+    assert(nop == shared::FreeCode::FREED);
     return lresult.get();
   }
 

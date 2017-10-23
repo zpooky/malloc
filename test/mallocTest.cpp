@@ -24,6 +24,42 @@
 
 //==================================================================================================
 //==================================================================================================
+static void
+assert_clean_slate() {
+  printf("EXPECT_EQ(std::size_t(0),debug::stuff_count_unclaimed_orphan_pools()["
+         "%zu]);\n",
+         debug::stuff_count_unclaimed_orphan_pools());
+  printf("EXPECT_EQ(std::size_t(0),debug::stuff_count_alloc()[%zu]);\n",
+         debug::stuff_count_alloc());
+
+  EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_orphan_pools());
+  EXPECT_EQ(std::size_t(0), debug::stuff_count_alloc());
+  auto global_free = debug::global_get_free(nullptr);
+  assert_no_overlap(global_free);
+  // assert_no_gaps(global_free); // TODO this wont work since TL pool is
+  // allocated
+  debug::stuff_force_reclaim_orphan();
+}
+
+/*Parametrized Fixture*/
+class MallocTest : public ::testing::Test {
+public:
+  MallocTest() {
+  }
+
+  virtual void
+  SetUp() {
+    printf("---------SetUp()\n");
+    assert_clean_slate();
+  }
+
+  virtual void
+  TearDown() {
+    printf("---------TearDown()\n");
+    assert_clean_slate();
+  }
+};
+
 /*Parametrized Fixture*/
 class MallocRangeSizeTest : public testing::TestWithParam<size_t> {
 public:
@@ -32,16 +68,14 @@ public:
 
   virtual void
   SetUp() {
+    printf("---------SetUp()\n");
+    assert_clean_slate();
   }
 
   virtual void
   TearDown() {
-    EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_orphan_pools());
-    EXPECT_EQ(std::size_t(0), debug::stuff_count_alloc());
-    auto global_free = debug::global_get_free(nullptr);
-    assert_no_overlap(global_free);
-    // assert_no_gaps(global_free);
-    debug::stuff_force_reclaim_orphan();
+    printf("---------TearDown()\n");
+    assert_clean_slate();
   }
 };
 
@@ -82,17 +116,14 @@ public:
 
   virtual void
   SetUp() {
+    printf("---------SetUp()\n");
+    assert_clean_slate();
   }
 
   virtual void
   TearDown() {
-    EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_orphan_pools());
-    EXPECT_EQ(std::size_t(0), debug::stuff_count_alloc());
-    auto global_free = debug::global_get_free(nullptr);
-    assert_no_overlap(global_free);
-    // assert_no_gaps(global_free); // TODO this wont work since TL pool is
-    // allocated
-    debug::stuff_force_reclaim_orphan();
+    printf("---------TearDown()\n");
+    assert_clean_slate();
   }
 };
 
@@ -205,6 +236,7 @@ malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
   });
 
   ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
+  ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc(rndAllocSz));
 }
 using ThreadArg = std::tuple<std::size_t, std::size_t>;
 
@@ -535,7 +567,7 @@ worker_test_range(void *arg) {
   return nullptr;
 }
 
-TEST(MallocTest, test_range) {
+TEST_F(MallocTest, test_range) {
   std::size_t it = NUMBER_OF_IT;
   threads(1, it, worker_test_range);
 }
@@ -654,7 +686,7 @@ worker_test_realloc(void *) {
   return nullptr;
 }
 
-TEST(MallocTest, test_realloc) {
+TEST_F(MallocTest, test_realloc) {
   void *arg = nullptr;
   threads(1, arg, worker_test_realloc);
 }
@@ -730,7 +762,7 @@ worker_malloc_consumer_realloc(void *a) {
   return nullptr;
 }
 
-TEST(MallocTest, test_1producer_1consumer_realloc) {
+TEST_F(MallocTest, test_1producer_1consumer_realloc) {
   std::vector<void *(*)(void *)> thProd{worker_malloc_producer};
   std::vector<void *(*)(void *)> thCon{worker_malloc_consumer_realloc};
   const std::size_t th = thProd.size() + thCon.size();
