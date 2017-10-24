@@ -109,6 +109,16 @@ free(void *const start) noexcept {
   return reinterpret_cast<Free *>(start);
 } // free()
 
+/*LocalFree*/
+LocalFree::LocalFree() noexcept
+    : lock{}
+    , next{nullptr}
+    , priv{nullptr}
+    , size{0} {
+}
+
+} // namespace header
+
 /*Extent*/
 static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");

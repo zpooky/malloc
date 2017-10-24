@@ -8,24 +8,48 @@
 #include "global.h"
 
 static void *
-local_alloc(header::Free &base, sp::node_size sz) noexcept {
-  sp::SharedLock guard{base.next_lock};
+local_alloc(header::LocalFree &base, sp::node_size sz) noexcept {
+  /* Exlcusive Lock only when dequeuing.
+   * Shared Lock when enquing & shrinking Free entry.
+   */
+start : {
+  header::Free *best = nullptr;
+  sp::SharedLock guard{base.lock};
   if (guard) {
     header::Free *current = base.next;
-    header::Free *best = current;
   next:
     if (current) {
-      if (current->size >= sz) {
-        //TODO
+      if (current->size == sz) {
+        best = current;
+        // TODO lock and dequeue
+        sp::PrepareGuard pre_guard{guard};
+        if (pre_guard) {
+          sp::ExclusiveGuard ex_guard{pre_guard};
+          if (ex_guard) {
+            // TODO
+          } else {
+            assert(false);
+          }
+        } else {
+          goto start;
+        }
+      } else {
+        if (current->size > sz) {
+          // TODO
+        }
+        current = current->next;
+        goto next;
       }
-      current = current->next;
-      goto next;
+    } else {
+      // TODO lock & resize
     }
   } else {
     // TODO
-    assert(false);
+    // assert(false);
   }
-  return nullptr;
+}
+
+  return best;
 } // ::alloc()
 
 static void *

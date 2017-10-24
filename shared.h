@@ -171,6 +171,15 @@ reduce(Free *free, sp::node_size length) noexcept;
 Free *
 free(void *const start) noexcept;
 
+/*LocalFree*/
+struct LocalFree {
+  sp::ReadWriteLock lock;
+  LocalFree *next;
+  LocalFree *priv;
+  sp::node_size size;
+  LocalFree() noexcept;
+};
+
 /*Extent*/
 struct Node;
 
