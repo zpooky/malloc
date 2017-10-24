@@ -166,10 +166,9 @@ recycle_extent(header::Node *head) noexcept {
   std::size_t recycled(0);
 start:
   header::Node *next = head->next.load();
-  const std::size_t node_size(head->node_size);
-  recycled += node_size;
+  recycled += std::size_t(head->node_size);
 
-  global::dealloc(head, node_size);
+  global::dealloc(head, head->node_size);
   if (next) {
     head = next;
     goto start;
@@ -363,6 +362,8 @@ realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
     }
     return util::maybe<void *>(ptr);
   }
+
+  result = FreeCode::NOT_FOUND;
   return {};
 }
 

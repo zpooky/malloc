@@ -25,25 +25,25 @@ struct State {
       : brk_lock{}
       , brk_position{nullptr}
       , brk_alloc{0}
-      , free{0, nullptr} {
+      , free{sp::node_size(0), nullptr} {
     // TODO move to src
     std::atomic_thread_fence(std::memory_order_release);
   }
 };
 namespace internal {
 header::Free *
-find_freex(State &, std::size_t) noexcept;
+find_freex(State &, sp::node_size) noexcept;
 void *
-alloc(State &, std::size_t) noexcept;
+alloc(State &, sp::node_size) noexcept;
 void
-dealloc(State &, void *const start, std::size_t length) noexcept;
+dealloc(State &, void *, sp::node_size) noexcept;
 
 } // namespace internal
 
 /*raw block alloc*/
-void *alloc(std::size_t) noexcept;
+void *alloc(sp::node_size) noexcept;
 void
-dealloc(void *, std::size_t) noexcept;
+dealloc(void *, sp::node_size) noexcept;
 
 } // namespace global
 

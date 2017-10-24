@@ -9,7 +9,7 @@
 #include <cassert>
 #include <cstring>
 
-#define SP_MALLOC_POOL_SIZE SP_MALLOC_PAGE_SIZE * 2
+#define SP_MALLOC_POOL_SIZE sp::node_size(SP_MALLOC_PAGE_SIZE * 2)
 
 struct asd {
   // {
@@ -76,8 +76,9 @@ static bool
 recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   if (unlink_pool(a, lock, subject)) {
     void *const target = reinterpret_cast<void *>(subject);
-    std::memset(target, 0, SP_MALLOC_POOL_SIZE);
-    global::dealloc(target, SP_MALLOC_POOL_SIZE);
+    constexpr std::size_t length(SP_MALLOC_POOL_SIZE);
+    std::memset(target, 0, length);
+    global::dealloc(target, sp::node_size(length));
     return true;
   }
   return false;
@@ -196,10 +197,12 @@ realloc(local::Pools &tl, void *const ptr, std::size_t length) noexcept {
 local::PoolsRAII *
 alloc_pool() noexcept {
   using PoolType = local::PoolsRAII;
-  static_assert(sizeof(PoolType) <= SP_MALLOC_POOL_SIZE, "");
+
+  constexpr std::size_t length(SP_MALLOC_POOL_SIZE);
+  static_assert(sizeof(PoolType) <= length, "");
 
   PoolType *result = nullptr;
-  void *const memory = global::alloc(SP_MALLOC_POOL_SIZE);
+  void *const memory = global::alloc(sp::node_size(length));
   if (memory) {
     result = new (memory) PoolType;
 

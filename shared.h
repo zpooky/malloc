@@ -9,7 +9,7 @@
 
 #define SP_MALLOC_PAGE_SIZE std::size_t(4 * 1024)
 #define SP_MALLOC_CACHE_LINE_SIZE 64
-#define SP_ALLOC_INITIAL_ALLOC std::size_t(SP_MALLOC_PAGE_SIZE)
+#define SP_ALLOC_INITIAL_ALLOC sp::node_size(SP_MALLOC_PAGE_SIZE)
 
 #define SP_TYPED_NUMERIC
 #ifdef SP_TYPED_NUMERIC
@@ -40,6 +40,10 @@ namespace sp {
       return NAME{data + o};                                                   \
     }                                                                          \
     constexpr NAME                                                             \
+    operator+(const NAME &o) const noexcept {                                  \
+      return operator+(o.data);                                                \
+    }                                                                          \
+    constexpr NAME                                                             \
     operator-(std::size_t o) const noexcept {                                  \
       return NAME{data - o};                                                   \
     }                                                                          \
@@ -52,8 +56,16 @@ namespace sp {
       return data > o;                                                         \
     }                                                                          \
     constexpr bool                                                             \
+    operator>(const NAME &o) const noexcept {                                  \
+      return operator>(o.data);                                                \
+    }                                                                          \
+    constexpr bool                                                             \
     operator>=(std::size_t o) const noexcept {                                 \
       return data >= o;                                                        \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator>=(const NAME &o) const noexcept {                                 \
+      return operator>=(o.data);                                               \
     }                                                                          \
     constexpr bool                                                             \
     operator<(std::size_t o) const noexcept {                                  \
@@ -67,6 +79,10 @@ namespace sp {
     operator<=(std::size_t o) const noexcept {                                 \
       return data <= o;                                                        \
     }                                                                          \
+    constexpr bool                                                             \
+    operator<=(const NAME &o) const noexcept {                                 \
+      return operator<=(o.data);                                               \
+    }                                                                          \
     constexpr NAME                                                             \
     operator/(std::size_t o) const noexcept {                                  \
       return NAME{data / o};                                                   \
@@ -77,6 +93,10 @@ namespace sp {
     }                                                                          \
     constexpr NAME operator*(std::size_t o) const noexcept {                   \
       return NAME{data * o};                                                   \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator==(const NAME &o) {                                                \
+      return data == o.data;                                                   \
     }                                                                          \
     constexpr explicit operator std::size_t() const noexcept {                 \
       return data;                                                             \
@@ -130,20 +150,24 @@ namespace header {
 /*Free*/
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
   sp::ReadWriteLock next_lock;
-  std::size_t size;
+  sp::node_size size;
   std::atomic<Free *> next;
 
-  Free(std::size_t sz, Free *nxt) noexcept;
+  Free(sp::node_size, Free *) noexcept;
 };
 
 bool
 is_consecutive(const Free *const head, const Free *const tail) noexcept;
+
 void
 coalesce(Free *head, Free *tail, Free *const next) noexcept;
+
 Free *
-init_free(void *const head, std::size_t length) noexcept;
+init_free(void *const head, sp::node_size length) noexcept;
+
 Free *
-reduce(Free *free, std::size_t length) noexcept;
+reduce(Free *free, sp::node_size length) noexcept;
+
 Free *
 free(void *const start) noexcept;
 
@@ -232,6 +256,7 @@ struct Pool { //
   operator=(const Pool &) = delete;
   Pool &
   operator=(Pool &&) = delete;
+
 }; // struct Pool
 
 /*Pools*/
@@ -279,6 +304,9 @@ public:
   operator=(Pools &&) = delete;
 
   Pool &operator[](std::size_t) noexcept;
+
+  void
+  init() noexcept;
 }; // struct Pool
 
 template <typename Res, typename Arg>

@@ -24,8 +24,8 @@ free_dequeue(header::Free *head, header::Free *target) noexcept {
 
 static void
 free_enqueue(header::Free *head, header::Free *target) noexcept {
-  assert(head != nullptr);
-  assert(target != nullptr);
+  assert(head);
+  assert(target);
   assert(head != target);
 
   if (header::is_consecutive(head, target)) {
@@ -38,7 +38,7 @@ free_enqueue(header::Free *head, header::Free *target) noexcept {
 } // ::free_enqueue()
 
 header::Free *
-find_free(global::State &state, size_t size) noexcept {
+find_free(global::State &state, sp::node_size size) noexcept {
 start:
   if (true) {
     header::Free *head = &state.free;
@@ -128,18 +128,18 @@ start:
 } // ::find_free()
 
 header::Free *
-alloc_free(global::State &state, const size_t atLeast) noexcept {
+alloc_free(global::State &state, sp::node_size atLeast) noexcept {
   {
     std::lock_guard<std::mutex> guard(state.brk_lock);
     // TODO some algorithm to determine optimal alloc size
-    std::size_t allocSz(0);
-    allocSz = std::max(state.brk_alloc, SP_ALLOC_INITIAL_ALLOC);
+    sp::node_size allocSz(0);
+    allocSz = std::max(state.brk_alloc, std::size_t(SP_ALLOC_INITIAL_ALLOC));
     allocSz = std::max(atLeast, allocSz);
   // TODO check size wrap around
   retry:
-    void *const res = ::sbrk(allocSz);
+    void *const res = ::sbrk(std::size_t(allocSz));
     if (res != (void *)-1) {
-      state.brk_alloc = state.brk_alloc + allocSz;
+      state.brk_alloc += std::size_t(allocSz);
       return header::init_free(res, allocSz);
     } else if (allocSz > atLeast) {
       allocSz = allocSz / 2;
@@ -261,7 +261,7 @@ start:
 } // ::return_free()
 
 void
-return_free(global::State &s, void *const ptr, size_t length) noexcept {
+return_free(global::State &s, void *const ptr, sp::node_size length) noexcept {
   header::Free *const toReturn = header::init_free(ptr, length);
   if (toReturn) {
     assert(ptr == toReturn);
@@ -282,7 +282,7 @@ static void
 debug_print_free(header::Free *const head) {
   if (head) {
     void *t = reinterpret_cast<void *>(head);
-    printf("[%p,%zu]", t, head->size);
+    printf("[%p,%zu]", t, std::size_t(head->size));
     debug_print_free(head->next.load());
   } else {
     printf("\n");
@@ -417,15 +417,16 @@ namespace global {
 namespace internal {
 
 header::Free *
-find_freex(State &state, std::size_t length) noexcept {
+find_freex(State &state, sp::node_size length) noexcept {
   return find_free(state, length);
 }
 
 void *
-alloc(State &state, std::size_t p_length) noexcept {
+alloc(State &state, sp::node_size p_length) noexcept {
   if (p_length == 0) {
     return nullptr;
   }
+
   header::Free *free = find_freex(state, p_length);
   if (free == nullptr) {
     free = alloc_free(state, p_length);
@@ -437,16 +438,16 @@ alloc(State &state, std::size_t p_length) noexcept {
   void *const unalign_ptr = reinterpret_cast<void *>(free);
   void *const align_ptr = util::align_pointer(unalign_ptr, 8);
   ptrdiff_t unalign_length = util::ptr_diff(align_ptr, unalign_ptr);
-  std::size_t align_length = free->size - unalign_length;
+  sp::node_size align_length = free->size - unalign_length;
 
   if (align_length >= p_length) {
     if (align_ptr != unalign_ptr) {
-      return_free(state, unalign_ptr, unalign_length);
+      return_free(state, unalign_ptr, sp::node_size(unalign_length));
       assert(false);
     }
 
-    void *const retFree = util::ptr_math(align_ptr, +p_length);
-    const size_t retLength = align_length - p_length;
+    void *const retFree = util::ptr_math(align_ptr, +std::size_t(p_length));
+    const sp::node_size retLength(align_length - p_length);
     return_free(state, retFree, retLength);
     return align_ptr;
   }
@@ -457,7 +458,7 @@ alloc(State &state, std::size_t p_length) noexcept {
 }
 
 void
-dealloc(State &state, void *const start, std::size_t length) noexcept {
+dealloc(State &state, void *const start, sp::node_size length) noexcept {
   return return_free(state, start, length);
 }
 
@@ -466,12 +467,12 @@ dealloc(State &state, void *const start, std::size_t length) noexcept {
 // TODO change so it should be number of pages instead of a specific
 // length+alignment
 void *
-alloc(std::size_t p_length) noexcept {
+alloc(sp::node_size p_length) noexcept {
   return internal::alloc(internal_state, p_length);
 } // alloc()
 
 void
-dealloc(void *const start, std::size_t length) noexcept {
+dealloc(void *const start, sp::node_size length) noexcept {
   return internal::dealloc(internal_state, start, length);
 }
 

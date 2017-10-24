@@ -55,12 +55,12 @@ INSTANTIATE_TEST_CASE_P(Default, GlobalTest,
 /*Util*/
 
 static void
-dummy_dealloc_setup(global::State &state, Range &range, size_t bSz) {
+dummy_dealloc_setup(global::State &state, Range &range, sp::node_size bSz) {
   // printf("dummy_dealloc_setup\n");
-  size_t i = 0;
+  std::size_t i = 0;
 // printf("valid: ");
 start:
-  size_t offset = i * bSz;
+  sp::node_size offset(bSz * i);
   if (offset + bSz <= range.length) {
     i++;
     void *const start = (void *)range.raw_offset(offset);
@@ -78,11 +78,11 @@ start:
 }
 
 static void
-dealloc_rand_setup(global::State &state, Range &range, size_t bSz) {
+dealloc_rand_setup(global::State &state, Range &range, sp::node_size bSz) {
   std::vector<void *> points;
-  size_t i = 0;
+  std::size_t i = 0;
 start:
-  size_t offset = i * bSz;
+  sp::node_size offset(bSz * i);
   if (offset + bSz <= range.length) {
     i++;
     void *const start = (void *)range.raw_offset(offset);
@@ -140,11 +140,11 @@ assert_dummy_dealloc(global::State &state, Range &range) {
 }
 
 static void
-assert_dummy_alloc(global::State &state, size_t size, Range &range, size_t bSz,
-                   Points &result) {
+assert_dummy_alloc(global::State &state, size_t size, Range &range,
+                   sp::node_size bSz, Points &result) {
 
   // printf("assert_dummy_dealloc\n");
-  for (size_t i = 0; i < size; i += bSz) {
+  for (size_t i = 0; i < size; i += std::size_t(bSz)) {
   retry:
     void *const current = global::internal::find_freex(state, bSz);
     if (current == nullptr) {
@@ -159,7 +159,7 @@ assert_dummy_alloc(global::State &state, size_t size, Range &range, size_t bSz,
 
 /*Test*/
 TEST_P(GlobalTest, dealloc_alloc_symmetric) {
-  const size_t sz = GetParam();
+  const sp::node_size sz(GetParam());
 
   const size_t SIZE = 1024 * 64;
   // alignas(64) uint8_t range[SIZE];
@@ -189,7 +189,7 @@ TEST_P(GlobalTest, dealloc_alloc_symmetric) {
 }
 
 TEST_P(GlobalTest, dealloc_doubling_alloc) {
-  const size_t sz = GetParam();
+  const sp::node_size sz(GetParam());
 
   const size_t SIZE = 1024 * 64;
   // alignas(64) uint8_t range[SIZE];
@@ -213,7 +213,7 @@ TEST_P(GlobalTest, dealloc_doubling_alloc) {
 }
 
 TEST_P(GlobalTest, dealloc_half_alloc) {
-  const size_t sz = GetParam();
+  const sp::node_size sz(GetParam());
 
   if (sz != 64) { // 64 is the minimum size
     const size_t SIZE = 1024 * 64;
@@ -260,10 +260,23 @@ struct ThreadAllocArg {
   sp::Barrier *b4;
 
   global::State *state;
-  size_t sz;
+  sp::node_size sz;
   size_t thread_range_size;
   Range range;
   Points result;
+  ThreadAllocArg()
+      : i(0)
+      , b(nullptr)
+      , b1(nullptr)
+      , b2(nullptr)
+      , b3(nullptr)
+      , b4(nullptr)
+      , state(nullptr)
+      , sz(0)
+      , thread_range_size(0)
+      , range()
+      , result() {
+  }
 };
 
 template <size_t thCnt>

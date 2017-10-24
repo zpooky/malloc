@@ -8,19 +8,33 @@
 #include "global.h"
 
 static void *
-local_alloc(local::PoolsRAII &pools, sp::node_size sz) noexcept {
-  // TODO
+local_alloc(header::Free &base, sp::node_size sz) noexcept {
+  sp::SharedLock guard{base.next_lock};
+  if (guard) {
+    header::Free *current = base.next;
+    header::Free *best = current;
+  next:
+    if (current) {
+      if (current->size >= sz) {
+        //TODO
+      }
+      current = current->next;
+      goto next;
+    }
+  } else {
+    // TODO
+    assert(false);
+  }
   return nullptr;
 } // ::alloc()
 
 static void *
 alloc(local::PoolsRAII &pools, sp::node_size sz) noexcept {
-  void *result = local_alloc(pools, sz);
+  void *result = local_alloc(pools.base_free, sz);
   if (!result) {
-    const std::size_t size(sz);
-    result = global::alloc(size);
+    result = global::alloc(sz);
     if (result) {
-      pools.total_alloc.fetch_add(size);
+      pools.total_alloc.fetch_add(std::size_t(sz));
     }
   }
   return result;

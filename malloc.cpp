@@ -109,12 +109,18 @@ static thread_local local::Pools local_pools;
 namespace debug {
 std::size_t
 malloc_count_alloc() {
-  return alloc_count_alloc(*local_pools.pools);
+  if (local_pools.pools) {
+    return alloc_count_alloc(*local_pools.pools);
+  }
+  return 0;
 }
 
 std::size_t
 malloc_count_alloc(std::size_t sz) {
-  return alloc_count_alloc(*local_pools.pools, sz);
+  if (local_pools.pools) {
+    return alloc_count_alloc(*local_pools.pools, sz);
+  }
+  return 0;
 }
 
 } // namespace debug
@@ -129,7 +135,10 @@ sp_malloc(std::size_t length) noexcept {
   if (length == 0) {
     return nullptr;
   }
+
   auto &lpools = local_pools;
+  lpools.init();
+
   return shared::alloc(lpools, length);
 } // ::sp_malloc()
 
@@ -140,9 +149,14 @@ sp_free(void *const ptr) noexcept {
   }
 
   using shared::FreeCode;
+  auto result = FreeCode::NOT_FOUND;
 
   auto &lpools = local_pools;
-  auto result = shared::free(lpools, ptr);
+  if (lpools.pools) {
+    result = shared::free(lpools, ptr);
+    assert(result != FreeCode::FREED_RECLAIM);
+  }
+
   if (result == FreeCode::NOT_FOUND) {
     result = global::free(ptr);
   }
@@ -156,14 +170,15 @@ sp_usable_size(void *const ptr) noexcept {
     return 0;
   }
 
-  auto lresult = shared::usable_size(local_pools, ptr);
-  if (lresult) {
-    // printf("lresult\n");
-    return std::size_t(lresult.get());
+  auto &lpools = local_pools;
+  if (lpools.pools) {
+    auto result = shared::usable_size(lpools, ptr);
+    if (result) {
+      return std::size_t(result.get());
+    }
   }
 
   auto result = global::usable_size(ptr);
-  // printf("rresult\n");
   return result.get_or(std::size_t(0));
 } // ::sp_usable_size()
 
@@ -178,12 +193,14 @@ sp_realloc(void *const ptr, std::size_t length) noexcept {
     return nullptr;
   }
 
-  auto nop = shared::FreeCode::FREED;
+  auto nop = shared::FreeCode::NOT_FOUND;
+  // TODO only required init() when length < bucket->size
+  local_pools.init();
   auto lresult = shared::realloc(local_pools, local_pools, ptr, length, nop);
   if (lresult) {
-    assert(nop == shared::FreeCode::FREED);
     return lresult.get();
   }
+  assert(nop == shared::FreeCode::NOT_FOUND);
 
   auto result = global::realloc(local_pools, ptr, length);
   void *const def = nullptr;

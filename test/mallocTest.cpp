@@ -21,23 +21,26 @@
 // TODO think of fixeing the case when memory mapped to specific pool but
 // the bucket is not currenctly reserved then "usuable_size" still returns
 // its pool size when infact it should be 0 since it is not reserved?
+// TODO free(nonHeapPtr)...
 
 //==================================================================================================
 //==================================================================================================
 static void
 assert_clean_slate() {
-  printf("EXPECT_EQ(std::size_t(0),debug::stuff_count_unclaimed_orphan_pools()["
-         "%zu]);\n",
-         debug::stuff_count_unclaimed_orphan_pools());
-  printf("EXPECT_EQ(std::size_t(0),debug::stuff_count_alloc()[%zu]);\n",
-         debug::stuff_count_alloc());
+  // printf("EXPECT_EQ(std::size_t(0),debug::stuff_count_unclaimed_orphan_pools()["
+  //        "%zu]);\n",
+  //        debug::stuff_count_unclaimed_orphan_pools());
+  // printf("EXPECT_EQ(std::size_t(0),debug::stuff_count_alloc()[%zu]);\n",
+  //        debug::stuff_count_alloc());
 
   EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_orphan_pools());
   EXPECT_EQ(std::size_t(0), debug::stuff_count_alloc());
   auto global_free = debug::global_get_free(nullptr);
   assert_no_overlap(global_free);
-  // assert_no_gaps(global_free); // TODO this wont work since TL pool is
-  // allocated
+  // TODO does not work probably because we are using stdmalloc and spmalloc at
+  // the same time
+  // assert_no_gaps(global_free);
+  // TODO assert that all memory get returned to global pool
   debug::stuff_force_reclaim_orphan();
 }
 
@@ -49,13 +52,13 @@ public:
 
   virtual void
   SetUp() {
-    printf("---------SetUp()\n");
+    // printf("---------SetUp()\n");
     assert_clean_slate();
   }
 
   virtual void
   TearDown() {
-    printf("---------TearDown()\n");
+    // printf("---------TearDown()\n");
     assert_clean_slate();
   }
 };
@@ -68,13 +71,13 @@ public:
 
   virtual void
   SetUp() {
-    printf("---------SetUp()\n");
+    // printf("---------SetUp()\n");
     assert_clean_slate();
   }
 
   virtual void
   TearDown() {
-    printf("---------TearDown()\n");
+    // printf("---------TearDown()\n");
     assert_clean_slate();
   }
 };
@@ -116,13 +119,13 @@ public:
 
   virtual void
   SetUp() {
-    printf("---------SetUp()\n");
+    // printf("---------SetUp()\n");
     assert_clean_slate();
   }
 
   virtual void
   TearDown() {
-    printf("---------TearDown()\n");
+    // printf("---------TearDown()\n");
     assert_clean_slate();
   }
 };
@@ -728,19 +731,24 @@ malloc_consumer_realloc(test::MemStack &s, std::atomic<std::size_t> &cnt) {
   Points resized;
   while (cnt > 0) {
     auto res = dequeue(s);
-    if (bool(res)) {
+    if (res) {
       --cnt;
+
       void *p = std::get<0>(res.get());
       std::size_t len = std::get<1>(res.get());
       std::size_t newLen = roundAlloc(len + 1);
+
       void *nptr = sp_realloc(p, newLen);
       ASSERT_FALSE(p == nptr);
       ASSERT_FALSE(nptr == nullptr);
-      // printf("cnt(%zu)\n", cnt.load());
+
+      std::size_t us = sp_usable_size(nptr);
+      ASSERT_TRUE(us >= newLen);
+      resized.emplace_back(nptr, us);
     }
   }
-  printf("free\n");
-  time("free", [&] { //
+
+  time("free", [&] {
     for (auto c : resized) {
       void *ptr = std::get<0>(c);
       std::size_t actualSz = std::get<1>(c);

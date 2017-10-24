@@ -51,7 +51,7 @@ namespace header {
 static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-Free::Free(std::size_t sz, Free *nxt) noexcept //
+Free::Free(sp::node_size sz, Free *nxt) noexcept //
     : next_lock{}
     , size(sz)
     , next(nxt) {
@@ -59,10 +59,10 @@ Free::Free(std::size_t sz, Free *nxt) noexcept //
 
 bool
 is_consecutive(const Free *const head, const Free *const tail) noexcept {
-  assert(head != nullptr);
-  assert(tail != nullptr);
+  assert(head);
+  assert(tail);
   uintptr_t head_base = reinterpret_cast<uintptr_t>(head);
-  uintptr_t head_end = head_base + head->size;
+  uintptr_t head_end = head_base + std::size_t(head->size);
   uintptr_t tail_base = reinterpret_cast<uintptr_t>(tail);
   return head_end == tail_base;
 } // is_consecutive()
@@ -71,16 +71,16 @@ void
 coalesce(Free *head, Free *tail, Free *const next) noexcept {
   assert(is_consecutive(head, tail));
   head->size = head->size + tail->size;
-  memset(tail, 0, tail->size); // TODO only debug
+  memset(tail, 0, std::size_t(tail->size)); // TODO only debug
   head->next.store(next, std::memory_order_relaxed);
 } // coalesce()
 
 Free *
-init_free(void *const head, std::size_t length) noexcept {
+init_free(void *const head, sp::node_size length) noexcept {
   if (head && length > 0) {
     assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
     assert(length >= sizeof(Free));
-    memset(head, 0, length); // TODO only debug
+    memset(head, 0, std::size_t(length)); // TODO only debug
 
     Free *const result = new (head) Free(length, nullptr);
     assert(reinterpret_cast<Free *>(result) == head);
@@ -90,14 +90,14 @@ init_free(void *const head, std::size_t length) noexcept {
 } // init_free()
 
 Free *
-reduce(Free *free, std::size_t length) noexcept {
+reduce(Free *free, sp::node_size length) noexcept {
   assert(free->size >= length);
   assert((free->size - length) >= sizeof(Free));
 
-  std::size_t newSz = free->size - length;
+  sp::node_size newSz(free->size - length);
   free->size = newSz;
 
-  void *const result = util::ptr_math(free, +newSz);
+  void *const result = util::ptr_math(free, +std::size_t(newSz));
   return new (result) Free(length, nullptr);
 } // reduce()
 
@@ -228,7 +228,7 @@ PoolsRAII::PoolsRAII() noexcept
     , priv{nullptr}
     , next{nullptr}
     , reclaim{false}
-    , base_free(0, nullptr) {
+    , base_free(sp::node_size(0), nullptr) {
   // TODO std::atomic_thread_fence(std::memory_order_release);?
 }
 
@@ -242,8 +242,7 @@ Pool &PoolsRAII::operator[](std::size_t idx) noexcept {
 // class Pools {{{
 Pools::Pools() noexcept
     : pools{nullptr} {
-  pools = global::alloc_pool();
-  printf("ctor Pools TL\n");
+  // printf("ctor Pools TL\n");
 }
 
 Pools::~Pools() noexcept {
@@ -251,13 +250,19 @@ Pools::~Pools() noexcept {
     global::release_pool(pools);
     pools = nullptr;
   }
-  printf("dtor Pools TL\n");
+  // printf("dtor Pools TL\n");
 }
 
 Pool &Pools::operator[](std::size_t idx) noexcept {
   assert(pools != nullptr);
   assert(idx < BUCKETS);
   return pools->buckets[idx];
+}
+void
+Pools::init() noexcept {
+  if (!pools) {
+    pools = global::alloc_pool();
+  }
 }
 // }}}
 
