@@ -5,7 +5,7 @@
 #include <cassert>
 #include <cstring>
 
-namespace shared {
+using shared::FreeCode;
 
 template <typename Res, typename Arg>
 using NodeFor = Res (*)(header::Node *, Arg &);
@@ -20,7 +20,7 @@ node_in_range(const header::Node *const node, void *const ptr) noexcept {
 
   const uintptr_t compare = reinterpret_cast<uintptr_t>(ptr);
   return compare >= start && compare < end;
-} // node_in_range()
+} // ::node_in_range()
 
 template <typename Res, typename Arg>
 static util::maybe<Res>
@@ -39,7 +39,7 @@ node_for(local::Pool &pool, void *search, NodeFor<Res, Arg> f,
     }
   }
   return {};
-} // node_for()
+} // ::node_for()
 
 static util::maybe<std::size_t>
 node_index_of(header::Node *const node, void *const ptr) noexcept {
@@ -64,7 +64,7 @@ node_index_of(header::Node *const node, void *const ptr) noexcept {
     assert(false);
   }
   return {};
-}
+} //:node_index_of()
 
 static sp::buckets
 node_buckets(header::Node *const node) noexcept {
@@ -75,7 +75,7 @@ node_buckets(header::Node *const node) noexcept {
   }
 
   return sp::buckets(0);
-}
+} //::node_buckets()
 
 template <typename Res, typename Arg>
 using ExtFor = Res (*)(header::Node *, sp::index, Arg &);
@@ -112,7 +112,7 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
   }
 
   return {};
-} // extent_for()
+} // ::extent_for()
 
 static bool
 perform_free(header::Extent *ext, sp::index idx) noexcept {
@@ -125,7 +125,7 @@ perform_free(header::Extent *ext, sp::index idx) noexcept {
   }
 
   return true;
-} // shared::perform_free()
+} // ::perform_free()
 
 static header::Node *
 find_parent(header::Node *start, header::Node *const child) noexcept {
@@ -141,10 +141,10 @@ start:
 
   assert(false);
   return nullptr;
-}
+} //::find_parent()
 
 static void
-unlink_extent(header::Node *parent, header::Node *head) noexcept {
+unlink_extent(header::Node *const parent, header::Node *head) noexcept {
   assert(parent);
   assert(head);
 start:
@@ -157,24 +157,49 @@ start:
     head->next.store(nullptr, std::memory_order_relaxed);
   }
   parent->next.store(current);
-}
+} //::unlink_extent()
+
+namespace local {
+static void
+dealloc(header::LocalFree &base, void *const raw, sp::node_size sz) noexcept {
+  sp::SharedLock guard{base.lock};
+  if (guard) {
+    header::LocalFree *current = base.next;
+  next:
+    if (current) {
+      // TODO
+    }
+  } else {
+    // TODO
+    assert(false);
+  }
+} // local::dealloc()
+
+} // namespace local
 
 static std::size_t
-recycle_extent(header::Node *head) noexcept {
+recycle_extent(local::PoolsRAII &ps, header::Node *head) noexcept {
   assert(head);
-  // TODO local::free_list support
   std::size_t recycled(0);
+  bool reclaim = ps.reclaim.load();
+// TODO if reclaim is false maybe put in TL FreeList
 start:
   header::Node *next = head->next.load();
   recycled += std::size_t(head->node_size);
 
-  global::dealloc(head, head->node_size);
+  if (reclaim) {
+    // TODO batch dealloc
+    global::dealloc(head, head->node_size);
+  } else {
+    // TODO batch dealloc
+    local::dealloc(ps.base_free, head, head->node_size);
+  }
   if (next) {
     head = next;
     goto start;
   }
   return recycled;
-}
+} //::recycle_extent()
 
 static FreeCode
 free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
@@ -248,14 +273,14 @@ free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
   }   /*shared*/
 
   return FreeCode::NOT_FOUND;
-}
+} //::free_logic()
 
 static FreeCode
 free_reclaim(local::PoolsRAII &ps, FreeCode c, header::Node *rExts) noexcept {
   // FREED_RECLAIM in this context means that the Extent was reclaimed
   if (c == FreeCode::FREED_RECLAIM) {
     assert(rExts);
-    std::size_t recycled = recycle_extent(rExts);
+    std::size_t recycled = recycle_extent(ps, rExts);
 
     std::size_t total = ps.total_alloc.fetch_sub(recycled);
     if (total == recycled) {
@@ -269,7 +294,7 @@ free_reclaim(local::PoolsRAII &ps, FreeCode c, header::Node *rExts) noexcept {
   }
 
   return FreeCode::FREED;
-}
+} //::free_reclaim()
 
 static FreeCode
 free(local::PoolsRAII &pools, void *ptr, sp::bucket_size length) noexcept {
@@ -282,7 +307,9 @@ free(local::PoolsRAII &pools, void *ptr, sp::bucket_size length) noexcept {
   }
 
   return free_reclaim(pools, result, recycled_ext);
-}
+} //::free()
+
+namespace shared {
 
 FreeCode
 free(local::PoolsRAII &pools, void *const ptr) noexcept {
@@ -343,19 +370,19 @@ usable_size(local::Pools &pools, void *const ptr) noexcept {
 
 util::maybe<void *>
 realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
-        std::size_t length, /*OUT*/ shared::FreeCode &result) noexcept {
+        std::size_t length, /*OUT*/ FreeCode &result) noexcept {
   auto maybeMemSz = usable_size(pools, ptr);
   if (maybeMemSz) {
     sp::bucket_size memSz = maybeMemSz.get();
     if (memSz < length) {
       void *const nptr = alloc(tl, length);
       if (nptr) {
-        memcpy(nptr, ptr, std::size_t(memSz));
+        std::memcpy(nptr, ptr, std::size_t(memSz));
       } else {
         // runtime fault, out of memory
         assert(false);
       }
-      result = free(pools, ptr, memSz);
+      result = ::free(pools, ptr, memSz);
       assert(result == FreeCode::FREED || result == FreeCode::FREED_RECLAIM);
 
       ptr = nptr;
@@ -369,7 +396,7 @@ realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
 
 util::maybe<void *>
 realloc(local::Pools &tl, local::Pools &pools, void *const ptr,
-        std::size_t length, /*OUT*/ shared::FreeCode &code) noexcept {
+        std::size_t length, /*OUT*/ FreeCode &code) noexcept {
   assert(tl.pools);
   assert(pools.pools);
   return realloc(*tl.pools, *pools.pools, ptr, length, code);

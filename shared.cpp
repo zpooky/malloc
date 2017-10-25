@@ -51,10 +51,14 @@ namespace header {
 static_assert(sizeof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Free) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-Free::Free(sp::node_size sz, Free *nxt) noexcept //
+Free::Free(sp::node_size sz, Free *nxt) noexcept
     : next_lock{}
     , size(sz)
     , next(nxt) {
+}
+
+Free::Free(sp::node_size sz) noexcept
+    : Free(sz, nullptr) {
 }
 
 bool
@@ -65,41 +69,51 @@ is_consecutive(const Free *const head, const Free *const tail) noexcept {
   uintptr_t head_end = head_base + std::size_t(head->size);
   uintptr_t tail_base = reinterpret_cast<uintptr_t>(tail);
   return head_end == tail_base;
-} // is_consecutive()
+} // header::is_consecutive()
 
 void
 coalesce(Free *head, Free *tail, Free *const next) noexcept {
   assert(is_consecutive(head, tail));
   head->size = head->size + tail->size;
-  memset(tail, 0, std::size_t(tail->size)); // TODO only debug
+#ifdef SP_TEST
+  memset(tail, 0, std::size_t(tail->size));
+#endif
   head->next.store(next, std::memory_order_relaxed);
-} // coalesce()
+} // header::coalesce()
 
 Free *
 init_free(void *const head, sp::node_size length) noexcept {
   if (head && length > 0) {
     assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
     assert(length >= sizeof(Free));
-    memset(head, 0, std::size_t(length)); // TODO only debug
+#ifdef SP_TEST
+    memset(head, 0, std::size_t(length));
+#endif
 
     Free *const result = new (head) Free(length, nullptr);
     assert(reinterpret_cast<Free *>(result) == head);
     return result;
   }
   return nullptr;
-} // init_free()
+} // header::init_free()
 
-Free *
-reduce(Free *free, sp::node_size length) noexcept {
+template <typename T>
+static T *
+ireduce(T *const free, sp::node_size length) noexcept {
   assert(free->size >= length);
-  assert((free->size - length) >= sizeof(Free));
+  assert((free->size - length) >= sizeof(T));
 
   sp::node_size newSz(free->size - length);
   free->size = newSz;
 
   void *const result = util::ptr_math(free, +std::size_t(newSz));
-  return new (result) Free(length, nullptr);
-} // reduce()
+  return new (result) T(length);
+}
+
+Free *
+reduce(Free *const free, sp::node_size length) noexcept {
+  return ireduce(free, length);
+} // header::reduce()
 
 Free *
 free(void *const start) noexcept {
@@ -107,23 +121,30 @@ free(void *const start) noexcept {
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % alignof(Free) == 0);
   return reinterpret_cast<Free *>(start);
-} // free()
+} // header::free()
 
 /*LocalFree*/
-LocalFree::LocalFree() noexcept
+LocalFree::LocalFree(sp::node_size sz) noexcept
     : lock{}
     , next{nullptr}
     , priv{nullptr}
-    , size{0} {
+    , size{sz} {
 }
 
-} // namespace header
+LocalFree::LocalFree() noexcept
+    : LocalFree(sp::node_size(0)) {
+}
+
+LocalFree *
+reduce(LocalFree *const free, sp::node_size length) noexcept {
+  return ireduce(free, length);
+} // header::reduce()
 
 /*Extent*/
 static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 static_assert(alignof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
 
-Extent::Extent() noexcept //
+Extent::Extent() noexcept
     : reserved{false} {
 }
 
@@ -133,7 +154,7 @@ calc_buckets(sp::node_size nodeSz, sp::bucket_size bucketSz) noexcept {
   assert(nodeSz > header::SIZE);
 
   return (nodeSz - header::SIZE) / bucketSz;
-}
+} // header::calc_buckets()
 
 Extent *
 extent(Node *const start) noexcept {
@@ -144,12 +165,12 @@ extent(Node *const start) noexcept {
   assert(headerPtr % alignof(Extent) == 0);
 
   return reinterpret_cast<Extent *>(headerPtr);
-} // extent()
+} // header::extent()
 
 bool
 is_empty(Extent *const ext) noexcept {
   return ext->reserved.all(0);
-}
+} // header::is_empty()
 
 /*Node*/
 // static_assert(alignof(Node) == SP_MALLOC_CACHE_LINE_SIZE, "");
@@ -183,7 +204,7 @@ init_extent(void *const raw, sp::node_size size,
   new (eHdr) Extent;
 
   return nHdr;
-} // init_node()
+} // header::init_node()
 
 Node *
 node(void *const start) noexcept {
@@ -191,10 +212,10 @@ node(void *const start) noexcept {
   uintptr_t startPtr = reinterpret_cast<uintptr_t>(start);
   assert(startPtr % Node::ALIGNMENT == 0);
   return reinterpret_cast<Node *>(start);
-} // node()
+} // header::node()
 
 sp::node_size
-node_data_size(Node *node) noexcept {
+node_data_size(Node *const node) noexcept {
   sp::node_size result = node->node_size;
   if (node->type == NodeType::HEAD) {
     assert(result >= header::SIZE);
@@ -204,17 +225,18 @@ node_data_size(Node *node) noexcept {
     result = result - sizeof(Node);
   }
   return result;
-}
+} // header::node_data_size()
 
 std::uintptr_t
-node_data_start(Node *node) noexcept {
+node_data_start(Node *const node) noexcept {
   uintptr_t result = reinterpret_cast<uintptr_t>(node);
   result += sizeof(Node);
   if (node->type == NodeType::HEAD) {
     result += sizeof(Extent);
   }
   return result;
-}
+} // header::node_data_start()
+
 } // namespace header
 
 /*
@@ -238,7 +260,7 @@ PoolsRAII::PoolsRAII() noexcept
     , priv{nullptr}
     , next{nullptr}
     , reclaim{false}
-    , base_free(sp::node_size(0), nullptr) {
+    , base_free() {
   // TODO std::atomic_thread_fence(std::memory_order_release);?
 }
 

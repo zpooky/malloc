@@ -6,27 +6,42 @@
 #include "ReadWriteLock.h"
 #include "bitset/Bitset.h"
 #include "global.h"
+#include <cstring>
 
 static void *
 local_alloc(header::LocalFree &base, sp::node_size sz) noexcept {
-  /* Exlcusive Lock only when dequeuing.
-   * Shared Lock when enquing & shrinking Free entry.
-   */
+/* Exclusive Lock only when dequeuing.
+ * Shared Lock when enqueueing & shrinking Free entry.
+ * Single dequeue(*alloc) multiple enqueue(free).
+ * dubble linked but not circular.
+ */
+// TODO coalesce
 start : {
-  header::Free *best = nullptr;
+  header::LocalFree *best = nullptr;
   sp::SharedLock guard{base.lock};
   if (guard) {
-    header::Free *current = base.next;
+    header::LocalFree *current = base.next;
   next:
     if (current) {
       if (current->size == sz) {
-        best = current;
-        // TODO lock and dequeue
-        sp::PrepareGuard pre_guard{guard};
+        sp::TryPrepareLock pre_guard{guard};
         if (pre_guard) {
-          sp::ExclusiveGuard ex_guard{pre_guard};
+          sp::EagerExclusiveLock ex_guard{pre_guard};
           if (ex_guard) {
-            // TODO
+
+            if (current->next)
+              current->next->priv = current->priv;
+
+            if (current->priv)
+              current->priv->next = current->next;
+
+            if (base.next == current)
+              base.next = current->next;
+
+#ifdef SP_TEST
+            std::memset(current, 0, std::size_t(current->size));
+#endif
+            return current;
           } else {
             assert(false);
           }
@@ -35,27 +50,29 @@ start : {
         }
       } else {
         if (current->size > sz) {
-          // TODO
+          if (!best || best->size > current->size) {
+            best = current;
+          }
         }
         current = current->next;
         goto next;
       }
-    } else {
-      // TODO lock & resize
+    } else if (best) {
+      return header::reduce(best, sz);
     }
   } else {
-    // TODO
-    // assert(false);
+    // TODO handle
+    assert(false);
   }
 }
-
-  return best;
-} // ::alloc()
+  return nullptr;
+} // ::local_alloc()
 
 static void *
 alloc(local::PoolsRAII &pools, sp::node_size sz) noexcept {
   void *result = local_alloc(pools.base_free, sz);
   if (!result) {
+    // TODO logic to allocate extra memory for locall::FreeList
     result = global::alloc(sz);
     if (result) {
       pools.total_alloc.fetch_add(std::size_t(sz));
@@ -73,11 +90,6 @@ next_node(header::Node *const start) noexcept {
   return start->next.load();
 } // ::next_node()
 
-/*
- * @param start - extent start
- * @param index -
- * @desc  -
- */
 static void *
 pointer_at(header::Node *start, sp::index index) noexcept {
   // Pool[Extent[Node[nodeHDR,extHDR],Node[nodeHDR]...]...]
@@ -121,10 +133,6 @@ node_start:
   }
 } // ::pointer_at()
 
-/*
- * @start - extent start
- * desc  - Used by malloc & free
- */
 static header::Node *
 next_extent(header::Node *start) noexcept {
   assert(start != nullptr);
@@ -140,10 +148,6 @@ start:
   return nullptr;
 } // ::next_intent()
 
-/*
- * @start - extent start
- * desc  - Used by malloc
- */
 static void *
 reserve(header::Node *const node) noexcept {
   if (node->type == header::NodeType::HEAD) {
@@ -193,10 +197,6 @@ calc_min_node(sp::bucket_size bucketSz) noexcept {
   return lookup[shared::pool_index(bucketSz)];
 }
 
-/*
- * @bucketSz - Normailzed size of bucket
- * desc  - Used by malloc
- */
 static header::Node *
 alloc_extent(local::PoolsRAII &pools, sp::bucket_size bucketSz) noexcept {
   // printf("alloc_extent(%zu)\n", bucketSz);
@@ -231,10 +231,6 @@ enqueue_new_extent(local::PoolsRAII &pools, std::atomic<header::Node *> &w,
   return current;
 } // ::enqueue_new_extent()
 
-/*
- * @size - extent start
- * desc  - Used by malloc
- */
 static void
 expand_extent(void *const) noexcept {
   // TODO

@@ -57,9 +57,6 @@
 //  * logic for reclaim on TL free the Extent
 //  * logic for reclaim on non-TL free the Extent
 //
-// 4. Differentiate global and global_Pool storage
-//  * refactor to two different files
-//
 // 5. global::free_list
 //  *  (shrinking/reclamation/release/dealloc) reclaim usuable mem to sbrk
 //  * change interface for global::alloc to N 4096 pages not X bytes
@@ -92,9 +89,19 @@
 //    - on PoolsRAII level
 //    - on Pool level
 // - An optimized collections of Pool:s used for free:ing in addition to the
-//   Pool[60] used for allocating
-// - skip `this` when global::free()
-// - delay creating PoolsRAII until necessary(malloc)
+//   Pool[60] used for allocating. balanced tree for Pool which are non-empty.
+// - skip TL Pool when iterating global::free() since we have already handled it.
+
+// TODO
+// - Look over where we use atomic<>
+
+// TODO feature
+// - alloc_aligned() - Find a bucket which have to required alignment
+// - free(ptr,size) - support free with size hint
+// - implement c++ new() interface
+// - implement malloc interface
+// - LD_PRELUDE
+// - benchmark
 
 // {{{
 static thread_local local::Pools local_pools;

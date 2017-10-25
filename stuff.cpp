@@ -34,7 +34,7 @@ struct asd {
 static asd internal_a;
 
 static bool
-unlink_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
+iunlink_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   assert(subject);
   sp::TryPrepareLock pre_guard{lock};
   if (pre_guard) {
@@ -74,10 +74,12 @@ unlink_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
 
 static bool
 recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
-  if (unlink_pool(a, lock, subject)) {
+  if (iunlink_pool(a, lock, subject)) {
     void *const target = reinterpret_cast<void *>(subject);
     constexpr std::size_t length(SP_MALLOC_POOL_SIZE);
+#ifdef SP_TEST
     std::memset(target, 0, length);
+#endif
     global::dealloc(target, sp::node_size(length));
     return true;
   }

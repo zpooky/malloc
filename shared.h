@@ -154,6 +154,7 @@ struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Free { //
   std::atomic<Free *> next;
 
   Free(sp::node_size, Free *) noexcept;
+  explicit Free(sp::node_size) noexcept;
 };
 
 bool
@@ -166,7 +167,7 @@ Free *
 init_free(void *const head, sp::node_size length) noexcept;
 
 Free *
-reduce(Free *free, sp::node_size length) noexcept;
+reduce(Free *, sp::node_size) noexcept;
 
 Free *
 free(void *const start) noexcept;
@@ -177,8 +178,13 @@ struct LocalFree {
   LocalFree *next;
   LocalFree *priv;
   sp::node_size size;
+
   LocalFree() noexcept;
+  explicit LocalFree(sp::node_size) noexcept;
 };
+
+LocalFree *
+reduce(LocalFree *, sp::node_size) noexcept;
 
 /*Extent*/
 struct Node;
@@ -285,7 +291,7 @@ struct PoolsRAII { //
   //}
 
   // local free list {
-  header::Free base_free;
+  header::LocalFree base_free;
   // }
 
   PoolsRAII() noexcept;
