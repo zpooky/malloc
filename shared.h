@@ -175,8 +175,8 @@ free(void *const start) noexcept;
 /*LocalFree*/
 struct LocalFree {
   sp::ReadWriteLock lock;
-  LocalFree *next;
-  LocalFree *priv;
+  std::atomic<LocalFree *> next;
+  std::atomic<LocalFree *> priv;
   sp::node_size size;
 
   LocalFree() noexcept;
@@ -185,6 +185,12 @@ struct LocalFree {
 
 LocalFree *
 reduce(LocalFree *, sp::node_size) noexcept;
+
+LocalFree *
+init_local_free(void *const head, sp::node_size) noexcept;
+
+LocalFree *
+init_local_free(void *const head, sp::node_size, LocalFree *next) noexcept;
 
 /*Extent*/
 struct Node;

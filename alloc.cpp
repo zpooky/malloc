@@ -13,7 +13,7 @@ local_alloc(header::LocalFree &base, sp::node_size sz) noexcept {
 /* Exclusive Lock only when dequeuing.
  * Shared Lock when enqueueing & shrinking Free entry.
  * Single dequeue(*alloc) multiple enqueue(free).
- * dubble linked but not circular.
+ * Double linked but not circular.
  */
 // TODO coalesce
 start : {
@@ -29,14 +29,16 @@ start : {
           sp::EagerExclusiveLock ex_guard{pre_guard};
           if (ex_guard) {
 
-            if (current->next)
-              current->next->priv = current->priv;
+            auto next = current->next.load();
+            if (next)
+              next->priv.store(current->priv);
 
-            if (current->priv)
-              current->priv->next = current->next;
+            auto priv = current->priv.load();
+            if (priv)
+              priv->next.store(current->next);
 
             if (base.next == current)
-              base.next = current->next;
+              base.next.store(current->next);
 
 #ifdef SP_TEST
             std::memset(current, 0, std::size_t(current->size));
@@ -61,7 +63,6 @@ start : {
       return header::reduce(best, sz);
     }
   } else {
-    // TODO handle
     assert(false);
   }
 }
@@ -71,6 +72,7 @@ start : {
 static void *
 alloc(local::PoolsRAII &pools, sp::node_size sz) noexcept {
   void *result = local_alloc(pools.base_free, sz);
+  // void *result = nullptr;//TODO
   if (!result) {
     // TODO logic to allocate extra memory for locall::FreeList
     result = global::alloc(sz);

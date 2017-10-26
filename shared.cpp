@@ -2,7 +2,7 @@
 #include "shared.h"
 #include "stuff.h"
 #include <cassert>
-#include <string.h>
+#include <cstring>
 
 /*
  *===========================================================
@@ -76,7 +76,7 @@ coalesce(Free *head, Free *tail, Free *const next) noexcept {
   assert(is_consecutive(head, tail));
   head->size = head->size + tail->size;
 #ifdef SP_TEST
-  memset(tail, 0, std::size_t(tail->size));
+  std::memset(tail, 0, std::size_t(tail->size));
 #endif
   head->next.store(next, std::memory_order_relaxed);
 } // header::coalesce()
@@ -87,12 +87,10 @@ init_free(void *const head, sp::node_size length) noexcept {
     assert(reinterpret_cast<uintptr_t>(head) % alignof(Free) == 0);
     assert(length >= sizeof(Free));
 #ifdef SP_TEST
-    memset(head, 0, std::size_t(length));
+    std::memset(head, 0, std::size_t(length));
 #endif
 
-    Free *const result = new (head) Free(length, nullptr);
-    assert(reinterpret_cast<Free *>(result) == head);
-    return result;
+    return new (head) Free(length, nullptr);
   }
   return nullptr;
 } // header::init_free()
@@ -139,6 +137,31 @@ LocalFree *
 reduce(LocalFree *const free, sp::node_size length) noexcept {
   return ireduce(free, length);
 } // header::reduce()
+
+LocalFree *
+init_local_free(void *const head, sp::node_size length) noexcept {
+  if (head && length > 0) {
+    assert(reinterpret_cast<uintptr_t>(head) % alignof(LocalFree) == 0);
+    assert(length >= sizeof(LocalFree));
+#ifdef SP_TEST
+    std::memset(head, 0, std::size_t(length));
+#endif
+
+    return new (head) LocalFree(length);
+  }
+  return nullptr;
+}
+
+LocalFree *
+init_local_free(void *const h, sp::node_size length, LocalFree *next) noexcept {
+  auto result = init_local_free(h, length);
+  if (result) {
+    result->next.store(next);
+    if (next)
+      next->priv.store(result);
+  }
+  return result;
+}
 
 /*Extent*/
 static_assert(sizeof(Extent) == SP_MALLOC_CACHE_LINE_SIZE, "");
@@ -196,11 +219,13 @@ init_extent(void *const raw, sp::node_size size,
   const sp::buckets buckets = calc_buckets(size, bucketSz);
   assert(buckets > 0);
 
+#ifdef SP_TEST
+  std::memset(raw, 0, std::size_t(size));
+#endif
   Node *const nHdr = node(raw);
   new (nHdr) Node(NodeType::HEAD, size, bucketSz, buckets);
 
   Extent *const eHdr = extent(nHdr);
-  // memset(raw, 0, length);
   new (eHdr) Extent;
 
   return nHdr;

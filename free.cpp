@@ -161,16 +161,30 @@ start:
 
 namespace local {
 static void
-dealloc(header::LocalFree &base, void *const raw, sp::node_size sz) noexcept {
+dealloc(header::LocalFree &base, header::LocalFree *first,
+        header::LocalFree *last) noexcept {
   sp::SharedLock guard{base.lock};
   if (guard) {
-    header::LocalFree *current = base.next;
-  next:
-    if (current) {
-      // TODO
+    header::LocalFree *next = base.next;
+  retry:
+    if (next) {
+      last->next.store(next);
+      header::LocalFree *priv = nullptr;
+      if (!next->priv.compare_exchange_strong(priv, last)) {
+        next = priv;
+        goto retry;
+      }
+      if (!base.next.compare_exchange_weak(next, first)) {
+        assert(false);
+      }
+    } else {
+      last->next.store(nullptr);
+      if (!base.next.compare_exchange_weak(next, first)) {
+        goto retry;
+      }
     }
   } else {
-    // TODO
+    // TODO handle
     assert(false);
   }
 } // local::dealloc()
@@ -182,7 +196,10 @@ recycle_extent(local::PoolsRAII &ps, header::Node *head) noexcept {
   assert(head);
   std::size_t recycled(0);
   bool reclaim = ps.reclaim.load();
-// TODO if reclaim is false maybe put in TL FreeList
+  // reclaim = true; // TODO
+  // TODO if reclaim is false maybe put in TL FreeList
+  header::LocalFree *first = nullptr;
+  header::LocalFree *last = nullptr;
 start:
   header::Node *next = head->next.load();
   recycled += std::size_t(head->node_size);
@@ -191,12 +208,17 @@ start:
     // TODO batch dealloc
     global::dealloc(head, head->node_size);
   } else {
-    // TODO batch dealloc
-    local::dealloc(ps.base_free, head, head->node_size);
+    first = header::init_local_free(head, head->node_size, first);
+    if (!last)
+      last = first;
   }
   if (next) {
     head = next;
     goto start;
+  }
+
+  if (first) {
+    local::dealloc(ps.base_free, first, last);
   }
   return recycled;
 } //::recycle_extent()
@@ -280,7 +302,7 @@ free_reclaim(local::PoolsRAII &ps, FreeCode c, header::Node *rExts) noexcept {
   // FREED_RECLAIM in this context means that the Extent was reclaimed
   if (c == FreeCode::FREED_RECLAIM) {
     assert(rExts);
-    std::size_t recycled = recycle_extent(ps, rExts);
+    const std::size_t recycled = recycle_extent(ps, rExts);
 
     std::size_t total = ps.total_alloc.fetch_sub(recycled);
     if (total == recycled) {
