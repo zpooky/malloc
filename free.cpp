@@ -161,27 +161,16 @@ start:
 
 namespace local {
 static void
-dealloc(header::LocalFree &base, header::LocalFree *first,
+dealloc(local::PoolsRAII &ps, header::LocalFree *first,
         header::LocalFree *last) noexcept {
-  sp::SharedLock guard{base.lock};
+  sp::SharedLock guard{ps.free_lock};
   if (guard) {
-    header::LocalFree *next = base.next;
+    // Not a double linked list when in the free stack
+    auto base = ps.free_stack.load();
   retry:
-    if (next) {
-      last->next.store(next);
-      header::LocalFree *priv = nullptr;
-      if (!next->priv.compare_exchange_strong(priv, last)) {
-        next = priv;
-        goto retry;
-      }
-      if (!base.next.compare_exchange_weak(next, first)) {
-        assert(false);
-      }
-    } else {
-      last->next.store(nullptr);
-      if (!base.next.compare_exchange_weak(next, first)) {
-        goto retry;
-      }
+    last->next = base;
+    if (!ps.free_stack.compare_exchange_weak(base, first)) {
+      goto retry;
     }
   } else {
     // TODO handle
@@ -194,31 +183,29 @@ dealloc(header::LocalFree &base, header::LocalFree *first,
 static std::size_t
 recycle_extent(local::PoolsRAII &ps, header::Node *head) noexcept {
   assert(head);
+
   std::size_t recycled(0);
-  bool reclaim = ps.reclaim.load();
-  // reclaim = true; // TODO
-  // TODO if reclaim is false maybe put in TL FreeList
   header::LocalFree *first = nullptr;
   header::LocalFree *last = nullptr;
 start:
-  header::Node *next = head->next.load();
-  recycled += std::size_t(head->node_size);
+  if (head) {
+    header::Node *next = head->next.load();
+    recycled += std::size_t(head->node_size);
 
-  if (reclaim) {
-    // TODO batch dealloc
-    global::dealloc(head, head->node_size);
-  } else {
     first = header::init_local_free(head, head->node_size, first);
-    if (!last)
+    if (!last) {
       last = first;
-  }
-  if (next) {
+    }
+
     head = next;
     goto start;
   }
 
-  if (first) {
-    local::dealloc(ps.base_free, first, last);
+  if (ps.reclaim.load()) {
+    // TODO Maybe put in TL FreeList instead of global::dealloc()
+    global::dealloc(first);
+  } else {
+    local::dealloc(ps, first, last);
   }
   return recycled;
 } //::recycle_extent()

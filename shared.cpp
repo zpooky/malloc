@@ -105,6 +105,9 @@ ireduce(T *const free, sp::node_size length) noexcept {
   free->size = newSz;
 
   void *const result = util::ptr_math(free, +std::size_t(newSz));
+#ifdef SP_TEST
+  std::memset(result, 0, std::size_t(length));
+#endif
   return new (result) T(length);
 }
 
@@ -123,8 +126,7 @@ free(void *const start) noexcept {
 
 /*LocalFree*/
 LocalFree::LocalFree(sp::node_size sz) noexcept
-    : lock{}
-    , next{nullptr}
+    : next{nullptr}
     , priv{nullptr}
     , size{sz} {
 }
@@ -156,9 +158,9 @@ LocalFree *
 init_local_free(void *const h, sp::node_size length, LocalFree *next) noexcept {
   auto result = init_local_free(h, length);
   if (result) {
-    result->next.store(next);
+    result->next = next;
     if (next)
-      next->priv.store(result);
+      next->priv = result;
   }
   return result;
 }
@@ -285,7 +287,9 @@ PoolsRAII::PoolsRAII() noexcept
     , priv{nullptr}
     , next{nullptr}
     , reclaim{false}
-    , base_free() {
+    , free_lock()
+    , free_stack()
+    , free_list() {
   // TODO std::atomic_thread_fence(std::memory_order_release);?
 }
 
@@ -318,7 +322,7 @@ Pool &Pools::operator[](std::size_t idx) noexcept {
 void
 Pools::init() noexcept {
   if (!pools) {
-    pools = global::alloc_pool();
+    pools = global::acquire_pool();
   }
 }
 // }}}

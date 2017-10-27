@@ -9,84 +9,69 @@
 #include <cstring>
 
 static void *
-local_alloc(header::LocalFree &base, sp::node_size sz) noexcept {
-/* Exclusive Lock only when dequeuing.
- * Shared Lock when enqueueing & shrinking Free entry.
- * Single dequeue(*alloc) multiple enqueue(free).
- * Double linked but not circular.
- */
-// TODO coalesce
-start : {
+local_alloc(local::PoolsRAII &pool, sp::node_size search) noexcept {
+  /* Double linked but not circular.
+  */
+  header::LocalFree &free_list = pool.free_list;
   header::LocalFree *best = nullptr;
-  sp::SharedLock guard{base.lock};
-  if (guard) {
-    header::LocalFree *current = base.next;
-  next:
-    if (current) {
-      if (current->size == sz) {
-        sp::TryPrepareLock pre_guard{guard};
-        if (pre_guard) {
-          sp::EagerExclusiveLock ex_guard{pre_guard};
-          if (ex_guard) {
+  header::LocalFree *current = free_list.next;
+next:
+  if (current) {
+    if (current->size == search) {
+      if (current->priv)
+        current->priv->next = current->next;
 
-            auto next = current->next.load();
-            if (next)
-              next->priv.store(current->priv);
-
-            auto priv = current->priv.load();
-            if (priv)
-              priv->next.store(current->next);
-
-            if (base.next == current)
-              base.next.store(current->next);
+      if (current->next)
+        current->next->priv = current->priv;
 
 #ifdef SP_TEST
-            std::memset(current, 0, std::size_t(current->size));
+      std::memset(current, 0, std::size_t(current->size));
 #endif
-            return current;
-          } else {
-            assert(false);
-          }
-        } else {
-          goto start;
-        }
-      } else {
-        if (current->size > sz) {
-          if (!best || best->size > current->size) {
-            best = current;
-          }
-        }
-        current = current->next;
-        goto next;
+      return current;
+    } else if (current->size > search) {
+      if (!best || best->size > current->size) {
+        best = current;
       }
-    } else if (best) {
-      return header::reduce(best, sz);
     }
+    current = current->next;
+    goto next;
   } else {
-    assert(false);
+    if (best) {
+      return header::reduce(best, search);
+    }
+    auto head = pool.free_stack.load();
+    if (head) {
+      sp::EagerExclusiveLock guard{pool.free_lock};
+      if (guard) {
+      retry:
+        if (head) {
+          header::LocalFree *empty = nullptr;
+          if (!pool.free_stack.compare_exchange_weak(head, empty)) {
+            goto retry;
+          }
+        }
+      }
+    }
+    if (head) {
+      // TODO insert stack into free list & coalesce
+    }
   }
-}
   return nullptr;
 } // ::local_alloc()
 
 static void *
 alloc(local::PoolsRAII &pools, sp::node_size sz) noexcept {
-  void *result = local_alloc(pools.base_free, sz);
-  // void *result = nullptr;//TODO
+  void *result = local_alloc(pools, sz);
   if (!result) {
     // TODO logic to allocate extra memory for locall::FreeList
     result = global::alloc(sz);
-    if (result) {
-      pools.total_alloc.fetch_add(std::size_t(sz));
-    }
+  }
+  if (result) {
+    pools.total_alloc.fetch_add(std::size_t(sz));
   }
   return result;
 } // ::alloc()
 
-/*
- * @start - node start
- * desc   -
- */
 static header::Node *
 next_node(header::Node *const start) noexcept {
   return start->next.load();
@@ -242,6 +227,7 @@ namespace shared {
 
 void *
 alloc(local::PoolsRAII &pools, std::size_t length) noexcept {
+  assert(pools.reclaim.load() == false);
   const auto bucketSz = shared::bucket_size_for(length);
   local::Pool &pool = shared::pool_for(pools, bucketSz);
 
@@ -303,7 +289,7 @@ void *
 alloc(local::Pools &pools, std::size_t length) noexcept {
   assert(pools.pools);
   return alloc(*pools.pools, length);
-}
+} // shared::alloc()
 
 } // namespace shared
 
@@ -317,7 +303,7 @@ alloc_count_alloc(local::PoolsRAII &p) {
     result += alloc_count_alloc(p, i);
   }
   return result;
-}
+} // debug::alloc_count_alloc()
 
 static std::size_t
 count_reserved(header::Extent &ext, sp::buckets buckets) {
@@ -330,7 +316,7 @@ count_reserved(header::Extent &ext, sp::buckets buckets) {
   }
 
   return result;
-}
+} // debug::count_reserved()
 
 std::size_t
 alloc_count_alloc(local::PoolsRAII &p, std::size_t sz) {
@@ -353,7 +339,7 @@ alloc_count_alloc(local::PoolsRAII &p, std::size_t sz) {
     }
   }
   return result;
-}
+} // debug::alloc_count_alloc()
 
 } // namespace debug
 #endif

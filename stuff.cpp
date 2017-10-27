@@ -164,7 +164,7 @@ usable_size(void *const ptr) noexcept {
     }
   }
   return {};
-}
+} // global::usuable_size()
 
 util::maybe<void *>
 realloc(local::PoolsRAII &tl, void *const ptr, std::size_t length) noexcept {
@@ -189,15 +189,16 @@ realloc(local::PoolsRAII &tl, void *const ptr, std::size_t length) noexcept {
     }
   }
   return {};
-}
+} // global::realloc()
+
 util::maybe<void *>
 realloc(local::Pools &tl, void *const ptr, std::size_t length) noexcept {
   assert(tl.pools);
   return realloc(*tl.pools, ptr, length);
-}
+} // global::realloc()
 
 local::PoolsRAII *
-alloc_pool() noexcept {
+acquire_pool() noexcept {
   using PoolType = local::PoolsRAII;
 
   constexpr std::size_t length(SP_MALLOC_POOL_SIZE);
@@ -219,11 +220,13 @@ alloc_pool() noexcept {
   }
 
   return result;
-} // global::alloc_pool()
+} // global::acquire_pool()
 
 void
 release_pool(local::PoolsRAII *pool) noexcept {
+  assert(pool->reclaim.load() == false);
   pool->reclaim.store(true);
+  // TODO recycle free_list(idle) & free_stack(can have concurrent frees)
   std::size_t allocs = pool->total_alloc.load();
   if (allocs == 0) {
   retry:
@@ -307,7 +310,7 @@ stuff_force_reclaim_orphan() {
       goto next;
     }
   }
-} // debug::stuff_force_reclaim()
+} // debug::stuff_force_reclaim_orphan()
 
 } // namespace debug
 #endif

@@ -30,20 +30,29 @@ struct State {
     std::atomic_thread_fence(std::memory_order_release);
   }
 };
+
 namespace internal {
 header::Free *
 find_freex(State &, sp::node_size) noexcept;
+
 void *
 alloc(State &, sp::node_size) noexcept;
+
 void
 dealloc(State &, void *, sp::node_size) noexcept;
 
+void
+dealloc(State &, header::LocalFree *) noexcept;
+
 } // namespace internal
 
-/*raw block alloc*/
 void *alloc(sp::node_size) noexcept;
+
 void
 dealloc(void *, sp::node_size) noexcept;
+
+void
+dealloc(header::LocalFree *) noexcept;
 
 } // namespace global
 

@@ -459,21 +459,40 @@ alloc(State &state, sp::node_size p_length) noexcept {
 
 void
 dealloc(State &state, void *const start, sp::node_size length) noexcept {
+  assert(start);
   return return_free(state, start, length);
-}
+} // global::internal::dealloc()
+
+void
+dealloc(State &state, header::LocalFree *current) noexcept {
+  assert(free);
+// TODO make better
+next:
+  if (current) {
+    header::LocalFree *next = current->next;
+    dealloc(state, current, current->size);
+    current = next;
+    goto next;
+  }
+} // global::internal::dealloc()
 
 } // namespace internal
 
 // TODO change so it should be number of pages instead of a specific
 // length+alignment
 void *
-alloc(sp::node_size p_length) noexcept {
-  return internal::alloc(internal_state, p_length);
-} // alloc()
+alloc(sp::node_size length) noexcept {
+  return internal::alloc(internal_state, length);
+} // global::alloc()
 
 void
 dealloc(void *const start, sp::node_size length) noexcept {
   return internal::dealloc(internal_state, start, length);
-}
+} // global::dealloc()
+
+void
+dealloc(header::LocalFree *const start) noexcept {
+  return internal::dealloc(internal_state, start);
+} // global::dealloc()
 
 } // namespace global

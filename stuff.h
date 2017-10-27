@@ -20,7 +20,7 @@ util::maybe<void *>
 realloc(local::Pools &, void *, std::size_t) noexcept;
 
 local::PoolsRAII *
-alloc_pool() noexcept;
+acquire_pool() noexcept;
 
 void
 release_pool(local::PoolsRAII *) noexcept;

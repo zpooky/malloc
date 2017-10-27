@@ -174,9 +174,8 @@ free(void *const start) noexcept;
 
 /*LocalFree*/
 struct LocalFree {
-  sp::ReadWriteLock lock;
-  std::atomic<LocalFree *> next;
-  std::atomic<LocalFree *> priv;
+  LocalFree *next;
+  LocalFree *priv;
   sp::node_size size;
 
   LocalFree() noexcept;
@@ -284,6 +283,7 @@ struct Pool { //
 struct PoolsRAII { //
   // TODO restructure for tighter alignment
   static constexpr std::size_t BUCKETS = (sizeof(std::size_t) * 8) - 3;
+  //
   std::array<Pool, BUCKETS> buckets;
   std::atomic<std::size_t> total_alloc;
 
@@ -297,7 +297,9 @@ struct PoolsRAII { //
   //}
 
   // local free list {
-  header::LocalFree base_free;
+  sp::ReadWriteLock free_lock;
+  std::atomic<header::LocalFree *> free_stack;
+  header::LocalFree free_list;
   // }
 
   PoolsRAII() noexcept;
