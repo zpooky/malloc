@@ -127,4 +127,16 @@ util::maybe<std::tuple<void *, std::size_t>>
 dequeue(MemStack &s);
 }
 
+template <typename T>
+bool
+memeq(T *ptr, std::size_t capacity, T value) noexcept {
+  for (std::size_t i = 0; i < capacity; ++i) {
+    if (*ptr != value) {
+      return false;
+    }
+    ++ptr;
+  }
+  return true;
+}
+
 #endif

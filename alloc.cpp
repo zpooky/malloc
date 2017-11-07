@@ -10,6 +10,7 @@
 
 static void *
 local_alloc(local::PoolsRAII &pool, sp::node_size search) noexcept {
+  //TODO change to tree?
   /* Double linked but not circular.
   */
   header::LocalFree &free_list = pool.free_list;
@@ -45,8 +46,7 @@ next:
       if (guard) {
       retry:
         if (head) {
-          header::LocalFree *empty = nullptr;
-          if (!pool.free_stack.compare_exchange_weak(head, empty)) {
+          if (!pool.free_stack.compare_exchange_weak(head, nullptr)) {
             goto retry;
           }
         }
@@ -83,7 +83,7 @@ pointer_at(header::Node *start, sp::index index) noexcept {
   // The first NodeHeader in the extent contains data while intermediate
   // NodeHeader does not containt this data.
   assert(start->type == header::NodeType::HEAD);
-  size_t header_size(header::SIZE);
+  std::size_t header_size(header::SIZE);
   sp::buckets buckets = start->buckets;
   const sp::bucket_size bucket_size = start->bucket_size;
 node_start:

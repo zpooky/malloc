@@ -181,7 +181,8 @@ dealloc(local::PoolsRAII &ps, header::LocalFree *first,
 } // namespace local
 
 static std::size_t
-recycle_extent(local::PoolsRAII &ps, header::Node *head) noexcept {
+recycle_extent(local::PoolsRAII &tl, local::PoolsRAII &ps,
+               header::Node *head) noexcept {
   assert(head);
 
   std::size_t recycled(0);
@@ -202,7 +203,7 @@ start:
   }
 
   if (ps.reclaim.load()) {
-    // TODO Maybe put in TL FreeList instead of global::dealloc()
+    // TODO Put in TL FreeList instead of global::dealloc()
     global::dealloc(first);
   } else {
     local::dealloc(ps, first, last);
@@ -285,17 +286,16 @@ free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
 } //::free_logic()
 
 static FreeCode
-free_reclaim(local::PoolsRAII &ps, FreeCode c, header::Node *rExts) noexcept {
+free_reclaim(local::PoolsRAII &tl, local::PoolsRAII &ps, FreeCode c,
+             header::Node *rExts) noexcept {
   // FREED_RECLAIM in this context means that the Extent was reclaimed
   if (c == FreeCode::FREED_RECLAIM) {
     assert(rExts);
-    const std::size_t recycled = recycle_extent(ps, rExts);
+    const std::size_t recycled = recycle_extent(tl, ps, rExts);
 
     std::size_t total = ps.total_alloc.fetch_sub(recycled);
     if (total == recycled) {
       if (ps.reclaim.load()) {
-        // TODO recycle local::free_list
-
         // FREE_RECLAIM in this context means Pool can be reclaimed
         return FreeCode::FREED_RECLAIM;
       }
@@ -306,7 +306,8 @@ free_reclaim(local::PoolsRAII &ps, FreeCode c, header::Node *rExts) noexcept {
 } //::free_reclaim()
 
 static FreeCode
-free(local::PoolsRAII &pools, void *ptr, sp::bucket_size length) noexcept {
+free(local::Pools &tl, local::PoolsRAII &pools, void *ptr,
+     sp::bucket_size length) noexcept {
   local::Pool &pool = shared::pool_for(pools, length);
 
   header::Node *recycled_ext = nullptr;
@@ -315,13 +316,13 @@ free(local::PoolsRAII &pools, void *ptr, sp::bucket_size length) noexcept {
     return result;
   }
 
-  return free_reclaim(pools, result, recycled_ext);
+  return free_reclaim(tl, pools, result, recycled_ext);
 } //::free()
 
 namespace shared {
 
 FreeCode
-free(local::PoolsRAII &pools, void *const ptr) noexcept {
+free(local::PoolsRAII &tl, local::PoolsRAII &pools, void *const ptr) noexcept {
   assert(ptr);
   header::Node *recycledExtent = nullptr;
   auto res = local::pools_find<FreeCode, header::Node *>(
@@ -342,13 +343,14 @@ free(local::PoolsRAII &pools, void *const ptr) noexcept {
     return result;
   }
 
-  return free_reclaim(pools, result, recycledExtent);
+  return free_reclaim(tl, pools, result, recycledExtent);
 } // shared::free()
 
 FreeCode
-free(local::Pools &pools, void *const ptr) noexcept {
+free(local::Pools &tl, local::Pools &pools, void *const ptr) noexcept {
+  assert(tl.pools);
   assert(pools.pools);
-  return free(*pools.pools, ptr);
+  return free(*tl.pools, *pools.pools, ptr);
 } // shared::free()
 
 util::maybe<sp::bucket_size>
@@ -391,7 +393,7 @@ realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
         // runtime fault, out of memory
         assert(false);
       }
-      result = ::free(pools, ptr, memSz);
+      result = ::free(tl, pools, ptr, memSz);
       assert(result == FreeCode::FREED || result == FreeCode::FREED_RECLAIM);
 
       ptr = nptr;

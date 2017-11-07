@@ -14,7 +14,6 @@
 // TODO allocate increasing and wrap around
 // TODO large range 1-XXX to see that we get the right bucket
 
-// TODO Cartesian product[allocSZ,iterations,threads[consumer,producer]]
 // TODO mutliple producer multiple consumer (realloc+free+usable_size)
 // TODO realloc from other thread then the malloc thread
 
@@ -22,7 +21,9 @@
 // the bucket is not currenctly reserved then "usuable_size" still returns
 // its pool size when infact it should be 0 since it is not reserved?
 // TODO free(nonHeapPtr)...
-
+//
+//
+// TODO Cartesian product[allocSZ,iterations,threads[consumer,producer]]
 //==================================================================================================
 //==================================================================================================
 static void
@@ -161,9 +162,11 @@ roundAlloc(std::size_t sz) {
   return 0;
 }
 
+using Worker_t = void *(*)(void *);
+
 template <typename Argument>
 static void
-threads(Argument &arg, std::vector<void *(*)(void *)> workers) {
+threads(Argument &arg, std::vector<Worker_t> workers) {
   std::vector<pthread_t> tids;
   for (auto worker : workers) {
     pthread_t tid = 0;
@@ -181,7 +184,7 @@ threads(Argument &arg, std::vector<void *(*)(void *)> workers) {
 
 template <typename Argument>
 static void
-threads(std::size_t threads, Argument &arg, void *(*worker)(void *)) {
+threads(std::size_t threads, Argument &arg, Worker_t worker) {
   std::vector<pthread_t> tids;
   for (std::size_t i(0); i < threads; ++i) {
     pthread_t tid = 0;
@@ -789,6 +792,132 @@ TEST_F(MallocTest, test_1producer_1consumer_realloc) {
   threads(a, workers);
   printf("after join\n");
 }
+
+//-----------------------------------------
+/*
+ */
+using mallocColourWaitAssertFreeArg =
+    std::tuple<std::size_t, std::size_t, sp::Barrier *, sp::Barrier *>;
+
+static void
+malloc_colour_wait_assert_free(uint8_t marker, std::size_t iterations,
+                               std::size_t allocSz, sp::Barrier *start,
+                               sp::Barrier *assertB) {
+  Points allocs;
+  allocs.reserve(iterations);
+
+  start->await();
+  for (std::size_t i = 0; i < iterations; ++i) {
+    ASSERT_EQ(i, debug::malloc_count_alloc());
+    void *ptr = sp_malloc(allocSz);
+    ASSERT_FALSE(ptr == nullptr);
+
+    std::size_t realSz = sp_usable_size(ptr);
+    allocs.emplace_back(ptr, realSz);
+    ASSERT_TRUE(realSz >= allocSz);
+
+    memset((uint8_t *)ptr, marker, realSz);
+  }
+  ASSERT_EQ(iterations, debug::malloc_count_alloc());
+
+  assertB->await();
+  ASSERT_EQ(iterations, debug::malloc_count_alloc());
+  ASSERT_EQ(allocs.size(), debug::malloc_count_alloc());
+
+  std::size_t remaining = allocs.size();
+
+  for (auto c : allocs) {
+    void *ptr = std::get<0>(c);
+    ASSERT_FALSE(ptr == nullptr);
+
+    std::size_t actualSz = std::get<1>(c);
+    ASSERT_TRUE(memeq((uint8_t *)ptr, actualSz, marker));
+
+    ASSERT_EQ(actualSz, sp_usable_size(ptr));
+
+    ASSERT_EQ(remaining, debug::malloc_count_alloc());
+    ASSERT_TRUE(sp_free(ptr));
+    remaining--;
+    ASSERT_EQ(remaining, debug::malloc_count_alloc());
+    ASSERT_FALSE(sp_free(ptr));
+    ASSERT_EQ(remaining, debug::malloc_count_alloc());
+  }
+  ASSERT_EQ(std::size_t(0), debug::malloc_count_alloc());
+}
+
+template <std::uint8_t colour>
+static void *
+worker_malloc_colour_wait_assert_free(void *a) {
+  auto *arg = (mallocColourWaitAssertFreeArg *)a;
+  malloc_colour_wait_assert_free(colour, std::get<0>(*arg), std::get<1>(*arg),
+                                 std::get<2>(*arg), std::get<3>(*arg));
+  return nullptr;
+}
+static void
+test_color_wait_assert_free(std::size_t allocSz,
+                            std::vector<Worker_t> workers) {
+  const std::size_t th = workers.size();
+  sp::Barrier start(th);
+  sp::Barrier assertB(th);
+  mallocColourWaitAssertFreeArg arg(NUMBER_OF_IT, allocSz, &start, &assertB);
+  threads(arg, workers);
+}
+
+TEST_P(MallocTestAllocSizePFixture, 2colour_wait_assert_free) {
+  const size_t allocSz = GetParam();
+
+  std::vector<Worker_t> workers{
+      worker_malloc_colour_wait_assert_free<0b10101010>,
+      worker_malloc_colour_wait_assert_free<0b1010101>};
+  test_color_wait_assert_free(allocSz, workers);
+}
+
+TEST_P(MallocTestAllocSizePFixture, 3colour_wait_assert_free) {
+  const size_t allocSz = GetParam();
+
+  std::vector<Worker_t> workers{
+      worker_malloc_colour_wait_assert_free<0b10101010>,
+      worker_malloc_colour_wait_assert_free<0b1010101>,
+      worker_malloc_colour_wait_assert_free<0b11000011>};
+  test_color_wait_assert_free(allocSz, workers);
+}
+
+TEST_P(MallocTestAllocSizePFixture, 4colour_wait_assert_free) {
+  const size_t allocSz = GetParam();
+
+  std::vector<Worker_t> workers{
+      worker_malloc_colour_wait_assert_free<0b10101010>,
+      worker_malloc_colour_wait_assert_free<0b1010101>,
+      worker_malloc_colour_wait_assert_free<0b11000011>,
+      worker_malloc_colour_wait_assert_free<0b00111100>};
+  test_color_wait_assert_free(allocSz, workers);
+}
+
+TEST_P(MallocTestAllocSizePFixture, 5colour_wait_assert_free) {
+  const size_t allocSz = GetParam();
+
+  std::vector<Worker_t> workers{
+      worker_malloc_colour_wait_assert_free<0b10101010>,
+      worker_malloc_colour_wait_assert_free<0b1010101>,
+      worker_malloc_colour_wait_assert_free<0b11000011>,
+      worker_malloc_colour_wait_assert_free<0b00111100>,
+      worker_malloc_colour_wait_assert_free<0b11001100>};
+  test_color_wait_assert_free(allocSz, workers);
+}
+
+TEST_P(MallocTestAllocSizePFixture, 6colour_wait_assert_free) {
+  const size_t allocSz = GetParam();
+
+  std::vector<Worker_t> workers{
+      worker_malloc_colour_wait_assert_free<0b10101010>,
+      worker_malloc_colour_wait_assert_free<0b1010101>,
+      worker_malloc_colour_wait_assert_free<0b11000011>,
+      worker_malloc_colour_wait_assert_free<0b00111100>,
+      worker_malloc_colour_wait_assert_free<0b11001100>,
+      worker_malloc_colour_wait_assert_free<0b00110011>};
+  test_color_wait_assert_free(allocSz, workers);
+}
+
 //-----------------------------------------
 
 // ./test/thetest --gtest_filter="*MallocTest*"

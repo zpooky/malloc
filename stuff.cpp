@@ -31,10 +31,12 @@ struct asd {
   asd(const asd &&) = delete;
 };
 
+// TODO assert release_pool(PoolsRAII.pid == this_pid());
+
 static asd internal_a;
 
 static bool
-iunlink_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
+unlink_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   assert(subject);
   sp::TryPrepareLock pre_guard{lock};
   if (pre_guard) {
@@ -72,15 +74,54 @@ iunlink_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   return true;
 }
 
+static header::LocalFree *
+cons(header::LocalFree *first, header::LocalFree *second) noexcept {
+  if (!first)
+    return second;
+
+  if(!second)
+    return first;
+
+cont:
+  header::LocalFree *last = first;
+  if (last->next) {
+    last = last->next;
+    goto cont;
+  }
+  last->next = second;
+  return first;
+}
+
 static bool
 recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
-  if (iunlink_pool(a, lock, subject)) {
+  if (unlink_pool(a, lock, subject)) {
+    // lock is not held here
+    assert(!lock);
+    // 1. TL free list
+    header::LocalFree *reclaim = subject->free_list.next;
+    subject->free_list.next = nullptr;
+    // 2. Concurrent free stack
+    {
+      header::LocalFree *stack = subject->free_stack.load();
+    stack_retry:
+      if (!subject->free_stack.compare_exchange_weak(stack, nullptr))
+        goto stack_retry;
+
+      reclaim = cons(reclaim, stack);
+    }
+
+    // 3. the pool itself
     void *const target = reinterpret_cast<void *>(subject);
     constexpr std::size_t length(SP_MALLOC_POOL_SIZE);
 #ifdef SP_TEST
     std::memset(target, 0, length);
 #endif
-    global::dealloc(target, sp::node_size(length));
+
+    reclaim =
+        cons(header::init_local_free(target, sp::node_size(length)), reclaim);
+
+    // TODO sort and coalesce adjacent entries
+    global::dealloc(reclaim);
     return true;
   }
   return false;
@@ -226,7 +267,6 @@ void
 release_pool(local::PoolsRAII *pool) noexcept {
   assert(pool->reclaim.load() == false);
   pool->reclaim.store(true);
-  // TODO recycle free_list(idle) & free_stack(can have concurrent frees)
   std::size_t allocs = pool->total_alloc.load();
   if (allocs == 0) {
   retry:
