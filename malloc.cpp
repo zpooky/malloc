@@ -90,7 +90,8 @@
 //    - on Pool level
 // - An optimized collections of Pool:s used for free:ing in addition to the
 //   Pool[60] used for allocating. balanced tree for Pool which are non-empty.
-// - skip TL Pool when iterating global::free() since we have already handled it.
+// - skip TL Pool when iterating global::free() since we have already handled
+// it.
 
 // TODO
 // - Look over where we use atomic<>
@@ -160,12 +161,12 @@ sp_free(void *const ptr) noexcept {
 
   auto &lpools = local_pools;
   if (lpools.pools) {
-    result = shared::free(lpools, ptr);
+    result = shared::free(lpools, lpools, ptr);
     assert(result != FreeCode::FREED_RECLAIM);
   }
 
   if (result == FreeCode::NOT_FOUND) {
-    result = global::free(ptr);
+    result = global::free(lpools, ptr);
   }
 
   return result == FreeCode::FREED || result == FreeCode::FREED_RECLAIM;

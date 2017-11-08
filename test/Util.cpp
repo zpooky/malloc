@@ -159,3 +159,16 @@ dequeue(MemStack &s) {
   return {};
 }
 } // namespace test
+//
+//==================================================================================================
+std::size_t
+roundAlloc(std::size_t sz) {
+  for (std::size_t i(8); i < ~std::size_t(0); i <<= 1) {
+    if (sz <= i) {
+      // printf("sz(%zu)%zu\n", sz, i);
+      return i;
+    }
+  }
+  assert(false);
+  return 0;
+}

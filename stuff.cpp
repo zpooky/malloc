@@ -79,7 +79,7 @@ cons(header::LocalFree *first, header::LocalFree *second) noexcept {
   if (!first)
     return second;
 
-  if(!second)
+  if (!second)
     return first;
 
 cont:
@@ -157,14 +157,15 @@ enqueue(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
 namespace global {
 
 shared::FreeCode
-free(void *const ptr) noexcept {
+free(local::Pools &tl, void *const ptr) noexcept {
+  assert(tl.pools);
   using shared::FreeCode;
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
   next:
     if (current) {
-      const auto result = shared::free(*current, ptr);
+      const auto result = shared::free(*tl.pools, *current, ptr);
       if (result != FreeCode::NOT_FOUND) {
         if (result == FreeCode::FREED_RECLAIM) {
           // printf("free()=FREED_RECLAIM\n");

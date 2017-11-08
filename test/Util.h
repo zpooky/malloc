@@ -12,6 +12,7 @@
 #include <tuple>
 #include <util.h>
 #include <vector>
+#include <pthread.h>
 
 using Point = std::tuple<void *, std::size_t>;
 using Points = std::vector<Point>;
@@ -137,6 +138,49 @@ memeq(T *ptr, std::size_t capacity, T value) noexcept {
     ++ptr;
   }
   return true;
+}
+
+
+//==================================================================================================
+ std::size_t
+roundAlloc(std::size_t sz) ;
+
+using Worker_t = void *(*)(void *);
+
+template <typename Argument>
+static void
+threads(Argument &arg, std::vector<Worker_t> workers) {
+  std::vector<pthread_t> tids;
+  for (auto worker : workers) {
+    pthread_t tid = 0;
+    int ret = pthread_create(&tid, nullptr, worker, &arg);
+    ASSERT_EQ(0, ret);
+    ASSERT_FALSE(tid == 0);
+    tids.push_back(tid);
+  }
+
+  for (auto tid : tids) {
+    int ret = pthread_join(tid, nullptr);
+    ASSERT_EQ(0, ret);
+  }
+}
+
+template <typename Argument>
+static void
+threads(std::size_t threads, Argument &arg, Worker_t worker) {
+  std::vector<pthread_t> tids;
+  for (std::size_t i(0); i < threads; ++i) {
+    pthread_t tid = 0;
+    int ret = pthread_create(&tid, nullptr, worker, &arg);
+    ASSERT_EQ(0, ret);
+    ASSERT_FALSE(tid == 0);
+    tids.push_back(tid);
+  }
+
+  for (auto tid : tids) {
+    int ret = pthread_join(tid, nullptr);
+    ASSERT_EQ(0, ret);
+  }
 }
 
 #endif

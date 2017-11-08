@@ -8,7 +8,7 @@
  */
 namespace global {
 shared::FreeCode
-free(void *) noexcept;
+free(local::Pools &tl, void *) noexcept;
 
 util::maybe<sp::bucket_size>
 usable_size(void *) noexcept;

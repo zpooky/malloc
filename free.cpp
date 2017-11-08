@@ -203,8 +203,11 @@ start:
   }
 
   if (ps.reclaim.load()) {
-    // TODO Put in TL FreeList instead of global::dealloc()
-    global::dealloc(first);
+    if (tl.reclaim.load()) {
+      global::dealloc(first);
+    } else {
+      local::dealloc(tl, first, last);
+    }
   } else {
     local::dealloc(ps, first, last);
   }
@@ -306,7 +309,7 @@ free_reclaim(local::PoolsRAII &tl, local::PoolsRAII &ps, FreeCode c,
 } //::free_reclaim()
 
 static FreeCode
-free(local::Pools &tl, local::PoolsRAII &pools, void *ptr,
+free(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
      sp::bucket_size length) noexcept {
   local::Pool &pool = shared::pool_for(pools, length);
 

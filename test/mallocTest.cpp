@@ -149,59 +149,6 @@ const size_t NUMBER_OF_IT = 1025;
 
 //==================================================================================================
 //==================================================================================================
-/*util*/
-static std::size_t
-roundAlloc(std::size_t sz) {
-  for (std::size_t i(8); i < ~std::size_t(0); i <<= 1) {
-    if (sz <= i) {
-      // printf("sz(%zu)%zu\n", sz, i);
-      return i;
-    }
-  }
-  assert(false);
-  return 0;
-}
-
-using Worker_t = void *(*)(void *);
-
-template <typename Argument>
-static void
-threads(Argument &arg, std::vector<Worker_t> workers) {
-  std::vector<pthread_t> tids;
-  for (auto worker : workers) {
-    pthread_t tid = 0;
-    int ret = pthread_create(&tid, nullptr, worker, &arg);
-    ASSERT_EQ(0, ret);
-    ASSERT_FALSE(tid == 0);
-    tids.push_back(tid);
-  }
-
-  for (auto tid : tids) {
-    int ret = pthread_join(tid, nullptr);
-    ASSERT_EQ(0, ret);
-  }
-}
-
-template <typename Argument>
-static void
-threads(std::size_t threads, Argument &arg, Worker_t worker) {
-  std::vector<pthread_t> tids;
-  for (std::size_t i(0); i < threads; ++i) {
-    pthread_t tid = 0;
-    int ret = pthread_create(&tid, nullptr, worker, &arg);
-    ASSERT_EQ(0, ret);
-    ASSERT_FALSE(tid == 0);
-    tids.push_back(tid);
-  }
-
-  for (auto tid : tids) {
-    int ret = pthread_join(tid, nullptr);
-    ASSERT_EQ(0, ret);
-  }
-}
-
-//==================================================================================================
-//==================================================================================================
 /*Test*/
 static void
 malloc_test_uniform(std::size_t iterations, std::size_t allocSz) {
