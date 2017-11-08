@@ -6,6 +6,7 @@
 #include <atomic>
 #include <bitset/Bitset.h>
 #include <cassert>
+#include <mutex>
 
 #define SP_MALLOC_PAGE_SIZE std::size_t(4 * 1024)
 #define SP_MALLOC_CACHE_LINE_SIZE 64
@@ -14,6 +15,7 @@
 #define SP_TYPED_NUMERIC
 #ifdef SP_TYPED_NUMERIC
 
+//========SP=============================================
 namespace sp {
 
 #define SIZE_TYPE(NAME)                                                        \
@@ -140,11 +142,7 @@ using index = std::size_t;
 
 #endif
 
-/*
- *===========================================================
- *========HEADER=============================================
- *===========================================================
- */
+//========HEADER=============================================
 namespace header {
 
 /*Free*/
@@ -256,11 +254,24 @@ node_data_start(Node *) noexcept;
 
 } // namespace header
 
-/*
- *===========================================================
- *=======LOCAL===============================================
- *===========================================================
- */
+//=======GLOBAL===============================================
+namespace global {
+struct State {
+  // brk{{{
+  std::mutex brk_lock;
+  void *brk_position; // not used for now
+  std::size_t brk_alloc;
+  // }}}
+
+  // free{{{
+  header::Free free;
+  // }}}
+
+  State() noexcept;
+};
+} // namespace global
+
+//=======LOCAL===============================================
 namespace local {
 /*Pool*/
 struct Pool { //
@@ -311,6 +322,7 @@ struct PoolsRAII { //
 class Pools { //
 public:
   PoolsRAII *pools;
+  global::State *global;
 
 public:
   static constexpr std::size_t BUCKETS = PoolsRAII::BUCKETS;
@@ -329,7 +341,7 @@ public:
   Pool &operator[](std::size_t) noexcept;
 
   void
-  init() noexcept;
+  init(global::State &) noexcept;
 }; // struct Pool
 
 template <typename Res, typename Arg>
@@ -368,6 +380,7 @@ pools_find(Pools &pools, void *search, PFind<Res, Arg> f, Arg &arg) noexcept {
 }
 } // namespace local
 
+//=======SHARED===============================================
 namespace shared {
 
 enum class FreeCode { FREED, FREED_RECLAIM, NOT_FOUND, DOUBLE_FREE };
@@ -378,6 +391,17 @@ std::size_t pool_index(sp::bucket_size) noexcept;
 
 local::Pool &
 pool_for(local::PoolsRAII &, sp::bucket_size) noexcept;
+
+struct State {
+  global::State &global;
+  local::PoolsRAII &pool;
+  local::PoolsRAII &local_pool;
+  State(global::State &, local::PoolsRAII &, local::PoolsRAII &) noexcept;
+  State(global::State &, local::Pools &, local::Pools &) noexcept;
+  State(global::State &, local::Pools &, local::PoolsRAII &) noexcept;
+  State(global::State &, local::PoolsRAII &, local::Pools &) noexcept;
+  ~State() noexcept;
+};
 
 } // namespace shared
 

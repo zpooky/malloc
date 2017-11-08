@@ -10,7 +10,7 @@
 /*Gtest*/
 static size_t
 free_entries(global::State &state) {
-  auto free = debug::global_get_free(&state);
+  auto free = debug::global_get_free(state);
   return free.size();
 }
 
@@ -65,8 +65,8 @@ start:
     i++;
     void *const start = (void *)range.raw_offset(offset);
 
-    // printf("global::internal::dealloc(state, %p, %zu)\n", start, bSz);
-    global::internal::dealloc(state, start, bSz);
+    // printf("global::dealloc(state, %p, %zu)\n", start, bSz);
+    global::dealloc(state, start, bSz);
 
     // printf("[%p,%zu]", start, bucketSz);
     goto start;
@@ -95,7 +95,7 @@ start:
 
   std::random_shuffle(points.begin(), points.end());
   for (auto &start : points) {
-    global::internal::dealloc(state, start, bSz);
+    global::dealloc(state, start, bSz);
   }
 }
 
@@ -125,13 +125,13 @@ assert_dummy_dealloc_no_abs_size(const std::vector<Ts> &free, Range &range) {
 
 static void
 assert_dummy_dealloc_no_abs_size(global::State &s, Range &r) {
-  auto free = debug::global_get_free(&s);
+  auto free = debug::global_get_free(s);
   assert_dummy_dealloc_no_abs_size(free, r);
 }
 
 static void
 assert_dummy_dealloc(global::State &state, Range &range) {
-  auto free = debug::global_get_free(&state);
+  auto free = debug::global_get_free(state);
 
   ASSERT_EQ(range.length, size_of_free(free));
   ASSERT_EQ(size_t(1), free.size()); // free pages should be coalesced
@@ -146,7 +146,7 @@ assert_dummy_alloc(global::State &state, size_t size, Range &range,
   // printf("assert_dummy_dealloc\n");
   for (size_t i = 0; i < size; i += std::size_t(bSz)) {
   retry:
-    void *const current = global::internal::find_freex(state, bSz);
+    void *const current = global::find_free(state, bSz);
     if (current == nullptr) {
       // printf("null\m");
       goto retry;
@@ -380,7 +380,7 @@ threaded_dealloc_test(global::State &state, size_t sz, void *(*f)(void *)) {
   // debug::print_free(&state);
   assert_dummy_dealloc_no_abs_size(state, range);
 
-  auto frees = debug::global_get_free(&state);
+  auto frees = debug::global_get_free(state);
   assert_consecutive_range(frees, range);
 
   free(startR);
@@ -475,7 +475,7 @@ threaded_dealloc_alloc_test(global::State &state, size_t sz,
 
   assert_consecutive_range(result, range);
 
-  ASSERT_EQ(size_t(0), debug::count_free(&state));
+  ASSERT_EQ(size_t(0), debug::count_free(state));
 
   free(startR);
 }
@@ -567,7 +567,7 @@ threaded_dealloc_threaded_alloc_test(global::State &state,
 
   assert_consecutive_range(result, range);
 
-  ASSERT_EQ(size_t(0), debug::count_free(&state));
+  ASSERT_EQ(size_t(0), debug::count_free(state));
 
   free(startR);
 }

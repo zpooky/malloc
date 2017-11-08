@@ -181,8 +181,7 @@ dealloc(local::PoolsRAII &ps, header::LocalFree *first,
 } // namespace local
 
 static std::size_t
-recycle_extent(local::PoolsRAII &tl, local::PoolsRAII &ps,
-               header::Node *head) noexcept {
+recycle_extent(shared::State &state, header::Node *head) noexcept {
   assert(head);
 
   std::size_t recycled(0);
@@ -202,14 +201,14 @@ start:
     goto start;
   }
 
-  if (ps.reclaim.load()) {
-    if (tl.reclaim.load()) {
-      global::dealloc(first);
+  if (state.pool.reclaim.load()) {
+    if (state.local_pool.reclaim.load()) {
+      global::dealloc(state.global, first);
     } else {
-      local::dealloc(tl, first, last);
+      local::dealloc(state.local_pool, first, last);
     }
   } else {
-    local::dealloc(ps, first, last);
+    local::dealloc(state.pool, first, last);
   }
   return recycled;
 } //::recycle_extent()
@@ -289,16 +288,16 @@ free_logic(local::Pool &pool, void *search, header::Node *&recycled) noexcept {
 } //::free_logic()
 
 static FreeCode
-free_reclaim(local::PoolsRAII &tl, local::PoolsRAII &ps, FreeCode c,
-             header::Node *rExts) noexcept {
+free_reclaim(shared::State &state, FreeCode c, header::Node *rExts) noexcept {
   // FREED_RECLAIM in this context means that the Extent was reclaimed
   if (c == FreeCode::FREED_RECLAIM) {
     assert(rExts);
-    const std::size_t recycled = recycle_extent(tl, ps, rExts);
+    const std::size_t recycled = recycle_extent(state, rExts);
 
-    std::size_t total = ps.total_alloc.fetch_sub(recycled);
+    std::size_t total = state.pool.total_alloc.fetch_sub(recycled);
+    assert(total >= recycled);
     if (total == recycled) {
-      if (ps.reclaim.load()) {
+      if (state.pool.reclaim.load()) {
         // FREE_RECLAIM in this context means Pool can be reclaimed
         return FreeCode::FREED_RECLAIM;
       }
@@ -309,9 +308,8 @@ free_reclaim(local::PoolsRAII &tl, local::PoolsRAII &ps, FreeCode c,
 } //::free_reclaim()
 
 static FreeCode
-free(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
-     sp::bucket_size length) noexcept {
-  local::Pool &pool = shared::pool_for(pools, length);
+free(shared::State &state, void *ptr, sp::bucket_size length) noexcept {
+  local::Pool &pool = shared::pool_for(state.pool, length);
 
   header::Node *recycled_ext = nullptr;
   auto result = free_logic(pool, ptr, recycled_ext);
@@ -319,17 +317,17 @@ free(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
     return result;
   }
 
-  return free_reclaim(tl, pools, result, recycled_ext);
+  return free_reclaim(state, result, recycled_ext);
 } //::free()
 
 namespace shared {
 
 FreeCode
-free(local::PoolsRAII &tl, local::PoolsRAII &pools, void *const ptr) noexcept {
+free(shared::State &state, void *const ptr) noexcept {
   assert(ptr);
   header::Node *recycledExtent = nullptr;
   auto res = local::pools_find<FreeCode, header::Node *>(
-      pools, ptr, //
+      state.pool, ptr, //
       [](local::Pool &p, void *search,
          header::Node *&recycled) -> util::maybe<FreeCode> {
         auto result = free_logic(p, search, recycled);
@@ -346,14 +344,7 @@ free(local::PoolsRAII &tl, local::PoolsRAII &pools, void *const ptr) noexcept {
     return result;
   }
 
-  return free_reclaim(tl, pools, result, recycledExtent);
-} // shared::free()
-
-FreeCode
-free(local::Pools &tl, local::Pools &pools, void *const ptr) noexcept {
-  assert(tl.pools);
-  assert(pools.pools);
-  return free(*tl.pools, *pools.pools, ptr);
+  return free_reclaim(state, result, recycledExtent);
 } // shared::free()
 
 util::maybe<sp::bucket_size>
@@ -383,37 +374,29 @@ usable_size(local::Pools &pools, void *const ptr) noexcept {
 } // shared::usable_size()
 
 util::maybe<void *>
-realloc(local::PoolsRAII &tl, local::PoolsRAII &pools, void *ptr,
-        std::size_t length, /*OUT*/ FreeCode &result) noexcept {
-  auto maybeMemSz = usable_size(pools, ptr);
+realloc(shared::State &state, void *ptr, std::size_t length,
+        /*OUT*/ FreeCode &code) noexcept {
+  auto maybeMemSz = usable_size(state.pool, ptr);
   if (maybeMemSz) {
     sp::bucket_size memSz = maybeMemSz.get();
     if (memSz < length) {
-      void *const nptr = alloc(tl, length);
+      void *const nptr = alloc(state.global, state.local_pool, length);
       if (nptr) {
         std::memcpy(nptr, ptr, std::size_t(memSz));
       } else {
         // runtime fault, out of memory
         assert(false);
       }
-      result = ::free(tl, pools, ptr, memSz);
-      assert(result == FreeCode::FREED || result == FreeCode::FREED_RECLAIM);
+      code = ::free(state, ptr, memSz);
+      assert(code == FreeCode::FREED || code == FreeCode::FREED_RECLAIM);
 
       ptr = nptr;
     }
     return util::maybe<void *>(ptr);
   }
 
-  result = FreeCode::NOT_FOUND;
+  code = FreeCode::NOT_FOUND;
   return {};
 }
-
-util::maybe<void *>
-realloc(local::Pools &tl, local::Pools &pools, void *const ptr,
-        std::size_t length, /*OUT*/ FreeCode &code) noexcept {
-  assert(tl.pools);
-  assert(pools.pools);
-  return realloc(*tl.pools, *pools.pools, ptr, length, code);
-} // shared::realloc()
 
 } // namespace shared

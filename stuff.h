@@ -8,22 +8,22 @@
  */
 namespace global {
 shared::FreeCode
-free(local::Pools &tl, void *) noexcept;
+free(global::State &, local::Pools &tl, void *) noexcept;
 
 util::maybe<sp::bucket_size>
 usable_size(void *) noexcept;
 
 util::maybe<void *>
-realloc(local::PoolsRAII &, void *, std::size_t) noexcept;
+realloc(global::State &, local::PoolsRAII &, void *, std::size_t) noexcept;
 
 util::maybe<void *>
-realloc(local::Pools &, void *, std::size_t) noexcept;
+realloc(global::State &, local::Pools &, void *, std::size_t) noexcept;
 
 local::PoolsRAII *
-acquire_pool() noexcept;
+acquire_pool(global::State &) noexcept;
 
 void
-release_pool(local::PoolsRAII *) noexcept;
+release_pool(global::State &, local::PoolsRAII *) noexcept;
 
 } // namespace stuff
 

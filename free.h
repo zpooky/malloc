@@ -4,7 +4,6 @@
  * interface to manage non-thread local memory. It does not manage any internal
  * state.
  *
- *
  */
 
 #ifndef SP_MALLOC_FREE_H
@@ -15,9 +14,7 @@
 namespace shared {
 
 FreeCode
-free(local::PoolsRAII &, local::PoolsRAII &, void *) noexcept;
-FreeCode
-free(local::Pools &, local::Pools &, void *) noexcept;
+free(shared::State &, void *) noexcept;
 
 /* Tries to lookup the size of the underlying bucket referenced by @ptr. Will
  * return the size of the underlying bucket if @ptr is owned by @pool or None.
@@ -48,13 +45,8 @@ usable_size(local::Pools &, void *) noexcept;
  * @return            Maybe a pointer to a memory location if sufficient size
  */
 util::maybe<void *>
-realloc(local::PoolsRAII &, local::PoolsRAII &, void *, std::size_t,
+realloc(shared::State &, void *, std::size_t,
         /*OUT*/ shared::FreeCode &) noexcept;
-
-util::maybe<void *>
-realloc(local::Pools &, local::Pools &, void *, std::size_t,
-        /*OUT*/ shared::FreeCode &) noexcept;
-
 } // namespace shared
 
 #endif

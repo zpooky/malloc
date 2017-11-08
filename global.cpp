@@ -11,10 +11,6 @@
 
 #include <unistd.h> //sbrk
 
-namespace {
-
-static global::State internal_state;
-
 static void
 free_dequeue(header::Free *head, header::Free *target) noexcept {
   assert(head != target);
@@ -269,8 +265,6 @@ return_free(global::State &s, void *const ptr, sp::node_size length) noexcept {
   }
 } // ::return_free()
 
-} // namespace
-
 /*
  *===========================================================
  *=======DEBUG===============================================
@@ -290,12 +284,9 @@ debug_print_free(header::Free *const head) {
 } // test::debug_print_free()
 
 std::vector<std::tuple<void *, std::size_t>>
-global_get_free(global::State *state) {
-  if (state == nullptr) {
-    state = &internal_state;
-  }
+global_get_free(global::State &state) {
   std::vector<std::tuple<void *, std::size_t>> result;
-  header::Free *head = state->free.next.load();
+  header::Free *head = state.free.next.load();
 start:
   if (head) {
     result.emplace_back(head, head->size);
@@ -308,19 +299,13 @@ start:
 } // test::watch_free()
 
 void
-clear_free(global::State *state) {
-  if (state == nullptr) {
-    state = &internal_state;
-  }
-  state->free.next.store(nullptr);
+clear_free(global::State &state) {
+  state.free.next.store(nullptr);
 } // test::clear_free()
 
 void
-print_free(global::State *state) {
-  if (state == nullptr) {
-    state = &internal_state;
-  }
-  header::Free *head = state->free.next.load(std::memory_order_acquire);
+print_free(global::State &state) {
+  header::Free *head = state.free.next.load(std::memory_order_acquire);
   if (head) {
     printf("cmpar: ");
     debug_print_free(head);
@@ -328,12 +313,9 @@ print_free(global::State *state) {
 } // test::print_free()
 
 std::size_t
-count_free(global::State *state) {
-  if (state == nullptr) {
-    state = &internal_state;
-  }
+count_free(global::State &state) {
   std::size_t result = 0;
-  header::Free *head = state->free.next.load();
+  header::Free *head = state.free.next.load();
 start:
   if (head) {
     result++;
@@ -351,14 +333,11 @@ swap(header::Free *p, header::Free *c, header::Free *n) {
 } // swap()
 
 void
-sort_free(global::State *state) {
-  // TODO
-  if (state == nullptr) {
-    state = &internal_state;
-  }
+sort_free(global::State &state) {
+// TODO
 restart:
   bool swapped = false;
-  header::Free *priv = &state->free;
+  header::Free *priv = &state.free;
   header::Free *current = priv->next.load();
 start:
   if (current) {
@@ -384,12 +363,9 @@ start:
 } // test::sort_free()
 
 void
-coalesce_free(global::State *state) {
-  if (state == nullptr) {
-    state = &internal_state;
-  }
+coalesce_free(global::State &state) {
   // sort_free(state);
-  header::Free *head = state->free.next.load();
+  header::Free *head = state.free.next.load();
 start:
   if (head) {
   get_next:
@@ -414,12 +390,11 @@ start:
  *===========================================================
  */
 namespace global {
-namespace internal {
 
 header::Free *
-find_freex(State &state, sp::node_size length) noexcept {
-  return find_free(state, length);
-}
+find_free(State &state, sp::node_size length) noexcept {
+  return ::find_free(state, length);
+} // global::find_free()
 
 void *
 alloc(State &state, sp::node_size p_length) noexcept {
@@ -427,7 +402,7 @@ alloc(State &state, sp::node_size p_length) noexcept {
     return nullptr;
   }
 
-  header::Free *free = find_freex(state, p_length);
+  header::Free *free = find_free(state, p_length);
   if (free == nullptr) {
     free = alloc_free(state, p_length);
     if (free == nullptr) {
@@ -455,13 +430,13 @@ alloc(State &state, sp::node_size p_length) noexcept {
   return_free(state, free);
   assert(false);
   return nullptr;
-}
+} // global::alloc()
 
 void
 dealloc(State &state, void *const start, sp::node_size length) noexcept {
   assert(start);
   return return_free(state, start, length);
-} // global::internal::dealloc()
+} // global::dealloc()
 
 void
 dealloc(State &state, header::LocalFree *current) noexcept {
@@ -474,25 +449,9 @@ next:
     current = next;
     goto next;
   }
-} // global::internal::dealloc()
-
-} // namespace internal
+} // global::dealloc()
 
 // TODO change so it should be number of pages instead of a specific
 // length+alignment
-void *
-alloc(sp::node_size length) noexcept {
-  return internal::alloc(internal_state, length);
-} // global::alloc()
-
-void
-dealloc(void *const start, sp::node_size length) noexcept {
-  return internal::dealloc(internal_state, start, length);
-} // global::dealloc()
-
-void
-dealloc(header::LocalFree *const start) noexcept {
-  return internal::dealloc(internal_state, start);
-} // global::dealloc()
 
 } // namespace global

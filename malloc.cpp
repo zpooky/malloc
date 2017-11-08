@@ -4,7 +4,6 @@
 // #include <utility>
 
 #ifdef SP_TEST
-#include "alloc_debug.h"
 #include "malloc_debug.h"
 #endif
 
@@ -104,8 +103,12 @@
 // - LD_PRELUDE
 // - benchmark
 
-// {{{
+// thread local Pools {{{
 static thread_local local::Pools local_pools;
+// }}}
+
+// global memory Arena {{{
+static global::State global_state;
 // }}}
 
 /*
@@ -131,6 +134,16 @@ malloc_count_alloc(std::size_t sz) {
   return 0;
 }
 
+void
+force_reclaim_orphan_tl() {
+  stuff_force_reclaim_orphan(global_state);
+} // debug::force_reclaim_orphan_tl()
+
+std::vector<std::tuple<void *, std::size_t>>
+global_get_free() {
+  return global_get_free(global_state);
+} // debug::global_get_free()
+
 } // namespace debug
 #endif
 /*
@@ -145,9 +158,9 @@ sp_malloc(std::size_t length) noexcept {
   }
 
   auto &lpools = local_pools;
-  lpools.init();
+  lpools.init(global_state);
 
-  return shared::alloc(lpools, length);
+  return shared::alloc(global_state, lpools, length);
 } // ::sp_malloc()
 
 bool
@@ -161,12 +174,13 @@ sp_free(void *const ptr) noexcept {
 
   auto &lpools = local_pools;
   if (lpools.pools) {
-    result = shared::free(lpools, lpools, ptr);
+    shared::State state(global_state, local_pools, local_pools);
+    result = shared::free(state, ptr);
     assert(result != FreeCode::FREED_RECLAIM);
   }
 
   if (result == FreeCode::NOT_FOUND) {
-    result = global::free(lpools, ptr);
+    result = global::free(global_state, lpools, ptr);
   }
 
   return result == FreeCode::FREED || result == FreeCode::FREED_RECLAIM;
@@ -203,14 +217,15 @@ sp_realloc(void *const ptr, std::size_t length) noexcept {
 
   auto nop = shared::FreeCode::NOT_FOUND;
   // TODO only required init() when length < bucket->size
-  local_pools.init();
-  auto lresult = shared::realloc(local_pools, local_pools, ptr, length, nop);
+  local_pools.init(global_state);
+  shared::State state(global_state, local_pools, local_pools);
+  auto lresult = shared::realloc(state, ptr, length, nop);
   if (lresult) {
     return lresult.get();
   }
   assert(nop == shared::FreeCode::NOT_FOUND);
 
-  auto result = global::realloc(local_pools, ptr, length);
+  auto result = global::realloc(global_state, local_pools, ptr, length);
   void *const def = nullptr;
   return result.get_or(def);
 } //::sp_realloc

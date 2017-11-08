@@ -8,9 +8,10 @@
 #include "global.h"
 #include <cstring>
 
+//============================================================
 static void *
 local_alloc(local::PoolsRAII &pool, sp::node_size search) noexcept {
-  //TODO change to tree?
+  // TODO change to tree?
   /* Double linked but not circular.
   */
   header::LocalFree &free_list = pool.free_list;
@@ -60,11 +61,12 @@ next:
 } // ::local_alloc()
 
 static void *
-alloc(local::PoolsRAII &pools, sp::node_size sz) noexcept {
+alloc(global::State &global, local::PoolsRAII &pools,
+      sp::node_size sz) noexcept {
   void *result = local_alloc(pools, sz);
   if (!result) {
     // TODO logic to allocate extra memory for locall::FreeList
-    result = global::alloc(sz);
+    result = global::alloc(global, sz);
   }
   if (result) {
     pools.total_alloc.fetch_add(std::size_t(sz));
@@ -185,10 +187,11 @@ calc_min_node(sp::bucket_size bucketSz) noexcept {
 }
 
 static header::Node *
-alloc_extent(local::PoolsRAII &pools, sp::bucket_size bucketSz) noexcept {
+alloc_extent(global::State &global, local::PoolsRAII &pools,
+             sp::bucket_size bucketSz) noexcept {
   // printf("alloc_extent(%zu)\n", bucketSz);
   sp::node_size nodeSz = calc_min_node(bucketSz);
-  void *const raw = alloc(pools, nodeSz);
+  void *const raw = alloc(global, pools, nodeSz);
   if (raw) {
     return header::init_extent(raw, nodeSz, bucketSz);
   }
@@ -201,9 +204,10 @@ should_expand_extent(header::Node *) {
 }
 
 static header::Node *
-enqueue_new_extent(local::PoolsRAII &pools, std::atomic<header::Node *> &w,
+enqueue_new_extent(global::State &global, local::PoolsRAII &pools,
+                   std::atomic<header::Node *> &w,
                    sp::bucket_size bucketSz) noexcept {
-  header::Node *const current = ::alloc_extent(pools, bucketSz);
+  header::Node *const current = ::alloc_extent(global, pools, bucketSz);
   if (current) {
     // TODO some kind of fence to ensure construction before publication
     // std::atomic_thread_fence(std::memory_order_release);
@@ -223,10 +227,11 @@ expand_extent(void *const) noexcept {
   // TODO
 } // ::extend_extent()
 
+//=======SHARED===============================================
 namespace shared {
-
 void *
-alloc(local::PoolsRAII &pools, std::size_t length) noexcept {
+alloc(global::State &global, local::PoolsRAII &pools,
+      std::size_t length) noexcept {
   assert(pools.reclaim.load() == false);
   const auto bucketSz = shared::bucket_size_for(length);
   local::Pool &pool = shared::pool_for(pools, bucketSz);
@@ -253,7 +258,7 @@ alloc(local::PoolsRAII &pools, std::size_t length) noexcept {
           if (::should_expand_extent(start)) {
             ::expand_extent(start);
           } else {
-            start = ::enqueue_new_extent(pools, start->next, bucketSz);
+            start = ::enqueue_new_extent(global, pools, start->next, bucketSz);
           }
           if (start) {
             goto reserve_start;
@@ -266,7 +271,7 @@ alloc(local::PoolsRAII &pools, std::size_t length) noexcept {
     } else {
       // only TL allowed to malloc meaning no alloc contention
       header::Node *current =
-          ::enqueue_new_extent(pools, pool.start.next, bucketSz);
+          ::enqueue_new_extent(global, pools, pool.start.next, bucketSz);
       if (current) {
         void *const result = ::reserve(current);
         // Since only one allocator this must succeed.
@@ -286,15 +291,15 @@ alloc(local::PoolsRAII &pools, std::size_t length) noexcept {
 } // shared::alloc()
 
 void *
-alloc(local::Pools &pools, std::size_t length) noexcept {
+alloc(global::State &state, local::Pools &pools, std::size_t length) noexcept {
   assert(pools.pools);
-  return alloc(*pools.pools, length);
+  return alloc(state, *pools.pools, length);
 } // shared::alloc()
 
 } // namespace shared
 
+//=======DEBUG===============================================
 #ifdef SP_TEST
-
 namespace debug {
 std::size_t
 alloc_count_alloc(local::PoolsRAII &p) {

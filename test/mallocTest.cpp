@@ -26,6 +26,7 @@
 // TODO Cartesian product[allocSZ,iterations,threads[consumer,producer]]
 //==================================================================================================
 //==================================================================================================
+
 static void
 assert_clean_slate() {
   // printf("EXPECT_EQ(std::size_t(0),debug::stuff_count_unclaimed_orphan_pools()["
@@ -36,13 +37,13 @@ assert_clean_slate() {
 
   EXPECT_EQ(std::size_t(0), debug::stuff_count_unclaimed_orphan_pools());
   EXPECT_EQ(std::size_t(0), debug::stuff_count_alloc());
-  auto global_free = debug::global_get_free(nullptr);
+  auto global_free = debug::global_get_free();
   assert_no_overlap(global_free);
   // TODO does not work probably because we are using stdmalloc and spmalloc at
   // the same time
   // assert_no_gaps(global_free);
   // TODO assert that all memory get returned to global pool
-  debug::stuff_force_reclaim_orphan();
+  debug::force_reclaim_orphan_tl();
 }
 
 /*Parametrized Fixture*/

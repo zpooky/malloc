@@ -26,8 +26,10 @@ INSTANTIATE_TEST_CASE_P(DefaultInstance, AllocTestAllocSizePFixture,
 //==================================================================================================
 TEST_P(AllocTestAllocSizePFixture, test_alloc) {
   const size_t allocSz = GetParam();
+
+  global::State global;
   local::PoolsRAII pools;
-  void*ptr = shared::alloc(pools, allocSz);
+  void *ptr = shared::alloc(global, pools, allocSz);
   ASSERT_TRUE(ptr == nullptr);
 }
 //==================================================================================================

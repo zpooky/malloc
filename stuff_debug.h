@@ -1,5 +1,7 @@
-#ifndef SP_MALLOC_STUFF_H
-#define SP_MALLOC_STUFF_H
+#ifndef SP_MALLOC_STUFF_DEBUG_H
+#define SP_MALLOC_STUFF_DEBUG_H
+
+#include "shared.h"
 
 namespace debug {
 
@@ -11,7 +13,7 @@ stuff_count_alloc();
 std::size_t stuff_count_alloc(std::size_t);
 
 void
-stuff_force_reclaim_orphan();
+stuff_force_reclaim_orphan(global::State &);
 }
 
 #endif

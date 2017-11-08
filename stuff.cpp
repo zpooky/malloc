@@ -11,6 +11,7 @@
 
 #define SP_MALLOC_POOL_SIZE sp::node_size(SP_MALLOC_PAGE_SIZE * 2)
 
+//===========================================================
 struct asd {
   // {
   sp::ReadWriteLock lock;
@@ -93,7 +94,8 @@ cont:
 }
 
 static bool
-recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
+recycle_pool(global::State &global, asd &a, sp::SharedLock &lock,
+             local::PoolsRAII *subject) noexcept {
   if (unlink_pool(a, lock, subject)) {
     // lock is not held here
     assert(!lock);
@@ -121,7 +123,7 @@ recycle_pool(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
         cons(header::init_local_free(target, sp::node_size(length)), reclaim);
 
     // TODO sort and coalesce adjacent entries
-    global::dealloc(reclaim);
+    global::dealloc(global, reclaim);
     return true;
   }
   return false;
@@ -154,10 +156,11 @@ enqueue(asd &a, sp::SharedLock &lock, local::PoolsRAII *subject) noexcept {
   return false;
 }
 
+//=======GLOBAL===============================================
 namespace global {
 
 shared::FreeCode
-free(local::Pools &tl, void *const ptr) noexcept {
+free(global::State &global, local::Pools &tl, void *const ptr) noexcept {
   assert(tl.pools);
   using shared::FreeCode;
   sp::SharedLock shared_guard{internal_a.lock};
@@ -165,11 +168,12 @@ free(local::Pools &tl, void *const ptr) noexcept {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
   next:
     if (current) {
-      const auto result = shared::free(*tl.pools, *current, ptr);
+      shared::State state(global, *current, tl);
+      const auto result = shared::free(state, ptr);
       if (result != FreeCode::NOT_FOUND) {
         if (result == FreeCode::FREED_RECLAIM) {
           // printf("free()=FREED_RECLAIM\n");
-          if (!recycle_pool(internal_a, shared_guard, current)) {
+          if (!recycle_pool(global, internal_a, shared_guard, current)) {
             // TODO !!! FIX does not work
             assert(false);
           }
@@ -209,16 +213,18 @@ usable_size(void *const ptr) noexcept {
 } // global::usuable_size()
 
 util::maybe<void *>
-realloc(local::PoolsRAII &tl, void *const ptr, std::size_t length) noexcept {
+realloc(global::State &global, local::PoolsRAII &tl, void *const ptr,
+        std::size_t length) noexcept {
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
   next:
     if (current) {
       auto code = shared::FreeCode::FREED;
-      auto result = shared::realloc(tl, *current, ptr, length, /*OUT*/ code);
+      shared::State state(global, *current, tl);
+      auto result = shared::realloc(state, ptr, length, /*OUT*/ code);
       if (code == shared::FreeCode::FREED_RECLAIM) {
-        if (!recycle_pool(internal_a, shared_guard, current)) {
+        if (!recycle_pool(global, internal_a, shared_guard, current)) {
           // TODO
           assert(false);
         }
@@ -234,20 +240,21 @@ realloc(local::PoolsRAII &tl, void *const ptr, std::size_t length) noexcept {
 } // global::realloc()
 
 util::maybe<void *>
-realloc(local::Pools &tl, void *const ptr, std::size_t length) noexcept {
+realloc(global::State &global, local::Pools &tl, void *const ptr,
+        std::size_t length) noexcept {
   assert(tl.pools);
-  return realloc(*tl.pools, ptr, length);
+  return realloc(global, *tl.pools, ptr, length);
 } // global::realloc()
 
 local::PoolsRAII *
-acquire_pool() noexcept {
+acquire_pool(global::State &global) noexcept {
   using PoolType = local::PoolsRAII;
 
   constexpr std::size_t length(SP_MALLOC_POOL_SIZE);
   static_assert(sizeof(PoolType) <= length, "");
 
   PoolType *result = nullptr;
-  void *const memory = global::alloc(sp::node_size(length));
+  void *const memory = global::alloc(global, sp::node_size(length));
   if (memory) {
     result = new (memory) PoolType;
 
@@ -265,7 +272,7 @@ acquire_pool() noexcept {
 } // global::acquire_pool()
 
 void
-release_pool(local::PoolsRAII *pool) noexcept {
+release_pool(global::State &global, local::PoolsRAII *pool) noexcept {
   assert(pool->reclaim.load() == false);
   pool->reclaim.store(true);
   std::size_t allocs = pool->total_alloc.load();
@@ -273,7 +280,7 @@ release_pool(local::PoolsRAII *pool) noexcept {
   retry:
     sp::SharedLock lock{internal_a.lock};
     if (lock) {
-      if (!recycle_pool(internal_a, lock, pool)) {
+      if (!recycle_pool(global, internal_a, lock, pool)) {
         goto retry;
       }
     }
@@ -282,10 +289,9 @@ release_pool(local::PoolsRAII *pool) noexcept {
 
 } // namespace global
 
+//=======DEBUG===============================================
 #ifdef SP_TEST
-
 namespace debug {
-
 std::size_t
 stuff_count_unclaimed_orphan_pools() noexcept {
   std::size_t result = 0;
@@ -337,7 +343,7 @@ stuff_count_alloc(std::size_t sz) {
 } // debug::stuff_count_alloc()
 
 void
-stuff_force_reclaim_orphan() {
+stuff_force_reclaim_orphan(global::State &global) {
   sp::SharedLock lock{internal_a.lock};
   if (lock) {
     local::PoolsRAII *current = internal_a.head.load(std::memory_order_acquire);
@@ -345,7 +351,7 @@ stuff_force_reclaim_orphan() {
     if (current) {
       if (current->reclaim.load()) {
         // TODO reclaim extents
-        recycle_pool(internal_a, lock, current);
+        recycle_pool(global, internal_a, lock, current);
       }
       current = current->next;
       goto next;

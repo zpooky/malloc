@@ -5,10 +5,10 @@
 
 namespace shared {
 void *
-alloc(local::PoolsRAII &, std::size_t) noexcept;
+alloc(global::State &, local::PoolsRAII &, std::size_t) noexcept;
 
 void *
-alloc(local::Pools &, std::size_t) noexcept;
+alloc(global::State &, local::Pools &, std::size_t) noexcept;
 
 } // namespace shared
 

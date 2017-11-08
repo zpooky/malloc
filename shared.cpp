@@ -4,11 +4,7 @@
 #include <cassert>
 #include <cstring>
 
-/*
- *===========================================================
- *========SP=================================================
- *===========================================================
- */
+//========sp=============================================
 #ifdef SP_TYPED_NUMERIC
 bool
 operator<(const sp::index &i, const sp::buckets &b) {
@@ -40,11 +36,7 @@ operator>(const sp::bucket_size &b, const sp::node_size &n) {
 }
 #endif
 
-/*
- *===========================================================
- *========HEADER=============================================
- *===========================================================
- */
+//========HEADER=============================================
 namespace header {
 
 /*Free*/
@@ -266,21 +258,28 @@ node_data_start(Node *const node) noexcept {
 
 } // namespace header
 
-/*
- *===========================================================
- *=======LOCAL===============================================
- *===========================================================
- */
+//=======GLOBAL===============================================
+namespace global {
+/*State*/
+State::State() noexcept //
+    : brk_lock{}
+    , brk_position{nullptr}
+    , brk_alloc{0}
+    , free{sp::node_size(0), nullptr} {
+}
+
+} // namespace global
+
+//=======LOCAL===============================================
 namespace local {
-// class Pool {{{
+/*Pool*/
 Pool::Pool() noexcept
     : start{header::NodeType::SPECIAL, sp::node_size(0), sp::bucket_size(0),
             sp::buckets(0)}
     , lock{} {
 }
-// }}}
 
-// class PoolsRAII {{{
+/*PoolsRAII*/
 PoolsRAII::PoolsRAII() noexcept
     : buckets{}
     , total_alloc{0}
@@ -298,17 +297,17 @@ Pool &PoolsRAII::operator[](std::size_t idx) noexcept {
   return buckets[idx];
 }
 
-// }}}
-
-// class Pools {{{
+/*Pools*/
 Pools::Pools() noexcept
-    : pools{nullptr} {
+    : pools{nullptr}
+    , global{nullptr} {
   // printf("ctor Pools TL\n");
 }
 
 Pools::~Pools() noexcept {
   if (pools) {
-    global::release_pool(pools);
+    assert(global);
+    global::release_pool(*global, pools);
     pools = nullptr;
   }
   // printf("dtor Pools TL\n");
@@ -320,15 +319,16 @@ Pool &Pools::operator[](std::size_t idx) noexcept {
   return pools->buckets[idx];
 }
 void
-Pools::init() noexcept {
+Pools::init(global::State &state) noexcept {
   if (!pools) {
-    pools = global::acquire_pool();
+    global = &state;
+    pools = global::acquire_pool(state);
   }
 }
-// }}}
 
 } // namespace local
 
+//=======SHARED===============================================
 namespace shared {
 sp::bucket_size
 bucket_size_for(std::size_t sz) noexcept {
@@ -346,5 +346,32 @@ pool_for(local::PoolsRAII &pools, sp::bucket_size sz) noexcept {
   const std::size_t index = pool_index(sz);
   return pools[index];
 } // ::pool_for()
+
+/*State*/
+State::State(global::State &g, local::PoolsRAII &p,
+             local::PoolsRAII &tl) noexcept
+    : global(g)
+    , pool(p)
+    , local_pool(tl) {
+}
+
+State::State(global::State &g, local::Pools &p, local::Pools &lp) noexcept
+    : State(g, *p.pools, *lp.pools) {
+  assert(p.pools);
+  assert(lp.pools);
+}
+
+State::State(global::State &g, local::Pools &p, local::PoolsRAII &lp) noexcept
+    : State(g, *p.pools, lp) {
+  assert(p.pools);
+}
+
+State::State(global::State &g, local::PoolsRAII &p, local::Pools &lp) noexcept
+    : State(g, p, *lp.pools) {
+  assert(lp.pools);
+}
+
+State::~State() noexcept {
+}
 
 } // namespace shared
