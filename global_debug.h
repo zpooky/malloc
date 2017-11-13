@@ -6,19 +6,25 @@
 #include <vector>
 
 namespace debug {
-// these functions can not be used during load
+/*these functions can not be used during load*/
+
 std::vector<std::tuple<void *, std::size_t>>
 global_get_free(global::State &);
+
 void
-clear_free(global::State &);
+global_clear_free(global::State &);
+
 void
-print_free(global::State &);
+global_print_free(global::State &);
+
 std::size_t
-count_free(global::State &);
+global_count_free(global::State &);
+
 void
-sort_free(global::State &);
+global_sort_free(global::State &);
+
 void
-coalesce_free(global::State &);
+global_coalesce_free(global::State &);
 
 } // namespace debug
 

@@ -8,14 +8,95 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <pthread.h>
 #include <shared.h>
 #include <tuple>
 #include <util.h>
 #include <vector>
-#include <pthread.h>
 
 using Point = std::tuple<void *, std::size_t>;
 using Points = std::vector<Point>;
+
+namespace test {
+// template<std::size_t length>
+struct StackHeadNoSize {
+  StackHeadNoSize *next;
+
+  StackHeadNoSize(StackHeadNoSize *n, std::size_t /*l*/)
+      : next(n) {
+    // assert(length ==l);
+  }
+
+  std::size_t
+  get_length() const {
+    // return length;
+    return 0;
+  }
+};
+
+struct StackHead {
+  StackHead *next;
+  std::size_t length;
+
+  StackHead(StackHead *n, std::size_t l)
+      : next(n)
+      , length(l) {
+  }
+
+  std::size_t
+  get_length() const {
+    return length;
+  }
+};
+
+template <typename Stack = StackHead>
+struct MemStack {
+  sp::ReadWriteLock lock;
+  Stack *head;
+
+  MemStack()
+      : lock()
+      , head(nullptr) {
+  }
+
+  ~MemStack() {
+    sp::EagerExclusiveLock guard(lock);
+  }
+};
+
+template <typename Stack>
+void
+enqueue(MemStack<Stack> &s, void *data, std::size_t length) {
+  // printf("length[%zu] >= Stack[%zu]\n", length, sizeof(Stack));
+  assert(length >= sizeof(Stack));
+  uintptr_t p = reinterpret_cast<std::uintptr_t>(data);
+  if (p % alignof(Stack) != 0) {
+    printf("alingof  assert fail\n");
+    assert(false);
+  }
+  sp::EagerExclusiveLock guard(s.lock);
+  if (guard) {
+    Stack *head = new (data) Stack(s.head, length);
+    s.head = head;
+  }
+}
+
+template <typename Stack>
+util::maybe<std::tuple<void *, std::size_t>>
+dequeue(MemStack<Stack> &s) {
+  sp::EagerExclusiveLock guard(s.lock);
+  if (guard) {
+    Stack *head = s.head;
+    if (head) {
+      s.head = head->next;
+
+      std::tuple<void *, std::size_t> r(head, head->get_length());
+      return util::maybe<std::tuple<void *, std::size_t>>(r);
+    }
+  }
+  return {};
+}
+} // namespace test
 
 template <typename T>
 static inline T *
@@ -88,6 +169,10 @@ void
 assert_no_overlap(const Points &ptrs);
 
 void
+assert_no_overlap(const test::MemStack<test::StackHeadNoSize> &ptrs,
+                  std::size_t);
+
+void
 sort_points(Points &free);
 
 void
@@ -108,26 +193,6 @@ time(const char *msg, Function f) {
       << "ms" << std::endl;
 }
 
-namespace test {
-struct StackHead {
-  StackHead *next;
-  std::size_t length;
-  StackHead(StackHead *, std::size_t);
-};
-
-struct MemStack {
-  sp::ReadWriteLock lock;
-  StackHead *head;
-  MemStack();
-};
-
-void
-enqueue(MemStack &s, void *data, std::size_t length);
-
-util::maybe<std::tuple<void *, std::size_t>>
-dequeue(MemStack &s);
-}
-
 template <typename T>
 bool
 memeq(T *ptr, std::size_t capacity, T value) noexcept {
@@ -140,10 +205,9 @@ memeq(T *ptr, std::size_t capacity, T value) noexcept {
   return true;
 }
 
-
 //==================================================================================================
- std::size_t
-roundAlloc(std::size_t sz) ;
+std::size_t
+roundAlloc(std::size_t sz);
 
 using Worker_t = void *(*)(void *);
 

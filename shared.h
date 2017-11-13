@@ -172,8 +172,14 @@ free(void *const start) noexcept;
 
 /*LocalFree*/
 struct LocalFree {
+  // list {{{
   LocalFree *next;
   LocalFree *priv;
+  //}}}
+  // tree{{{
+  LocalFree *left;
+  LocalFree *right;
+  //}}}
   sp::node_size size;
 
   LocalFree() noexcept;
@@ -184,18 +190,21 @@ LocalFree *
 reduce(LocalFree *, sp::node_size) noexcept;
 
 LocalFree *
-init_local_free(void *const head, sp::node_size) noexcept;
+init_local_free(void *head, sp::node_size) noexcept;
 
 LocalFree *
-init_local_free(void *const head, sp::node_size, LocalFree *next) noexcept;
+init_local_free(void *head, sp::node_size, LocalFree *next) noexcept;
+
+bool
+is_consecutive(LocalFree *, LocalFree *) noexcept;
 
 /*Extent*/
 struct Node;
 
 struct alignas(SP_MALLOC_CACHE_LINE_SIZE) Extent { //
-  static constexpr std::size_t MAX_BUCKETS = 512;
+  static constexpr std::size_t max_buckets = 512;
 
-  sp::Bitset<MAX_BUCKETS, std::uint64_t> reserved;
+  sp::Bitset<max_buckets, std::uint64_t> reserved;
 
   Extent() noexcept;
 };
@@ -265,6 +274,12 @@ struct State {
 
   // free{{{
   header::Free free;
+// }}}
+
+// test{{{
+#ifdef SP_TEST
+  bool skip_alloc;
+#endif
   // }}}
 
   State() noexcept;
@@ -384,6 +399,15 @@ pools_find(Pools &pools, void *search, PFind<Res, Arg> f, Arg &arg) noexcept {
 namespace shared {
 
 enum class FreeCode { FREED, FREED_RECLAIM, NOT_FOUND, DOUBLE_FREE };
+
+#ifdef SP_TEST
+#define PRINT_FreeCode(STR, CODE)                                              \
+  do {                                                                         \
+    const char *lookup[]{"FREED", "FREED_RECLAIM", "NOT_FOUND",                \
+                         "DOUBLE_FREE"};                                       \
+    printf("%s:%s\n", STR, lookup[int(CODE)]);                                 \
+  } while (0)
+#endif
 
 sp::bucket_size bucket_size_for(std::size_t) noexcept;
 

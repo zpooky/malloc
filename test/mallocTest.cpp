@@ -647,11 +647,11 @@ TEST_F(MallocTest, test_realloc) {
 //-----------------------------------------
 using TestProducerConsumerReallocArg =
     std::tuple<sp::Barrier *, std::size_t, const std::vector<std::size_t> *,
-               test::MemStack *, std::atomic<std::size_t>>;
+               test::MemStack<test::StackHead> *, std::atomic<std::size_t>>;
 
 static void
 malloc_producer(std::size_t it, const std::vector<std::size_t> &sz,
-                test::MemStack &s) {
+                test::MemStack<test::StackHead> &s) {
   for (size_t i = 0; i < it; ++i) {
     for (auto allocSz : sz) {
       void *const ptr = sp_malloc(allocSz);
@@ -678,7 +678,7 @@ worker_malloc_producer(void *a) {
 }
 
 static void
-malloc_consumer_realloc(test::MemStack &s, std::atomic<std::size_t> &cnt) {
+malloc_consumer_realloc(test::MemStack<test::StackHead> &s, std::atomic<std::size_t> &cnt) {
   Points resized;
   while (cnt > 0) {
     auto res = dequeue(s);
@@ -727,7 +727,7 @@ TEST_F(MallocTest, test_1producer_1consumer_realloc) {
   const std::size_t th = thProd.size() + thCon.size();
 
   const std::size_t it = NUMBER_OF_IT;
-  test::MemStack s;
+  test::MemStack<test::StackHead> s;
   sp::Barrier b(th);
   std::size_t allocs = thProd.size() * (it * SIZES2.size());
 

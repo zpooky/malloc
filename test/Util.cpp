@@ -23,8 +23,9 @@ in_range(void *r, size_t rSz, void *e, size_t eLen) {
 
 void
 assert_in_range(Range &range, void *current, size_t bSz) {
+  ASSERT_TRUE(current != nullptr);
   if (!in_range(range.start, range.length, current, bSz)) {
-    printf("in_range(%p, %zu, %p, "
+    printf("in_range(Range(%p, %zu), %p, "
            "%zu)|range(%zu-%zu[l:%zu])|cur(%zu-%zu[l:%zu])\n",      //
            range.start, range.length, current, bSz,                 //
            reinterpret_cast<uintptr_t>(range.start),                //
@@ -80,6 +81,12 @@ assert_no_overlap(const Points &ptrs) {
 }
 
 void
+assert_no_overlap(const test::MemStack<test::StackHeadNoSize> &ptrs,
+                  std::size_t) {
+  // TODO
+}
+
+void
 sort_points(Points &free) {
   auto cmp = [](const auto &first, const auto &second) -> bool {
     return std::get<0>(first) < std::get<0>(second);
@@ -89,17 +96,16 @@ sort_points(Points &free) {
 
 void
 assert_consecutive_range(Points &free, Range range) { // spz
-  uint8_t *const startR = range.start;
-
   sort_points(free);
 
-  void *first = startR;
+  void *first = range.start;
   for (auto it = free.begin(); it != free.end(); ++it) {
     ASSERT_EQ(std::get<0>(*it), first);
 
     first = ptr_add(std::get<0>(*it), std::get<1>(*it));
   }
-  ASSERT_EQ(first, ptr_add(range.start, +range.length));
+  void *const range_end = ptr_add(range.start, range.length);
+  ASSERT_EQ(first, range_end);
 }
 
 void
@@ -117,48 +123,6 @@ assert_no_gaps(Points &free) {
   }
 }
 
-namespace test {
-
-StackHead::StackHead(StackHead *n, std::size_t l)
-    : next(n)
-    , length(l) {
-}
-
-MemStack::MemStack()
-    : lock()
-    , head(nullptr) {
-}
-
-void
-enqueue(MemStack &s, void *data, std::size_t length) {
-  assert(length >= sizeof(StackHead));
-  uintptr_t p = reinterpret_cast<std::uintptr_t>(data);
-  if (p % alignof(StackHead) != 0) {
-    printf("alingof  assert fail\n");
-    assert(false);
-  }
-  sp::EagerExclusiveLock guard(s.lock);
-  if (guard) {
-    StackHead *head = new (data) StackHead(s.head, length);
-    s.head = head;
-  }
-}
-
-util::maybe<std::tuple<void *, std::size_t>>
-dequeue(MemStack &s) {
-  sp::EagerExclusiveLock guard(s.lock);
-  if (guard) {
-    StackHead *head = s.head;
-    if (head) {
-      s.head = head->next;
-
-      std::tuple<void *, std::size_t> r(head, head->length);
-      return util::maybe<std::tuple<void *, std::size_t>>(r);
-    }
-  }
-  return {};
-}
-} // namespace test
 //
 //==================================================================================================
 std::size_t

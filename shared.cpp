@@ -52,15 +52,25 @@ Free::Free(sp::node_size sz, Free *nxt) noexcept
 Free::Free(sp::node_size sz) noexcept
     : Free(sz, nullptr) {
 }
+template <typename T>
+static bool
+internal_is_consecutive(const T *const head, const T *const tail) noexcept {
+  assert(head);
+  assert(tail);
+  uintptr_t head_start = reinterpret_cast<uintptr_t>(head);
+  uintptr_t head_end = head_start + std::size_t(head->size);
+  uintptr_t tail_start = reinterpret_cast<uintptr_t>(tail);
+#ifdef SP_TEST
+  uintptr_t tail_end = tail_start + std::size_t(tail->size);
+  assert(!(head_end > tail_start && head_end < tail_end));
+  assert(!(tail_end > head_start && tail_end < head_end));
+#endif
+  return head_end == tail_start;
+}
 
 bool
 is_consecutive(const Free *const head, const Free *const tail) noexcept {
-  assert(head);
-  assert(tail);
-  uintptr_t head_base = reinterpret_cast<uintptr_t>(head);
-  uintptr_t head_end = head_base + std::size_t(head->size);
-  uintptr_t tail_base = reinterpret_cast<uintptr_t>(tail);
-  return head_end == tail_base;
+  return internal_is_consecutive(head, tail);
 } // header::is_consecutive()
 
 void
@@ -118,8 +128,14 @@ free(void *const start) noexcept {
 
 /*LocalFree*/
 LocalFree::LocalFree(sp::node_size sz) noexcept
+    // list {{{
     : next{nullptr}
-    , priv{nullptr}
+    , priv(nullptr)
+    //}}}
+    // tree{{{
+    , left{nullptr}
+    , right(nullptr)
+    // }}}
     , size{sz} {
 }
 
@@ -155,6 +171,11 @@ init_local_free(void *const h, sp::node_size length, LocalFree *next) noexcept {
       next->priv = result;
   }
   return result;
+}
+
+bool
+is_consecutive(LocalFree *head, LocalFree *tail) noexcept {
+  return internal_is_consecutive(head, tail);
 }
 
 /*Extent*/
@@ -265,7 +286,11 @@ State::State() noexcept //
     : brk_lock{}
     , brk_position{nullptr}
     , brk_alloc{0}
-    , free{sp::node_size(0), nullptr} {
+    , free(sp::node_size(0), nullptr)
+#ifdef SP_TEST
+    , skip_alloc(false)
+#endif
+{
 }
 
 } // namespace global

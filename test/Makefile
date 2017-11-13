@@ -6,7 +6,7 @@ SUT_DIR = build_test
 GTEST_ROOT = $(PROJECT_ROOT)/external/googletest/googletest
 HEADER_DIRS = -I$(GTEST_ROOT)/include -I$(PROJECT_ROOT) -I$(PROJECT_ROOT)/external
 LDLIBS = -L$(GTEST_ROOT)/make -lgtest_main -lpthread -L$(PROJECT_ROOT)/$(SUT_DIR) -lsut
-override CXXFLAGS += $(HEADER_DIRS) -enable-frame-pointers -std=gnu++14 -Wall -Wextra -ggdb -fno-strict-aliasing -Wpointer-arith
+override CXXFLAGS += $(HEADER_DIRS) -enable-frame-pointers -std=gnu++14 -Wall -Wextra -ggdb -fno-strict-aliasing -Wpointer-arith -DSP_TEST
 BUILD = build
 
 # File names

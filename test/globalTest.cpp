@@ -73,7 +73,7 @@ start:
   }
   ASSERT_EQ(offset, range.length);
   // printf("\n");
-  // debug::print_free();
+  // debug::global_print_free();
   // printf("dummy_dealloc_setup: %zu\n", i);
 }
 
@@ -377,7 +377,7 @@ threaded_dealloc_test(global::State &state, size_t sz, void *(*f)(void *)) {
 
   Points result;
   threaded<thCnt>(state, sz, SIZE, range, {f}, result);
-  // debug::print_free(&state);
+  // debug::global_print_free(&state);
   assert_dummy_dealloc_no_abs_size(state, range);
 
   auto frees = debug::global_get_free(state);
@@ -418,7 +418,7 @@ worker_dealloc_alloc(void *argument) {
   //   printf("arg->b1->await();\n");
   //
   //   assert_dummy_dealloc_no_abs_size(state, arg->range);
-  //   auto frees = debug::watch_free(&state);
+  //   auto frees = debug::global_watch_free(&state);
   //   assert_no_overlap(frees);
   //   assert_consecutive_range(frees, arg->range);
   //
@@ -475,7 +475,7 @@ threaded_dealloc_alloc_test(global::State &state, size_t sz,
 
   assert_consecutive_range(result, range);
 
-  ASSERT_EQ(size_t(0), debug::count_free(state));
+  ASSERT_EQ(size_t(0), debug::global_count_free(state));
 
   free(startR);
 }
@@ -567,7 +567,7 @@ threaded_dealloc_threaded_alloc_test(global::State &state,
 
   assert_consecutive_range(result, range);
 
-  ASSERT_EQ(size_t(0), debug::count_free(state));
+  ASSERT_EQ(size_t(0), debug::global_count_free(state));
 
   free(startR);
 }

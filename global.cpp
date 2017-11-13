@@ -265,11 +265,7 @@ return_free(global::State &s, void *const ptr, sp::node_size length) noexcept {
   }
 } // ::return_free()
 
-/*
- *===========================================================
- *=======DEBUG===============================================
- *===========================================================
- */
+//=======DEBUG===============================================
 #ifdef SP_TEST
 namespace debug { //
 static void
@@ -299,12 +295,12 @@ start:
 } // test::watch_free()
 
 void
-clear_free(global::State &state) {
+global_clear_free(global::State &state) {
   state.free.next.store(nullptr);
 } // test::clear_free()
 
 void
-print_free(global::State &state) {
+global_print_free(global::State &state) {
   header::Free *head = state.free.next.load(std::memory_order_acquire);
   if (head) {
     printf("cmpar: ");
@@ -313,7 +309,7 @@ print_free(global::State &state) {
 } // test::print_free()
 
 std::size_t
-count_free(global::State &state) {
+global_count_free(global::State &state) {
   std::size_t result = 0;
   header::Free *head = state.free.next.load();
 start:
@@ -333,7 +329,7 @@ swap(header::Free *p, header::Free *c, header::Free *n) {
 } // swap()
 
 void
-sort_free(global::State &state) {
+global_sort_free(global::State &state) {
 // TODO
 restart:
   bool swapped = false;
@@ -363,7 +359,7 @@ start:
 } // test::sort_free()
 
 void
-coalesce_free(global::State &state) {
+global_coalesce_free(global::State &state) {
   // sort_free(state);
   header::Free *head = state.free.next.load();
 start:
@@ -384,11 +380,7 @@ start:
 } // namespace test
 #endif
 
-/*
- *===========================================================
- *=======GLOBAL==============================================
- *===========================================================
- */
+//=======GLOBAL==============================================
 namespace global {
 
 header::Free *
@@ -398,6 +390,11 @@ find_free(State &state, sp::node_size length) noexcept {
 
 void *
 alloc(State &state, sp::node_size p_length) noexcept {
+#ifdef SP_TEST
+  if (state.skip_alloc) {
+    return nullptr;
+  }
+#endif
   if (p_length == 0) {
     return nullptr;
   }

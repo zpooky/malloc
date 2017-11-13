@@ -5,65 +5,15 @@
 
 #include "ReadWriteLock.h"
 #include "bitset/Bitset.h"
+#include "LocalFreeList.h"
 #include "global.h"
 #include <cstring>
 
 //============================================================
 static void *
-local_alloc(local::PoolsRAII &pool, sp::node_size search) noexcept {
-  // TODO change to tree?
-  /* Double linked but not circular.
-  */
-  header::LocalFree &free_list = pool.free_list;
-  header::LocalFree *best = nullptr;
-  header::LocalFree *current = free_list.next;
-next:
-  if (current) {
-    if (current->size == search) {
-      if (current->priv)
-        current->priv->next = current->next;
-
-      if (current->next)
-        current->next->priv = current->priv;
-
-#ifdef SP_TEST
-      std::memset(current, 0, std::size_t(current->size));
-#endif
-      return current;
-    } else if (current->size > search) {
-      if (!best || best->size > current->size) {
-        best = current;
-      }
-    }
-    current = current->next;
-    goto next;
-  } else {
-    if (best) {
-      return header::reduce(best, search);
-    }
-    auto head = pool.free_stack.load();
-    if (head) {
-      sp::EagerExclusiveLock guard{pool.free_lock};
-      if (guard) {
-      retry:
-        if (head) {
-          if (!pool.free_stack.compare_exchange_weak(head, nullptr)) {
-            goto retry;
-          }
-        }
-      }
-    }
-    if (head) {
-      // TODO insert stack into free list & coalesce
-    }
-  }
-  return nullptr;
-} // ::local_alloc()
-
-static void *
 alloc(global::State &global, local::PoolsRAII &pools,
       sp::node_size sz) noexcept {
-  void *result = local_alloc(pools, sz);
+  void *result = local::alloc(pools, sz);
   if (!result) {
     // TODO logic to allocate extra memory for locall::FreeList
     result = global::alloc(global, sz);
@@ -336,15 +286,30 @@ alloc_count_alloc(local::PoolsRAII &p, std::size_t sz) {
     if (current) {
       assert(current->type == header::NodeType::HEAD);
       auto ext = header::extent(current);
-      assert(ext != nullptr);
+      assert(ext);
       result += count_reserved(*ext, current->buckets);
 
-      current = current->next.load(); // TODO next_extent
+      current = next_extent(current);
       goto start;
     }
   }
   return result;
 } // debug::alloc_count_alloc()
+
+std::vector<std::tuple<void *, std::size_t>>
+local_free_get_free(local::PoolsRAII &pool) {
+  std::vector<std::tuple<void *, std::size_t>> result;
+
+  header::LocalFree &free_list = pool.free_list;
+  header::LocalFree *current = free_list.next;
+start:
+  if (current) {
+    result.emplace_back(current, std::size_t(current->size));
+    current = current->next;
+    goto start;
+  }
+  return result;
+}
 
 } // namespace debug
 #endif

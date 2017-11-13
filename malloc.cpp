@@ -1,14 +1,9 @@
 #include <algorithm>
 #include <cassert>
-// #include <tuple>
-// #include <utility>
 
 #ifdef SP_TEST
 #include "malloc_debug.h"
 #endif
-
-#include <array>
-#include <atomic>
 
 #include "alloc.h"
 #include "free.h"

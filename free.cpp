@@ -2,6 +2,7 @@
 #include "free.h"
 #include "global.h"
 #include "util.h"
+#include "LocalFreeList.h"
 #include <cassert>
 #include <cstring>
 
@@ -100,7 +101,7 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
       if (nodeIdx) {
         assert(extent != nullptr);
         index = index + nodeIdx.get();
-        assert(index < header::Extent::MAX_BUCKETS);
+        assert(index < header::Extent::max_buckets);
 
         return util::maybe<Res>(f(extent, index, arg));
       }
@@ -117,7 +118,7 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
 static bool
 perform_free(header::Extent *ext, sp::index idx) noexcept {
   assert(ext);
-  assert(idx < header::Extent::MAX_BUCKETS);
+  assert(idx < header::Extent::max_buckets);
 
   if (!ext->reserved.set(std::size_t(idx), false)) {
     // double free is a runtime fault
@@ -158,27 +159,6 @@ start:
   }
   parent->next.store(current);
 } //::unlink_extent()
-
-namespace local {
-static void
-dealloc(local::PoolsRAII &ps, header::LocalFree *first,
-        header::LocalFree *last) noexcept {
-  sp::SharedLock guard{ps.free_lock};
-  if (guard) {
-    // Not a double linked list when in the free stack
-    auto base = ps.free_stack.load();
-  retry:
-    last->next = base;
-    if (!ps.free_stack.compare_exchange_weak(base, first)) {
-      goto retry;
-    }
-  } else {
-    // TODO handle
-    assert(false);
-  }
-} // local::dealloc()
-
-} // namespace local
 
 static std::size_t
 recycle_extent(shared::State &state, header::Node *head) noexcept {
@@ -326,18 +306,18 @@ FreeCode
 free(shared::State &state, void *const ptr) noexcept {
   assert(ptr);
   header::Node *recycledExtent = nullptr;
-  auto res = local::pools_find<FreeCode, header::Node *>(
-      state.pool, ptr, //
-      [](local::Pool &p, void *search,
-         header::Node *&recycled) -> util::maybe<FreeCode> {
-        auto result = free_logic(p, search, recycled);
-        if (result == FreeCode::NOT_FOUND) {
-          return {};
-        }
 
-        return util::maybe<FreeCode>(result);
-      },
-      recycledExtent);
+  auto logic = [](local::Pool &p, void *search,
+                  header::Node *&recycled) -> util::maybe<FreeCode> {
+    auto result = free_logic(p, search, recycled);
+    if (result == FreeCode::NOT_FOUND) {
+      return {};
+    }
+
+    return util::maybe<FreeCode>(result);
+  };
+  auto res = local::pools_find<FreeCode, header::Node *>(state.pool, ptr, logic,
+                                                         recycledExtent);
 
   FreeCode result = res.get_or(FreeCode::NOT_FOUND);
   if (result == FreeCode::NOT_FOUND || result == FreeCode::DOUBLE_FREE) {
