@@ -160,10 +160,10 @@ in_range(T &b, T &e) {
 }
 
 void
-assert_in_range(Range &range, void *current, size_t bSz);
+assert_in_range(const Range &range, void *current, size_t bSz);
 
 void
-assert_in_range(Range &range, void *current, sp::node_size bSz);
+assert_in_range(const Range &range, void *current, sp::node_size bSz);
 
 void
 assert_no_overlap(const Points &ptrs);

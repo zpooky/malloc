@@ -29,6 +29,10 @@ namespace sp {
       return data == o;                                                        \
     }                                                                          \
     constexpr bool                                                             \
+    operator==(const NAME &o) const noexcept {                                 \
+      return this->operator==(o.data);                                          \
+    }                                                                          \
+    constexpr bool                                                             \
     operator!=(std::size_t o) const noexcept {                                 \
       return !operator==(o);                                                   \
     }                                                                          \
@@ -95,10 +99,6 @@ namespace sp {
     }                                                                          \
     constexpr NAME operator*(std::size_t o) const noexcept {                   \
       return NAME{data * o};                                                   \
-    }                                                                          \
-    constexpr bool                                                             \
-    operator==(const NAME &o) {                                                \
-      return data == o.data;                                                   \
     }                                                                          \
     constexpr explicit operator std::size_t() const noexcept {                 \
       return data;                                                             \
@@ -308,7 +308,8 @@ struct Pool { //
 /*Pools*/
 struct PoolsRAII { //
   // TODO restructure for tighter alignment
-  static constexpr std::size_t BUCKETS = (sizeof(std::size_t) * 8) - 3;
+  static constexpr std::size_t BUCKETS =
+      (sizeof(std::size_t) * 8) - 3; // TODO what is this?
   //
   std::array<Pool, BUCKETS> buckets;
   std::atomic<std::size_t> total_alloc;
@@ -322,11 +323,13 @@ struct PoolsRAII { //
   std::atomic<bool> reclaim;
   //}
 
-  // local free list {
+  // free list{{{
+  // stack {{{
   sp::ReadWriteLock free_lock;
   std::atomic<header::LocalFree *> free_stack;
   header::LocalFree free_list;
-  // }
+  header::LocalFree free_tree;
+  // }}}
 
   PoolsRAII() noexcept;
 

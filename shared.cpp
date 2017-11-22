@@ -310,10 +310,16 @@ PoolsRAII::PoolsRAII() noexcept
     , total_alloc{0}
     , priv{nullptr}
     , next{nullptr}
-    , reclaim{false}
+    , reclaim(false)
+    // free list {{{
     , free_lock()
     , free_stack()
-    , free_list() {
+    , free_list(sp::node_size(0))
+    , free_tree()
+//}}}
+{
+  free_list.next = &free_list;
+  free_list.priv = &free_list;
   // TODO std::atomic_thread_fence(std::memory_order_release);?
 }
 

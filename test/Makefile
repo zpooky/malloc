@@ -20,7 +20,7 @@ DEPENDS = $(OBJECTS:.o=.d)
 # all {{{
 all: sut $(EXEC)
 # }}}
-#
+
 # $(EXEC) {{{
 $(EXEC): gtest $(OBJECTS)
 	$(CXX) $(OBJECTS) -o $(EXEC) $(LDLIBS)

@@ -22,7 +22,7 @@ in_range(void *r, size_t rSz, void *e, size_t eLen) {
 }
 
 void
-assert_in_range(Range &range, void *current, size_t bSz) {
+assert_in_range(const Range &range, void *current, size_t bSz) {
   ASSERT_TRUE(current != nullptr);
   if (!in_range(range.start, range.length, current, bSz)) {
     printf("in_range(Range(%p, %zu), %p, "
@@ -55,7 +55,7 @@ assert_in_range(Range &range, void *current, size_t bSz) {
   }
 }
 void
-assert_in_range(Range &range, void *current, sp::node_size bSz) {
+assert_in_range(const Range &range, void *current, sp::node_size bSz) {
   return assert_in_range(range, current, std::size_t(bSz));
 }
 

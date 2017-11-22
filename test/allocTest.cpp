@@ -1,6 +1,7 @@
 #include "Barrier.h"
 #include "Util.h"
 #include "gtest/gtest.h"
+#include <LocalFreeList.h>
 #include <LocalFreeList_debug.h>
 #include <alloc.h>
 #include <alloc_debug.h>
@@ -150,17 +151,14 @@ TEST(AllocTest, test_local_alloc_local_free_list) {
 }
 //==================================================================================================
 static std::size_t
-nodes(LocalFree *tree) {
-  if (!tree) {
+tree_nodes(LocalFree *tree) {
+  if (tree == nullptr) {
     return 0;
   }
+
   std::size_t result = 1;
-
-  if (tree->left)
-    result += nodes(tree->left);
-
-  if (tree->right)
-    result += nodes(tree->right);
+  result += tree_nodes(tree->left);
+  result += tree_nodes(tree->right);
 
   return result;
 }
@@ -210,6 +208,7 @@ valid_binary_tree(LocalFree *const current) {
       return false;
     }
   }
+
   return true;
 }
 
@@ -263,15 +262,77 @@ print_tree(std::string prefix, bool isTail, const char *ctx, LocalFree *tree) {
     }
     if (cs == 1) {
       if (tree->left) {
-        print_tree(prefix + (isTail ? "    " : "│   "), true, "lt",
-                   tree->left);
-      } else
-      if (tree->right) {
+        print_tree(prefix + (isTail ? "    " : "│   "), true, "lt", tree->left);
+      } else if (tree->right) {
         print_tree(prefix + (isTail ? "    " : "│   "), true, "gt",
                    tree->right);
       }
     }
   }
+}
+
+template <typename F>
+static void
+for_each(header::LocalFree *start, F f) {
+  ASSERT_EQ(std::size_t(0), std::size_t(start->size));
+  LocalFree *current = start->next;
+
+Lnext:
+  ASSERT_FALSE(current == nullptr);
+  if (current != start) {
+    f(current);
+    current = current->next;
+    goto Lnext;
+  }
+}
+
+static void
+assert_list_cycle(local::PoolsRAII &pool) {
+  printf("assert_list_cycle\n");
+  // TODO
+}
+
+static void
+assert_list_in_range(local::PoolsRAII &pool, const Range &range) {
+  printf("assert_list_in_range\n");
+  for_each(&pool.free_list, [&](auto *current) {
+    assert_in_range(range, current, std::size_t(current->size));
+  });
+}
+
+static void
+assert_list_consecutive_range(header::LocalFree *begin, const Range &range) {
+  printf("assert_list_consecutive_range\n");
+  Points points;
+  auto *it = begin;
+  // std::size_t i = 0;
+  while (it != nullptr) {
+    assert_in_range(range, it, it->size);
+    points.emplace_back(it, std::size_t(it->size));
+    it = it->next;
+    // printf("i=%zu\n", i++);
+  }
+  printf("shuffled: %zu\n", points.size());
+  assert_consecutive_range(points, range);
+}
+
+static void
+assert_list_consecutive_range(local::PoolsRAII &pool, const Range &range) {
+  Points points;
+  for_each(&pool.free_list, [&](auto *current) {
+    points.emplace_back(current, std::size_t(current->size));
+  });
+  printf("points: %zu\n", points.size());
+  printf("assert_consecutive_range\n");
+  assert_consecutive_range(points, range);
+}
+
+static void
+assert_tree_consecutive_range(LocalFree &tree, const Range &range) {
+  printf("assert_tree_consecutive_range\n");
+  // Points points;
+  // assert_consecutive_range(points, range);
+  // TODO
 }
 
 TEST(AllocTest, test_sort) {
@@ -283,10 +344,10 @@ TEST(AllocTest, test_sort) {
 
   constexpr sp::node_size ns(sizeof(LocalFree));
   std::size_t alloc = std::size_t(ns) * arena;
-  void *const ptr = ::aligned_alloc(alignof(LocalFree), alloc);
 
-  LocalFree *const begin = (LocalFree *)ptr;
-  LocalFree *const end = ptr_add(begin, alloc);
+  LocalFree *const begin = new LocalFree[arena];
+  Range range((uint8_t *)begin, alloc);
+  LocalFree *const end = begin + arena;
 
   printf("init_local_free\n");
   for (LocalFree *it = begin; it != end; ++it) {
@@ -295,39 +356,56 @@ TEST(AllocTest, test_sort) {
   }
   //----
   LocalFree *it = begin;
-  for (std::size_t i = 0; i < arena; ++i) {
+  for (std::size_t i = 0; i < arena - 1; ++i) {
   retry:
     // TODO think of something better
     std::size_t nextIdx = random() % arena;
-    if (nextIdx == i) {
-      goto retry;
-    }
     LocalFree *next = begin + nextIdx;
-    if (next->next) {
+    if (it == next) {
       goto retry;
     }
+    if (next->next != nullptr) {
+      goto retry;
+    }
+    // printf("%zu-", nextIdx);
     // printf("%zu,", nextIdx);
     it->next = next;
     it = next;
+    // printf("cnt:%zu\n", i);
   }
   // printf("\n");
-  //----
+  assert_list_consecutive_range(begin, range);
 
-  printf("stack_find\n");
-  // LocalFree *const stackHead =
-  //     stack_find(begin, [&begin, &offset](LocalFree *n) { //
-  //       return n->next == (begin + offset[0]);
-  //     });
-  // ASSERT_FALSE(stackHead == nullptr);
   printf("stack_size\n");
   // ASSERT_EQ(arena, stack_size(begin));
 
-  printf("local_free_stack_to_tree\n");
-  LocalFree *tree = debug::local_free_stack_to_tree(begin);
-  ASSERT_TRUE(valid_binary_tree(tree));
-  print_tree("", true, "", tree);
-  ASSERT_EQ(std::size_t(1), nodes(tree));
+  printf("dealloc\n");
+  global::State global;
+  global.skip_alloc = true;
+  local::PoolsRAII pool;
+  local::dealloc(pool, begin, it);
 
+  printf("merge_stack\n");
+  ASSERT_FALSE(pool.free_stack.load() == nullptr);
+  ASSERT_TRUE(debug::local_free_list_merge_stack_to_tree(pool));
+  ASSERT_TRUE(pool.free_stack.load() == nullptr);
+
+  printf("assert\n");
+  assert_list_cycle(pool);
+  assert_list_in_range(pool, range);
+  assert_list_consecutive_range(pool, range);
+  assert_tree_consecutive_range(pool.free_tree, range);
+
+  LocalFree *tree = pool.free_tree.next;
+  ASSERT_FALSE(tree == nullptr);
+  printf("valid_bin_tree\n");
+  ASSERT_TRUE(valid_binary_tree(tree));
+
+  // print_tree("", true, "", tree);
+  printf("tree_nodes\n");
+  ASSERT_EQ(std::size_t(1), tree_nodes(tree));
+
+  printf("others\n");
   ASSERT_EQ(alloc, std::size_t(tree->size));
   ASSERT_EQ(begin, tree);
 
@@ -336,7 +414,7 @@ TEST(AllocTest, test_sort) {
   ASSERT_TRUE(begin->left == nullptr);
   ASSERT_TRUE(begin->right == nullptr);
 
-  ::free(ptr);
+  delete[] begin;
 }
 
 // TODO shared::hint(pools,allocSz,allocs)

@@ -88,7 +88,12 @@
 // it.
 
 // TODO
+// execute mprotect system call on unmapped memory present in global & local
+// pool,write protect is maybe enough? only used when we are in debug mode!
+
+// TODO
 // - Look over where we use atomic<>
+//  * if atomic is only used for cas() should it be release&acquire or seq_cst?
 
 // TODO feature
 // - alloc_aligned() - Find a bucket which have to required alignment
