@@ -102,6 +102,9 @@
 // - implement malloc interface
 // - LD_PRELUDE
 // - benchmark
+//
+// TODO change to mmap with one big area so we sp_malloc can coexist with another
+// malloc without interfering with it by changing brk()
 
 // thread local Pools {{{
 static thread_local local::Pools local_pools;

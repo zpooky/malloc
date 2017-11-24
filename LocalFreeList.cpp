@@ -288,17 +288,24 @@ Lstart:
       }
     }
 
-    // if (parent && is_consecutive(*parent, node)) {
-    //   assert((*parent)->left == nullptr);
-    //   assert((*parent)->right == node);
-    //   // right = parent->right;
-    //
-    //   // merge [parent][it]
-    //   // (*parent)->size += node->size;
-    //   auto add_sz = node->size;
-    //   node = *parent;
-    //   node->size = node->size + add_sz;
-    // }
+    if (parent && is_consecutive(*parent, node)) {
+      assert(new_left == nullptr);
+      assert((*parent)->right == node);
+      // right = parent->right;
+      list::unlist(node);
+      new_left = (*parent)->left;
+
+      // merge [parent][it]
+      // (*parent)->size += node->size;
+      // auto add_sz = node->size;
+      // node = *parent;
+      // node->size = node->size + add_sz;
+      LocalFree *priv = (*parent)->priv;
+      LocalFree *next = (*parent)->next;
+      node = header::init_local_free(*parent, (*parent)->size + node->size);
+      list::relink(node, priv, next);
+      assert(node == *parent);
+    }
 
     {
       node->left = new_left;
@@ -390,6 +397,12 @@ static bool
 merge_stack(local::PoolsRAII &pool) noexcept {
   auto stack = pool.free_stack.load();
   if (stack) {
+    // TODO
+    // Maybe prepare lock is enough here because only one thread can hold the
+    // prepare lock at one time and it does not hinder concurrent shared locks.
+    // The only purpose of the lock here is to avoid the ABA concurrency
+    // problem when swapping free stack head. Write a stress test X threads cas
+    // dequeue then case insert again one by one.
     sp::EagerExclusiveLock guard{pool.free_lock};
     if (guard) {
     retry:
@@ -400,6 +413,7 @@ merge_stack(local::PoolsRAII &pool) noexcept {
       }
     }
   }
+
   if (stack) {
     insert_from_stack(pool, stack);
     return true;
