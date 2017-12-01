@@ -136,6 +136,11 @@ sub_range(Range &r, size_t ridx, size_t rlength);
 bool
 in_range(void *r, size_t rSz, void *e, size_t eLen);
 
+static inline bool
+in_rangex(void *r, size_t rSz, void *e, size_t eLen) {
+  return in_range(r, rSz, e, eLen);
+}
+
 template <typename T>
 static inline size_t
 size_of_free(const T &free) {
@@ -168,9 +173,9 @@ assert_in_range(const Range &range, void *current, sp::node_size bSz);
 void
 assert_no_overlap(const Points &ptrs);
 
-void
-assert_no_overlap(const test::MemStack<test::StackHeadNoSize> &ptrs,
-                  std::size_t);
+// void
+// assert_no_overlap(const test::MemStack<test::StackHeadNoSize> &ptrs,
+//                   std::size_t);
 
 void
 sort_points(Points &free);

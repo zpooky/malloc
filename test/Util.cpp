@@ -80,11 +80,11 @@ assert_no_overlap(const Points &ptrs) {
   }
 }
 
-void
-assert_no_overlap(const test::MemStack<test::StackHeadNoSize> &ptrs,
-                  std::size_t) {
-  // TODO
-}
+// void
+// assert_no_overlap(const test::MemStack<test::StackHeadNoSize> &ptrs,
+//                   std::size_t) {
+//   // TODO
+// }
 
 void
 sort_points(Points &free) {

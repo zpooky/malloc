@@ -5,6 +5,7 @@
 #include "LocalFreeList_debug.h"
 #endif
 
+//==PRIVATE=================================================================
 namespace list {
 static header::LocalFree *
 enlist(header::LocalFree *node, header::LocalFree *list) noexcept;
@@ -67,6 +68,7 @@ void
 dealloc(local::PoolsRAII &ps, LocalFree *first, LocalFree *last) noexcept {
   // TODO how to handle only one LocalFree* dealloc
   assert(first);
+  assert(last);
   assert(last->next == nullptr);
 #ifdef DEBUG
   {
@@ -139,39 +141,51 @@ unlist(header::LocalFree *node) noexcept {
 } // namespace list
 
 namespace local {
-// static void
-// unlink_list(LocalFree *const first, LocalFree *const second, //
-//             LocalFree *&priv, LocalFree *&next) noexcept {
-//   assert(first);
-//   assert(second);
-//   if (first->next) {
-//     if (first->next != second) {
-//       next = first->next;
-//       goto Lpriv;
-//     }
-//   }
-//   if (second->next) {
-//     if (second->next != first) {
-//       next = second->next;
-//     }
-//   }
-//
-// Lpriv:
-//   if (first->priv) {
-//     if (first->priv != second) {
-//       priv = first->priv;
-//       goto Ldone;
-//     }
-//   }
-//   if (second->priv) {
-//     if (second->priv != first) {
-//       priv = second->priv;
-//     }
-//   }
-//
-// Ldone:
-//   return;
-// }
+
+static LocalFree *
+merge_if_n(LocalFree *it) noexcept {
+  assert(it);
+  if (it->left) {
+    if (is_consecutive(it->left, it)) {
+      // assert(false);
+      assert(it->left->right == nullptr);
+
+      list::unlist(it->left);
+      {
+        LocalFree *const left = it->left->left;
+        LocalFree *const right = it->right;
+        {
+          LocalFree *const priv = it->priv;
+          LocalFree *const next = it->next;
+          it = header::init_local_free(it->left, it->left->size + it->size);
+          list::relink(it, priv, next);
+        }
+        it->left = left;
+        it->right = right;
+      }
+    }
+  }
+  if (it->right) {
+    if (is_consecutive(it, it->right)) {
+      assert(it->right->left == nullptr);
+
+      list::unlist(it->right);
+      {
+        LocalFree *const left = it->left;
+        LocalFree *const right = it->right->right;
+        {
+          LocalFree *const priv = it->priv;
+          LocalFree *const next = it->next;
+          it = header::init_local_free(it, it->size + it->right->size);
+          list::relink(it, priv, next);
+        }
+        it->left = left;
+        it->right = right;
+      }
+    }
+  }
+  return it;
+}
 
 static LocalFree *
 insert_node(LocalFree *root, LocalFree *node, bool &merged) noexcept {
@@ -191,6 +205,18 @@ insert_node(LocalFree *root, LocalFree *node, bool &merged) noexcept {
   assert(root);
   assert(root->next != nullptr);
   assert(root->priv != nullptr);
+
+  auto update_it = [&root](LocalFree **parent, bool is_left,
+                           LocalFree *subject) {
+    if (!parent) {
+      root = subject;
+    } else if (is_left) {
+      (*parent)->left = subject;
+    } else {
+      (*parent)->right = subject;
+    }
+    return;
+  };
 
   // if /it/ is left or right from parent
   bool is_left = false;
@@ -220,21 +246,31 @@ Lstart:
       }
     }
 
-    // if (parent && is_consecutive(it, *parent)) {
-    //   // printf("is_consecutive(it, *parent)\n");
-    //   assert(it->right == nullptr);
-    //   assert((*parent)->left == it);
-    //   // printf("parent-left\n");
-    //
-    //   list::unlist(it);
-    //   LocalFree *right = (*parent)->right;
-    //   LocalFree *left = it->left;
-    //
-    //   // merge [it]<-[parent]->null
-    //   *parent = header::init_local_free(it, it->size + (*parent)->size);
-    //   (*parent)->left = left;
-    //   (*parent)->right = right;
-    // }
+    // TODO recursively merge upwards until no longer adjacent
+    // TODO maybe automaticly merge when travesing the tree
+    if (parent && is_consecutive(it, *parent)) {
+      // printf("is_consecutive(it, *parent)\n");
+      assert(it->right == nullptr);
+      assert((*parent)->left == it);
+      // printf("parent-left\n");
+
+      list::unlist(it);
+      {
+        LocalFree *right = (*parent)->right;
+        LocalFree *left = it->left;
+
+        // merge [it]<-[parent]->null
+        {
+          LocalFree *priv = (*parent)->priv;
+          LocalFree *next = (*parent)->next;
+          *parent = header::init_local_free(it, it->size + (*parent)->size);
+          list::relink(*parent, priv, next);
+        }
+        (*parent)->left = left;
+        (*parent)->right = right;
+      }
+    }
+    // assert(!parent || !is_consecutive(*parent, it));
 
     assert(root->next != nullptr);
     assert(root->priv != nullptr);
@@ -250,17 +286,6 @@ Lstart:
     LocalFree *old_left = it->left;
     LocalFree *old_right = it->right;
 
-    auto updateIt = [](header::LocalFree **parent, bool is_left,
-                       header::LocalFree *subject) { //
-      if (is_left) {
-        assert(parent);
-        (*parent)->left = subject;
-      } else {
-        assert(parent);
-        (*parent)->right = subject;
-      } // TODO handle parent nullptr
-      return;
-    };
     {
       // merge [node][it]
       LocalFree *priv = it->priv;
@@ -268,7 +293,7 @@ Lstart:
       node = header::init_local_free(node, node->size + it->size);
       list::relink(node, priv, next);
 
-      updateIt(parent, is_left, node);
+      update_it(parent, is_left, node);
     }
 
     if (old_left && is_consecutive(old_left, node)) {
@@ -284,22 +309,18 @@ Lstart:
         node = header::init_local_free(old_left, old_left->size + node->size);
         assert(node == old_left);
         list::relink(node, priv, next);
-        updateIt(parent, is_left, node);
+        update_it(parent, is_left, node);
       }
     }
 
     if (parent && is_consecutive(*parent, node)) {
       assert(new_left == nullptr);
       assert((*parent)->right == node);
-      // right = parent->right;
+
       list::unlist(node);
       new_left = (*parent)->left;
 
       // merge [parent][it]
-      // (*parent)->size += node->size;
-      // auto add_sz = node->size;
-      // node = *parent;
-      // node->size = node->size + add_sz;
       LocalFree *priv = (*parent)->priv;
       LocalFree *next = (*parent)->next;
       node = header::init_local_free(*parent, (*parent)->size + node->size);
@@ -322,6 +343,9 @@ Lstart:
   }
   /*TODO this part should be rebalanced*/
   {
+    it = merge_if_n(it);
+    update_it(parent, is_left, it);
+
     if (!parent) {
       parent = &root;
     } else if (is_left) {
@@ -365,6 +389,7 @@ Lstart:
 
     LocalFree *next = stack->next;
     stack->next = nullptr;
+    // TODO readd
     // if (next && header::is_consecutive(stack, next)) {
     //   stack =
     //       header::init_local_free(stack, stack->size + next->size,
@@ -383,7 +408,6 @@ Lstart:
     bool merged = false;
     tree = insert_node(tree, stack, merged);
     if (!merged) {
-      // printf("=\n");
       pool.free_list.next = list::enlist(stack, pool.free_list.next);
     }
 

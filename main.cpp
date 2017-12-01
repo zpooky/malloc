@@ -1,5 +1,6 @@
 #include "global.h"
 #include "global_debug.h"
+#include "static_tree.h"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -80,9 +81,51 @@ pmath(T *v, ptrdiff_t diff) {
 //   }
 //   assert(first == pmath(range.start, +range.length));
 // }
+//
+//
+struct Data {
+  bool present;
+  int data;
+  Data()
+      : present(false)
+      , data(0) {
+  }
+  explicit Data(int d)
+      : present(true)
+      , data(d) {
+  }
+
+  explicit operator bool() const noexcept {
+    return present;
+  }
+
+  bool
+  operator==(const Data &o) const noexcept {
+    return (present == true) && present == o.present && data == o.data;
+  }
+
+  int
+  cmp(const Data &o) const noexcept {
+    if (data == o.data) {
+      return 0;
+    }
+    if (data < o.data) {
+      return -1;
+    }
+    return 1;
+  }
+};
 
 int
 main() {
+  sp::static_tree<Data> tree;
+  int key = 0;
+  Data d(key);
+
+  assert(sp::search(tree, d) == nullptr);
+  assert(sp::binary_insert(tree, d));
+  assert(sp::search(tree, d) != nullptr);
+  printf("done\n");
   // srand(0);
   //
   // while (true) {

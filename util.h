@@ -93,12 +93,14 @@ public:
     T *ptr = reinterpret_cast<T *>(&data);
     return *ptr;
   }
+
   T &
       get() &
       noexcept {
     T *ptr = reinterpret_cast<T *>(&data);
     return *ptr;
   }
+
   T &&
       get() &&
       noexcept {
