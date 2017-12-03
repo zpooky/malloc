@@ -99,17 +99,17 @@ struct Data {
     return present;
   }
 
-  bool
-  operator==(const Data &o) const noexcept {
-    return (present == true) && present == o.present && data == o.data;
-  }
+  // bool
+  // operator==(const Data &o) const noexcept {
+  //   return (present == true) && present == o.present && data == o.data;
+  // }
 
   int
   cmp(const Data &o) const noexcept {
     if (data == o.data) {
       return 0;
     }
-    if (data < o.data) {
+    if (data > o.data) {
       return -1;
     }
     return 1;
@@ -118,14 +118,44 @@ struct Data {
 
 int
 main() {
-  sp::static_tree<Data> tree;
-  int key = 0;
-  Data d(key);
+  // {
+  //   sp::static_tree<Data> tree;
+  //   for (int key = 0; key < 1024; ++key) {
+  //     // for (int i = 0; i < key; ++i) {
+  //     //   Data *res = sp::search(tree, Data(i));
+  //     //   assert(res);
+  //     //   assert(res->data == i);
+  //     // }
+  //     Data d(key);
+  //     // assert(sp::search(tree, d) == nullptr);
+  //     assert(sp::binary_insert(tree, d));
+  //     printf("============\n");
+  //     assert(sp::search(tree, d) != nullptr);
+  //   }
+  //   printf("done\n");
+  // }
+  {
+    using Type = sp::static_tree<Data>;
+    Type tree;
+    {
+      int i = 0;
+      sp::in_order_for_each(tree, [&i](Data &d) { //
+        assert(!bool(d));
+        d = Data(i);
+      });
+      assert(i == Type::capacity);
+    }
+    {
+      int i = 0;
+      sp::in_order_for_each(tree, [&i](Data &d) { //
+        assert(bool(d));
+        assert(d.data == i);
+        ++i;
+      });
+      assert(i == Type::capacity);
+    }
+  }
 
-  assert(sp::search(tree, d) == nullptr);
-  assert(sp::binary_insert(tree, d));
-  assert(sp::search(tree, d) != nullptr);
-  printf("done\n");
   // srand(0);
   //
   // while (true) {
