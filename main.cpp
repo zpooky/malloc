@@ -118,42 +118,59 @@ struct Data {
 
 int
 main() {
-  // {
-  //   sp::static_tree<Data> tree;
-  //   for (int key = 0; key < 1024; ++key) {
-  //     // for (int i = 0; i < key; ++i) {
-  //     //   Data *res = sp::search(tree, Data(i));
-  //     //   assert(res);
-  //     //   assert(res->data == i);
-  //     // }
-  //     Data d(key);
-  //     // assert(sp::search(tree, d) == nullptr);
-  //     assert(sp::binary_insert(tree, d));
-  //     printf("============\n");
-  //     assert(sp::search(tree, d) != nullptr);
-  //   }
-  //   printf("done\n");
-  // }
+  // TODO the size calculations gives level+1 capacity which is wrong
+  constexpr std::size_t levels = 10;
+  using Type = sp::static_tree<Data, levels>;
+  static_assert(Type::levels == levels, "");
+  static_assert(Type::capacity == 2047, "");
   {
-    using Type = sp::static_tree<Data>;
     Type tree;
-    {
-      int i = 0;
-      sp::in_order_for_each(tree, [&i](Data &d) { //
-        assert(!bool(d));
-        d = Data(i);
-      });
-      assert(i == Type::capacity);
+    for (int key = 0; key < int(levels) + 1; ++key) {
+      for (int i = 0; i < key; ++i) {
+        Data *res = sp::search(tree, Data(i));
+        assert(res);
+        assert(res->data == i);
+      }
+      Data d(key);
+      assert(sp::search(tree, d) == nullptr);
+      assert(sp::binary_insert(tree, d));
+      printf("============\n");
+      assert(sp::search(tree, d) != nullptr);
     }
-    {
-      int i = 0;
-      sp::in_order_for_each(tree, [&i](Data &d) { //
-        assert(bool(d));
-        assert(d.data == i);
-        ++i;
-      });
-      assert(i == Type::capacity);
+    printf("done\n");
+  }
+  {
+    Type tree;
+    for (int key = levels + 1; key > 0; --key) {
+      Data d(key);
+      assert(sp::search(tree, d) == nullptr);
+      assert(sp::binary_insert(tree, d));
+      assert(sp::search(tree, d) != nullptr);
     }
+    printf("done reverse\n");
+  }
+  {
+    // using Type = sp::static_tree<Data>;
+    // static_assert(Type::levels == 9, "");
+    // static_assert(Type::capacity == 1023, "");
+    // Type tree;
+    // {
+    //   int i = 0;
+    //   sp::in_order_for_each(tree, [&i](Data &d) {
+    //     assert(!bool(d));
+    //     d = Data(i);
+    //   });
+    //   assert(i == Type::capacity);
+    // }
+    // {
+    //   int i = 0;
+    //   sp::in_order_for_each(tree, [&i](Data &d) {
+    //     assert(bool(d));
+    //     assert(d.data == i);
+    //     ++i;
+    //   });
+    //   assert(i == Type::capacity);
+    // }
   }
 
   // srand(0);

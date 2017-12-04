@@ -4,8 +4,31 @@
 namespace sp {
 namespace impl {
 
-template <std::size_t size, std::size_t level>
+template <std::size_t level>
+struct static_breadth {
+  static constexpr std::size_t value = std::size_t(std::size_t(1) << level);
+};
+
+template <>
+struct static_breadth<0> {
+  static constexpr std::size_t value = 1;
+};
+
+template <std::size_t level>
+struct static_size {
+  static constexpr std::size_t value =
+      static_breadth<level>::value + static_size<level - 1>::value;
+};
+
+template <>
+struct static_size<0> {
+  static constexpr std::size_t value = static_breadth<0>::value;
+};
+
+template <std::size_t size, std::size_t level = 0>
 struct static_level { //
+  static constexpr std::size_t value =
+      static_level<size - static_breadth<level>::value, level + 1>::value;
 };
 
 template <std::size_t level>
@@ -13,23 +36,53 @@ struct static_level<0, level> { //
   static constexpr std::size_t value = level;
 };
 
+// fail case
+template <>
+struct static_level<0, 0> { //
+};
+
 } // namespace impl
 
 template <std::size_t size>
 struct static_level {
-  static constexpr std::size_t value = 0;
+  static constexpr std::size_t value = impl::static_level<size>::value;
 };
 
-template <std::size_t level>
+template <std::size_t levels>
 struct static_size {
-  static constexpr std::size_t value = 0;
+  static constexpr std::size_t value = impl::static_size<levels>::value;
 };
+// level -> size
+static_assert(static_size<0>::value == 1, "");
+static_assert(static_size<1>::value == 3, "");
+static_assert(static_size<2>::value == 7, "");
+static_assert(static_size<3>::value == 15, "");
+static_assert(static_size<4>::value == 31, "");
+static_assert(static_size<5>::value == 63, "");
+static_assert(static_size<6>::value == 127, "");
+static_assert(static_size<7>::value == 255, "");
+static_assert(static_size<8>::value == 511, "");
+static_assert(static_size<9>::value == 1023, "");
+static_assert(static_size<10>::value == 2047, "");
 
-template <typename T, std::size_t SIZE = 1024>
+// size -> levels
+static_assert(static_level<1>::value == 1, "");
+static_assert(static_level<3>::value == 2, "");
+static_assert(static_level<7>::value == 3, "");
+static_assert(static_level<15>::value == 4, "");
+static_assert(static_level<31>::value == 5, "");
+static_assert(static_level<63>::value == 6, "");
+static_assert(static_level<127>::value == 7, "");
+static_assert(static_level<255>::value == 8, "");
+static_assert(static_level<511>::value == 9, "");
+static_assert(static_level<1023>::value == 10, "");
+
+template <typename T, std::size_t t_levels = 9>
 struct static_tree {
-  static constexpr std::size_t capacity = SIZE;
+  static constexpr std::size_t levels = t_levels;
+  static constexpr std::size_t capacity = static_size<levels>::value;
   // static constexpr size = sp::static_size<level>::value;
-  T storage[SIZE];
+  T storage[capacity];
 
   static_tree() noexcept(noexcept(T{}))
       : storage() {
@@ -62,13 +115,15 @@ level(std::size_t l) noexcept {
   return std::size_t(std::size_t(1) << l) - std::size_t(1);
 }
 
-/*N is number of possible children
- */
-template <std::size_t N = 2>
+template <std::size_t CHILDREN = 2>
 static std::size_t
 base(std::size_t l, std::size_t oldIdx) noexcept {
+  //TODO make better
+  std::size_t relOldIdx = l == 0 ? 0 : oldIdx - level(l - 1);
+
   std::size_t start = level(l);
-  std::size_t offset = oldIdx * N;
+  std::size_t offset = relOldIdx * CHILDREN;
+  printf("base[start[%zu],offset[%zu]]\n", start, offset);
   return start + offset;
 }
 
@@ -89,13 +144,13 @@ cmp(const T &current, const Key &needle) noexcept {
 
 } // namespace impl
 
-template <typename T, std::size_t SIZE, typename Key>
+template <typename T, std::size_t levels, typename Key>
 T *
-search(static_tree<T, SIZE> &tree, const Key &needle) noexcept {
+search(static_tree<T, levels> &tree, const Key &needle) noexcept {
   std::size_t level = 0;
   std::size_t idx = 0;
 Lstart:
-  if (idx < SIZE) {
+  if (idx < static_tree<T, levels>::capacity) {
     T &current = tree.storage[idx];
     if (bool(current)) {
       int c = impl::cmp(current, needle);
@@ -113,23 +168,27 @@ Lstart:
   return nullptr;
 }
 
-template <typename T, std::size_t SIZE>
+template <typename T, std::size_t levels>
 bool
-binary_insert(static_tree<T, SIZE> &tree, const T &data) noexcept {
+binary_insert(static_tree<T, levels> &tree, const T &data) noexcept {
   printf("insert(%d)\n", data.data);
   std::size_t level = 0;
   std::size_t idx = 0;
+  constexpr std::size_t capacity = static_tree<T, levels>::capacity;
 Lstart:
-  if (idx < SIZE) {
+  if (idx < capacity) {
     T &current = tree.storage[idx];
     if (bool(current)) {
       int c = impl::cmp(current, data);
-      printf("%d = cmp(current[%zu], data[%zu])\n", c, current.data, data.data);
+      printf("%s = cmp(current[%d], data[%d])\n", c == 1 ? "gt" : "lt",
+             current.data, data.data);
 
       level++;
       bool less_than = c == -1;
-      printf("%zu = lookup(%s)\n", idx, less_than ? "ls" : "gt");
+      const std::size_t b_idx = idx;
       idx = impl::lookup(level, idx, less_than);
+      printf("%zu = lookup(level[%zu], idx[%zu], %s)\n", //
+             idx, level, b_idx, less_than ? "ls" : "gt");
 
       goto Lstart;
     } else {
@@ -138,8 +197,10 @@ Lstart:
       return true;
     }
   }
+  printf("ERROR[%zu > %zu]\n", idx, capacity);
   return false;
 }
+
 namespace impl {
 static std::size_t
 breadth(std::size_t level) noexcept {
@@ -185,9 +246,9 @@ parent(std::size_t l, std::size_t idx) noexcept {
  *       /  |    |   \
  *      8   10   12   14
  */
-template <typename T, std::size_t SIZE, typename F>
+template <typename T, std::size_t levels, typename F>
 void
-in_order_for_each(static_tree<T, SIZE> &tree, F f) {
+in_order_for_each(static_tree<T, levels> &tree, F f) {
   const bool left = true;
   const bool right = false;
 
@@ -198,7 +259,7 @@ in_order_for_each(static_tree<T, SIZE> &tree, F f) {
   auto up = [&d] { return !d; };
   auto down = [&d] { return d; };
 Lstart:
-  if (idx < SIZE) {
+  if (idx < static_tree<T, levels>::capacity) {
     // lookup next upwards
     idx = impl::lookup(level, idx, direction);
 
