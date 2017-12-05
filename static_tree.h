@@ -77,15 +77,108 @@ static_assert(static_level<255>::value == 8, "");
 static_assert(static_level<511>::value == 9, "");
 static_assert(static_level<1023>::value == 10, "");
 
+#define SIZE_TYPE(NAME)                                                        \
+  struct NAME {                                                                \
+    std::size_t data;                                                          \
+    explicit constexpr NAME(std::size_t d) noexcept                            \
+        : data(d) {                                                            \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator==(std::size_t o) const noexcept {                                 \
+      return data == o;                                                        \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator==(const NAME &o) const noexcept {                                 \
+      return this->operator==(o.data);                                         \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator!=(std::size_t o) const noexcept {                                 \
+      return !operator==(o);                                                   \
+    }                                                                          \
+    constexpr NAME &                                                           \
+    operator=(std::size_t o) noexcept {                                        \
+      data = o;                                                                \
+      return *this;                                                            \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator+(std::size_t o) const noexcept {                                  \
+      return NAME{data + o};                                                   \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator+(const NAME &o) const noexcept {                                  \
+      return operator+(o.data);                                                \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator-(std::size_t o) const noexcept {                                  \
+      return NAME{data - o};                                                   \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator-(NAME o) const noexcept {                                         \
+      return operator-(o.data);                                                \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator>(std::size_t o) const noexcept {                                  \
+      return data > o;                                                         \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator>(const NAME &o) const noexcept {                                  \
+      return operator>(o.data);                                                \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator>=(std::size_t o) const noexcept {                                 \
+      return data >= o;                                                        \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator>=(const NAME &o) const noexcept {                                 \
+      return operator>=(o.data);                                               \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator<(std::size_t o) const noexcept {                                  \
+      return data < o;                                                         \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator<(const NAME &o) const noexcept {                                  \
+      return operator<(o.data);                                                \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator<=(std::size_t o) const noexcept {                                 \
+      return data <= o;                                                        \
+    }                                                                          \
+    constexpr bool                                                             \
+    operator<=(const NAME &o) const noexcept {                                 \
+      return operator<=(o.data);                                               \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator/(std::size_t o) const noexcept {                                  \
+      return NAME{data / o};                                                   \
+    }                                                                          \
+    constexpr NAME                                                             \
+    operator%(std::size_t o) const noexcept {                                  \
+      return NAME{data % o};                                                   \
+    }                                                                          \
+    constexpr NAME operator*(std::size_t o) const noexcept {                   \
+      return NAME{data * o};                                                   \
+    }                                                                          \
+    constexpr explicit operator std::size_t() const noexcept {                 \
+      return data;                                                             \
+    }                                                                          \
+  };                                                                           \
+  static_assert(sizeof(NAME) == sizeof(std::size_t), "");                      \
+  static_assert(alignof(NAME) == alignof(std::size_t), "")
+
+SIZE_TYPE(relative_idx);
+SIZE_TYPE(absolute_idx);
+
+enum class Direction : uint8_t { LEFT, RIGHT };
+
 template <typename T, std::size_t t_levels = 9>
 struct static_tree {
   static constexpr std::size_t levels = t_levels;
   static constexpr std::size_t capacity = static_size<levels>::value;
   // static constexpr size = sp::static_size<level>::value;
-  T storage[capacity];
-
+  T storagex[capacity];
   static_tree() noexcept(noexcept(T{}))
-      : storage() {
+      : storagex() {
   }
 
   static_tree(const static_tree<T> &) = delete;
@@ -95,6 +188,14 @@ struct static_tree {
   operator=(const static_tree &) = delete;
   static_tree &
   operator=(const static_tree &&) = delete;
+
+  T &operator[](sp::absolute_idx idx) noexcept {
+    return storagex[std::size_t(idx)];
+  }
+
+  // To avoid std::size_t overflow
+  // TODO number_of_bits(std::size_t)
+  static_assert(levels < 64, "");
 };
 // TODO dynamic_tree<T>(T* storage,std::size_t)
 
@@ -116,24 +217,56 @@ level(std::size_t l) noexcept {
 }
 
 template <std::size_t CHILDREN = 2>
-static std::size_t
-base(std::size_t l, std::size_t oldIdx) noexcept {
-  //TODO make better
-  std::size_t relOldIdx = l == 0 ? 0 : oldIdx - level(l - 1);
+static sp::absolute_idx
+base(std::size_t l, sp::relative_idx old_idx) noexcept {
 
   std::size_t start = level(l);
-  std::size_t offset = relOldIdx * CHILDREN;
-  printf("base[start[%zu],offset[%zu]]\n", start, offset);
-  return start + offset;
+  std::size_t offset = std::size_t(old_idx) * CHILDREN;
+  return sp::absolute_idx(start + offset);
 }
 
-std::size_t
-lookup(std::size_t level, std::size_t oldIdx, bool less_than) noexcept {
-  std::size_t idx = base(level, oldIdx);
-  if (!less_than) {
-    ++idx;
+static sp::absolute_idx
+lookup(std::size_t new_lvl, sp::relative_idx old_idx, Direction dir) noexcept {
+
+  sp::absolute_idx idx = base(new_lvl, old_idx);
+  if (dir == Direction::RIGHT) {
+    idx = idx + 1;
   }
+
   return idx;
+}
+
+template <std::size_t CHILDREN = 2>
+static sp::relative_idx
+lookup_relative(sp::relative_idx old_idx, Direction dir) noexcept {
+
+  sp::relative_idx idx = old_idx * CHILDREN;
+  if (dir == Direction::RIGHT) {
+    idx = idx + 1;
+  }
+
+  return idx;
+}
+
+static sp::absolute_idx
+translate(std::size_t l, sp::relative_idx idx) {
+  std::size_t start = level(l);
+  return sp::absolute_idx(std::size_t(idx) + start);
+}
+
+static sp::relative_idx
+parent_relative(sp::relative_idx idx) noexcept {
+  sp::relative_idx i(std::size_t(idx) / 2);
+
+  if (lookup_relative(i, Direction::RIGHT) == idx) {
+    return i;
+  }
+
+  if (lookup_relative(i, Direction::LEFT) == idx) {
+    return i;
+  }
+  assert(false);
+  return sp::relative_idx(0);
 }
 
 template <typename T, typename Key>
@@ -148,10 +281,12 @@ template <typename T, std::size_t levels, typename Key>
 T *
 search(static_tree<T, levels> &tree, const Key &needle) noexcept {
   std::size_t level = 0;
-  std::size_t idx = 0;
+  sp::relative_idx idx(0);
+  constexpr std::size_t capacity = static_tree<T, levels>::capacity;
 Lstart:
-  if (idx < static_tree<T, levels>::capacity) {
-    T &current = tree.storage[idx];
+  const sp::absolute_idx abs_idx = impl::translate(level, idx);
+  if (abs_idx < capacity) {
+    T &current = tree[abs_idx];
     if (bool(current)) {
       int c = impl::cmp(current, needle);
       if (c == 0) {
@@ -159,8 +294,8 @@ Lstart:
       }
 
       level++;
-      bool less_than = c == -1;
-      idx = impl::lookup(level, idx, less_than);
+      Direction dir = c == -1 ? Direction::LEFT : Direction::RIGHT;
+      idx = impl::lookup_relative(idx, dir);
 
       goto Lstart;
     }
@@ -171,66 +306,38 @@ Lstart:
 template <typename T, std::size_t levels>
 bool
 binary_insert(static_tree<T, levels> &tree, const T &data) noexcept {
-  printf("insert(%d)\n", data.data);
+  // printf("insert(%d)\n", data.data);
   std::size_t level = 0;
-  std::size_t idx = 0;
+  sp::relative_idx idx = 0;
   constexpr std::size_t capacity = static_tree<T, levels>::capacity;
 Lstart:
-  if (idx < capacity) {
-    T &current = tree.storage[idx];
+  const sp::absolute_idx abs_idx = impl::translate(level, idx);
+  if (abs_idx < capacity) {
+    T &current = tree[abs_idx];
     if (bool(current)) {
       int c = impl::cmp(current, data);
-      printf("%s = cmp(current[%d], data[%d])\n", c == 1 ? "gt" : "lt",
-             current.data, data.data);
+      // printf("%s = cmp(current[%d], data[%d])\n", c == 1 ? "gt" : "lt",
+      //        current.data, data.data);
 
       level++;
-      bool less_than = c == -1;
+      Direction dir = c == -1 ? Direction::LEFT : Direction::RIGHT;
       const std::size_t b_idx = idx;
-      idx = impl::lookup(level, idx, less_than);
-      printf("%zu = lookup(level[%zu], idx[%zu], %s)\n", //
-             idx, level, b_idx, less_than ? "ls" : "gt");
+      idx = impl::lookup(level, idx, dir);
+      // printf("%zu = lookup(level[%zu], idx[%zu], %s)\n", //
+      //        std::size_t(idx), level, b_idx,
+      //        dir == Direction::LEFT ? "lt" : "gt");
 
       goto Lstart;
     } else {
-      printf("table[%zu] = %d\n", idx, data.data);
+      // printf("table[%zu] = %d\n", std::size_t(idx), data.data);
       current = data;
       return true;
     }
   }
-  printf("ERROR[%zu > %zu]\n", idx, capacity);
+  // printf("ERROR[%zu > %zu]\n", std::size_t(idx), capacity);
   return false;
 }
 
-namespace impl {
-static std::size_t
-breadth(std::size_t level) noexcept {
-  if (level == 0) {
-    return 1;
-  }
-  return level * 2;
-}
-
-static std::size_t
-parent(std::size_t l, std::size_t idx) noexcept {
-  // brute force search parent index for idx
-  std::size_t parent_level = l - 1;
-  std::size_t offset = level(parent_level);
-  std::size_t b = offset + breadth(parent_level);
-
-  for (std::size_t i = offset; i < b; ++i) {
-    if (lookup(parent_level, i, false) == idx) {
-      return i;
-    }
-    if (lookup(parent_level, i, true) == idx) {
-      return i;
-    }
-  }
-  assert(false);
-  return 0;
-}
-} // namespace impl
-
-// bfs_for_each()
 /*       7
  *       /\
  *      /  \
@@ -249,50 +356,79 @@ parent(std::size_t l, std::size_t idx) noexcept {
 template <typename T, std::size_t levels, typename F>
 void
 in_order_for_each(static_tree<T, levels> &tree, F f) {
-  const bool left = true;
-  const bool right = false;
+  enum class Traversal : uint8_t { UP, DOWN };
+
+  Direction d[levels + 1]{Direction::LEFT};
+  Traversal t = Traversal::UP;
+
+  auto set_direction = [&d](std::size_t lvl, Direction dir) {
+    if (lvl <= levels) {
+      d[lvl] = dir;
+    }
+  };
 
   std::size_t level = 0;
-  std::size_t idx = 0;
-  bool direction = left;
-  bool d = false;
-  auto up = [&d] { return !d; };
-  auto down = [&d] { return d; };
+  sp::relative_idx idx(0);
 Lstart:
-  if (idx < static_tree<T, levels>::capacity) {
-    // lookup next upwards
-    idx = impl::lookup(level, idx, direction);
+  if (level <= levels) {
+    if (t == Traversal::UP) {
+      if (d[level] == Direction::LEFT) {
+        level++;
+        set_direction(level, Direction::LEFT);
+        idx = impl::lookup_relative(idx, Direction::LEFT);
+        // printf("up_left[idx[%zu], level[%zu]]\n", std::size_t(idx), level);
+      } else {
+        level++;
+        set_direction(level, Direction::LEFT);
+        idx = impl::lookup_relative(idx, Direction::RIGHT);
+        // printf("up_right[idx[%zu], level[%zu]]\n", std::size_t(idx), level);
+      }
+      goto Lstart;
+    } else /*t == DOWN*/ {
+      if (d[level] == Direction::LEFT) {
+        // We returned to this level after traversed left, now traverse right
 
-    // after increment idx
-    if (down()) {
-      if (direction == right) {
-        if (idx == 0) {
-          return;
+        // Indicate that we have consumed right when returning to this level[0]
+        d[level] = Direction::RIGHT;
+
+        //
+        f(tree[impl::translate(level, idx)]);
+
+        //
+        t = Traversal::UP;
+        ++level;
+        set_direction(level, Direction::LEFT);
+        idx = impl::lookup_relative(idx, Direction::RIGHT);
+        // printf("down_right[idx[%zu], level[%zu]]\n", std::size_t(idx), level);
+        goto Lstart;
+      } else { //[0]
+        if (level > 0) {
+          idx = impl::parent_relative(idx);
+          level--;
+          // printf("down[idx[%zu], level[%zu]]\n", std::size_t(idx), level);
+          goto Lstart;
         }
       }
     }
-
-    if (up()) {
-      if (direction == right) {
-        direction = left;
-      }
-    }
-
-    goto Lstart;
   } else {
-    idx = impl::parent(level, idx);
-    f(tree.storage[idx]);
+    assert(t == Traversal::UP);
+    // level and index now point to an out of bound node
+    // printf("end[idx[%zu], level[%zu]]\n", std::size_t(idx), level);
+    idx = impl::parent_relative(idx);
+    level--;
+    // we now point to the leaf node
 
-    if (up()) {
-      if (direction == left) {
-        direction = right;
-        idx = impl::parent(level, idx);
-      } else {
-      }
-    } else {
-      assert(false);
+    if (d[level] == Direction::LEFT) {
+      // since we are in a leaf node
+      // f(tree[impl::translate(level, idx)]);
     }
-    // goto Lstart;
+
+    // we now point to the node parent of the leaf
+    // idx = impl::parent(level, idx);
+    // level--;
+
+    t = Traversal::DOWN;
+    goto Lstart;
   }
 }
 

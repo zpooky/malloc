@@ -119,58 +119,124 @@ struct Data {
 int
 main() {
   // TODO the size calculations gives level+1 capacity which is wrong
-  constexpr std::size_t levels = 10;
-  using Type = sp::static_tree<Data, levels>;
-  static_assert(Type::levels == levels, "");
-  static_assert(Type::capacity == 2047, "");
+
+  // {
+  //   constexpr std::size_t levels = 10;
+  //   using Type = sp::static_tree<Data, levels>;
+  //   static_assert(Type::levels == levels, "");
+  //   static_assert(Type::capacity == 2047, "");
+  //   {
+  //     Type tree;
+  //     for (int key = 0; key < int(levels) + 1; ++key) {
+  //       for (int i = 0; i < key; ++i) {
+  //         Data *res = sp::search(tree, Data(i));
+  //         assert(res);
+  //         assert(res->data == i);
+  //       }
+  //       Data d(key);
+  //       assert(sp::search(tree, d) == nullptr);
+  //       assert(sp::binary_insert(tree, d));
+  //       printf("============\n");
+  //       assert(sp::search(tree, d) != nullptr);
+  //     }
+  //     printf("done insert\n");
+  //   }
+  //   {
+  //     Type tree;
+  //     for (int key = levels + 1; key > 0; --key) {
+  //       Data d(key);
+  //       assert(sp::search(tree, d) == nullptr);
+  //       assert(sp::binary_insert(tree, d));
+  //       assert(sp::search(tree, d) != nullptr);
+  //     }
+  //     printf("done reverse insert\n");
+  //   }
+  // }
+
   {
-    Type tree;
-    for (int key = 0; key < int(levels) + 1; ++key) {
-      for (int i = 0; i < key; ++i) {
-        Data *res = sp::search(tree, Data(i));
-        assert(res);
-        assert(res->data == i);
+    const sp::Direction left = sp::Direction::LEFT;
+    const sp::Direction right = sp::Direction::RIGHT;
+    {
+      sp::relative_idx parent_idx(0);
+      for (std::size_t level = 0; level < 63; ++level) {
+        {
+          sp::relative_idx idx = sp::impl::lookup_relative(parent_idx, left);
+          auto a_id = sp::impl::parent_relative(idx);
+          assert(a_id == parent_idx);
+        }
+        {
+          sp::relative_idx idx = sp::impl::lookup_relative(parent_idx, right);
+          // printf("lookup :: parent[%zu] -> %s -> r_idx[%zu]\n", //
+          //        std::size_t(parent_idx), "right", std::size_t(idx));
+
+          auto a_id = sp::impl::parent_relative(idx);
+          // printf("parent :: level[%zu] -> r_idx[%zu] -> parent[%zu]\n", //
+          //        level + 1, std::size_t(idx), std::size_t(a_id));
+          assert(a_id == parent_idx);
+          parent_idx = idx;
+        }
       }
-      Data d(key);
-      assert(sp::search(tree, d) == nullptr);
-      assert(sp::binary_insert(tree, d));
-      printf("============\n");
-      assert(sp::search(tree, d) != nullptr);
     }
-    printf("done\n");
+    printf("--------\n");
+    {
+      sp::relative_idx parent_idx(0);
+      for (std::size_t level = 0; level < 63; ++level) {
+        {
+          sp::relative_idx idx = sp::impl::lookup_relative(parent_idx, right);
+          auto a_id = sp::impl::parent_relative(idx);
+          assert(a_id == parent_idx);
+        }
+        {
+          sp::relative_idx idx = sp::impl::lookup_relative(parent_idx, left);
+          // printf("lookup :: parent[%zu] -> %s -> r_idx[%zu]\n", //
+          //        std::size_t(parent_idx), "left", std::size_t(idx));
+
+          auto a_id = sp::impl::parent_relative(idx);
+          // printf("parent :: level[%zu] -> r_idx[%zu] -> parent[%zu]\n", //
+          //        level + 1, std::size_t(idx), std::size_t(a_id));
+          assert(a_id == parent_idx);
+
+          parent_idx = idx;
+        }
+      }
+    }
+    printf("--------\n");
   }
   {
-    Type tree;
-    for (int key = levels + 1; key > 0; --key) {
-      Data d(key);
-      assert(sp::search(tree, d) == nullptr);
-      assert(sp::binary_insert(tree, d));
-      assert(sp::search(tree, d) != nullptr);
-    }
-    printf("done reverse\n");
-  }
-  {
-    // using Type = sp::static_tree<Data>;
-    // static_assert(Type::levels == 9, "");
+    constexpr std::size_t levels = 9;
+    using Type = sp::static_tree<Data, levels>;
+    static_assert(Type::levels == levels, "");
     // static_assert(Type::capacity == 1023, "");
-    // Type tree;
-    // {
-    //   int i = 0;
-    //   sp::in_order_for_each(tree, [&i](Data &d) {
-    //     assert(!bool(d));
-    //     d = Data(i);
-    //   });
-    //   assert(i == Type::capacity);
-    // }
-    // {
-    //   int i = 0;
-    //   sp::in_order_for_each(tree, [&i](Data &d) {
-    //     assert(bool(d));
-    //     assert(d.data == i);
-    //     ++i;
-    //   });
-    //   assert(i == Type::capacity);
-    // }
+    Type tree;
+    for (std::size_t i = 0; i < Type::capacity; ++i) {
+      Data d((int)i);
+      assert(sp::search(tree, d) == nullptr);
+    }
+    {
+      int i = 0;
+      sp::in_order_for_each(tree, [&i](Data &d) {
+        assert(!bool(d));
+        d = Data(i);
+        ++i;
+      });
+      printf("inserted[%d],capacity[%zu]\n", i, Type::capacity);
+      assert(i == Type::capacity);
+    }
+    {
+      int i = 0;
+      sp::in_order_for_each(tree, [&i](Data &d) {
+        assert(bool(d));
+        assert(d.data == i);
+        ++i;
+      });
+      printf("present[%d],capacity[%zu]\n", i, Type::capacity);
+      assert(i == Type::capacity);
+    }
+    for (std::size_t i = 0; i < Type::capacity; ++i) {
+      Data d((int)i);
+      assert(sp::search(tree, d) != nullptr);
+    }
+    printf("search ok!");
   }
 
   // srand(0);

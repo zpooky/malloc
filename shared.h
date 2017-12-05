@@ -30,7 +30,7 @@ namespace sp {
     }                                                                          \
     constexpr bool                                                             \
     operator==(const NAME &o) const noexcept {                                 \
-      return this->operator==(o.data);                                          \
+      return this->operator==(o.data);                                         \
     }                                                                          \
     constexpr bool                                                             \
     operator!=(std::size_t o) const noexcept {                                 \
