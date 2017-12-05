@@ -120,38 +120,38 @@ int
 main() {
   // TODO the size calculations gives level+1 capacity which is wrong
 
-  // {
-  //   constexpr std::size_t levels = 10;
-  //   using Type = sp::static_tree<Data, levels>;
-  //   static_assert(Type::levels == levels, "");
-  //   static_assert(Type::capacity == 2047, "");
-  //   {
-  //     Type tree;
-  //     for (int key = 0; key < int(levels) + 1; ++key) {
-  //       for (int i = 0; i < key; ++i) {
-  //         Data *res = sp::search(tree, Data(i));
-  //         assert(res);
-  //         assert(res->data == i);
-  //       }
-  //       Data d(key);
-  //       assert(sp::search(tree, d) == nullptr);
-  //       assert(sp::binary_insert(tree, d));
-  //       printf("============\n");
-  //       assert(sp::search(tree, d) != nullptr);
-  //     }
-  //     printf("done insert\n");
-  //   }
-  //   {
-  //     Type tree;
-  //     for (int key = levels + 1; key > 0; --key) {
-  //       Data d(key);
-  //       assert(sp::search(tree, d) == nullptr);
-  //       assert(sp::binary_insert(tree, d));
-  //       assert(sp::search(tree, d) != nullptr);
-  //     }
-  //     printf("done reverse insert\n");
-  //   }
-  // }
+  {
+    constexpr std::size_t levels = 10;
+    using Type = sp::static_tree<Data, levels>;
+    static_assert(Type::levels == levels, "");
+    static_assert(Type::capacity == 2047, "");
+    {
+      Type tree;
+      for (int key = 0; key < int(levels) + 1; ++key) {
+        for (int i = 0; i < key; ++i) {
+          Data *res = sp::search(tree, Data(i));
+          assert(res);
+          assert(res->data == i);
+        }
+        Data d(key);
+        assert(sp::search(tree, d) == nullptr);
+        assert(sp::binary_insert(tree, d));
+        printf("============\n");
+        assert(sp::search(tree, d) != nullptr);
+      }
+      printf("done insert\n");
+    }
+    {
+      Type tree;
+      for (int key = levels + 1; key > 0; --key) {
+        Data d(key);
+        assert(sp::search(tree, d) == nullptr);
+        assert(sp::binary_insert(tree, d));
+        assert(sp::search(tree, d) != nullptr);
+      }
+      printf("done reverse insert\n");
+    }
+  }
 
   {
     const sp::Direction left = sp::Direction::LEFT;

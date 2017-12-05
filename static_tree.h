@@ -173,6 +173,7 @@ enum class Direction : uint8_t { LEFT, RIGHT };
 
 template <typename T, std::size_t t_levels = 9>
 struct static_tree {
+  // TODO this is inclusive
   static constexpr std::size_t levels = t_levels;
   static constexpr std::size_t capacity = static_size<levels>::value;
   // static constexpr size = sp::static_size<level>::value;
@@ -308,7 +309,7 @@ bool
 binary_insert(static_tree<T, levels> &tree, const T &data) noexcept {
   // printf("insert(%d)\n", data.data);
   std::size_t level = 0;
-  sp::relative_idx idx = 0;
+  sp::relative_idx idx(0);
   constexpr std::size_t capacity = static_tree<T, levels>::capacity;
 Lstart:
   const sp::absolute_idx abs_idx = impl::translate(level, idx);
@@ -322,7 +323,7 @@ Lstart:
       level++;
       Direction dir = c == -1 ? Direction::LEFT : Direction::RIGHT;
       const std::size_t b_idx = idx;
-      idx = impl::lookup(level, idx, dir);
+      idx = impl::lookup_relative(idx, dir);
       // printf("%zu = lookup(level[%zu], idx[%zu], %s)\n", //
       //        std::size_t(idx), level, b_idx,
       //        dir == Direction::LEFT ? "lt" : "gt");
@@ -399,7 +400,8 @@ Lstart:
         ++level;
         set_direction(level, Direction::LEFT);
         idx = impl::lookup_relative(idx, Direction::RIGHT);
-        // printf("down_right[idx[%zu], level[%zu]]\n", std::size_t(idx), level);
+        // printf("down_right[idx[%zu], level[%zu]]\n", std::size_t(idx),
+        // level);
         goto Lstart;
       } else { //[0]
         if (level > 0) {
