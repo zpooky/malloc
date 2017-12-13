@@ -1,3 +1,4 @@
+#include "dyn_tree.h"
 #include "global.h"
 #include "global_debug.h"
 #include "static_tree.h"
@@ -99,10 +100,24 @@ struct Data {
     return present;
   }
 
-  // bool
-  // operator==(const Data &o) const noexcept {
-  //   return (present == true) && present == o.present && data == o.data;
-  // }
+  operator int() const noexcept {
+    return data;
+  }
+
+  bool
+  operator==(const Data &o) const noexcept {
+    return data == o.data;
+  }
+
+  bool
+  operator>(const Data &o) const noexcept {
+    return data > o.data;
+  }
+
+  bool
+  operator<(const Data &o) const noexcept {
+    return data < o.data;
+  }
 
   int
   cmp(const Data &o) const noexcept {
@@ -135,7 +150,7 @@ main() {
         }
         Data d(key);
         assert(sp::search(tree, d) == nullptr);
-        assert(sp::binary_insert(tree, d));
+        assert(sp::insert(tree, d));
         printf("============\n");
         assert(sp::search(tree, d) != nullptr);
       }
@@ -146,7 +161,7 @@ main() {
       for (int key = levels + 1; key > 0; --key) {
         Data d(key);
         assert(sp::search(tree, d) == nullptr);
-        assert(sp::binary_insert(tree, d));
+        assert(sp::insert(tree, d));
         assert(sp::search(tree, d) != nullptr);
       }
       printf("done reverse insert\n");
@@ -236,7 +251,68 @@ main() {
       Data d((int)i);
       assert(sp::search(tree, d) != nullptr);
     }
-    printf("search ok!");
+    printf("search ok!\n");
+  }
+  {
+    constexpr std::size_t levels = 9;
+    using Type = sp::static_tree<sp::SortedNode<Data>, levels>;
+    Type tree;
+    Data d(1);
+    insert(tree, d);
+  }
+  //===================
+  //==DYN=TREE=========
+  //===================
+  { // test rotate_left
+    auto a = new sp::DNode<Data>(Data(1));
+    auto b = a->right = new sp::DNode<Data>(Data(2), a);
+    auto c = b->right = new sp::DNode<Data>(Data(3), b);
+
+    auto reb = sp::impl::dtree::rotate_left(a);
+    assert(reb->value == b->value);
+    assert(reb->parent == nullptr);
+
+    assert(reb->left->value == a->value);
+    assert(reb->left->parent == b);
+    assert(reb->left->left == nullptr);
+    assert(reb->left->right == nullptr);
+
+    assert(reb->right->value == c->value);
+    assert(reb->right->parent == b);
+    assert(reb->right->left == nullptr);
+    assert(reb->right->right == nullptr);
+  }
+  { // test rotate_right
+    auto c = new sp::DNode<Data>(Data(3));
+    auto b = c->left = new sp::DNode<Data>(Data(2), c);
+    auto a = b->left = new sp::DNode<Data>(Data(1), b);
+
+    auto reb = sp::impl::dtree::rotate_right(c);
+    assert(reb->value == b->value);
+    assert(reb->parent == nullptr);
+
+    assert(reb->left->value == a->value);
+    assert(reb->left->parent == b);
+    assert(reb->left->left == nullptr);
+    assert(reb->left->right == nullptr);
+
+    assert(reb->right->value == c->value);
+    assert(reb->right->parent == b);
+    assert(reb->right->left == nullptr);
+    assert(reb->right->right == nullptr);
+  }
+  {
+    sp::DTree<Data> tree;
+    for (int i = 0; i < 10; ++i) {
+      printf("\n.%d\n", i);
+      dump(tree);//TODO include balance
+
+      Data ins(i);
+      auto res = sp::insert(tree, ins);
+      assert(std::get<1>(res));
+      assert(std::get<0>(res) != nullptr);
+    }
+    sp::verify(tree);
   }
 
   // srand(0);

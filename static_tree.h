@@ -77,11 +77,14 @@ static_assert(static_level<255>::value == 8, "");
 static_assert(static_level<511>::value == 9, "");
 static_assert(static_level<1023>::value == 10, "");
 
-#define SIZE_TYPE(NAME)                                                        \
+#define SIZE_TYPEX(NAME)                                                       \
   struct NAME {                                                                \
     std::size_t data;                                                          \
     explicit constexpr NAME(std::size_t d) noexcept                            \
         : data(d) {                                                            \
+    }                                                                          \
+    constexpr NAME() noexcept                                                  \
+        : NAME(std::size_t(0)) {                                               \
     }                                                                          \
     constexpr bool                                                             \
     operator==(std::size_t o) const noexcept {                                 \
@@ -166,8 +169,8 @@ static_assert(static_level<1023>::value == 10, "");
   static_assert(sizeof(NAME) == sizeof(std::size_t), "");                      \
   static_assert(alignof(NAME) == alignof(std::size_t), "")
 
-SIZE_TYPE(relative_idx);
-SIZE_TYPE(absolute_idx);
+SIZE_TYPEX(relative_idx);
+SIZE_TYPEX(absolute_idx);
 
 enum class Direction : uint8_t { LEFT, RIGHT };
 
@@ -197,6 +200,12 @@ struct static_tree {
   // To avoid std::size_t overflow
   // TODO number_of_bits(std::size_t)
   static_assert(levels < 64, "");
+};
+
+template <typename T>
+struct SortedNode {
+  T value;
+  std::int8_t balance;
 };
 // TODO dynamic_tree<T>(T* storage,std::size_t)
 
@@ -306,7 +315,7 @@ Lstart:
 
 template <typename T, std::size_t levels>
 bool
-binary_insert(static_tree<T, levels> &tree, const T &data) noexcept {
+insert(static_tree<T, levels> &tree, const T &data) noexcept {
   // printf("insert(%d)\n", data.data);
   std::size_t level = 0;
   sp::relative_idx idx(0);
@@ -322,7 +331,7 @@ Lstart:
 
       level++;
       Direction dir = c == -1 ? Direction::LEFT : Direction::RIGHT;
-      const std::size_t b_idx = idx;
+      // const std::size_t b_idx = idx;
       idx = impl::lookup_relative(idx, dir);
       // printf("%zu = lookup(level[%zu], idx[%zu], %s)\n", //
       //        std::size_t(idx), level, b_idx,
@@ -336,6 +345,98 @@ Lstart:
     }
   }
   // printf("ERROR[%zu > %zu]\n", std::size_t(idx), capacity);
+  return false;
+}
+
+template <typename T, std::size_t levels>
+bool
+insert(static_tree<SortedNode<T>, levels> &tree, const T &ins) {
+  sp::relative_idx parents[levels + 1];
+
+  auto rebalance = [&tree, &parents](std::size_t level, sp::relative_idx c) {
+    auto dir = [](sp::relative_idx pa, sp::relative_idx child) {
+      if (impl::lookup_relative(pa, Direction::LEFT) == child) {
+        return Direction::LEFT;
+      }
+      if (impl::lookup_relative(pa, Direction::RIGHT) == child) {
+        return Direction::RIGHT;
+      }
+      assert(false);
+      return Direction::LEFT;
+    };
+
+    auto balance_right = [](std::size_t level, sp::relative_idx idx) { //
+      // TODO move 1 from right to left
+    };
+
+    auto balance_left = [](std::size_t level, sp::relative_idx idx) { //
+      // TODO move 1 from left to right
+    };
+
+    if (level == 0) {
+      return;
+    }
+
+  Lbalance:
+    if (level > 0) {
+      std::size_t pl = --level;
+      sp::relative_idx pidx = parents[pl];
+
+      const sp::absolute_idx pabs_idx = impl::translate(pl, pidx);
+      auto &parent = tree[pabs_idx];
+
+      Direction d = dir(pidx, c);
+      if (d == Direction::LEFT) {
+        parent.balance--;
+      } else {
+        parent.balance++;
+      }
+
+      if (parent.balance > std::uint8_t(1)) {
+        balance_right(pl, pidx);
+      } else if (parent.balance < std::uint8_t(-1)) {
+        balance_left(pl, pidx);
+      }
+
+      goto Lbalance;
+    }
+
+  };
+
+  std::size_t level = 0;
+  sp::relative_idx idx(0);
+// constexpr std::size_t capacity = static_tree<T, levels>::capacity;
+
+Lstart:
+  if (level <= levels) {
+    const sp::absolute_idx abs_idx = impl::translate(level, idx);
+    auto &current = tree[abs_idx];
+
+    if (bool(current.value)) {
+      parents[level] = idx;
+      int c = impl::cmp(current.value, ins);
+      if (c == 0) {
+        // TODO ?
+        assert(false);
+
+        return false;
+      } else if (c > 0) {
+        level++;
+        idx = impl::lookup_relative(idx, Direction::RIGHT);
+      } else /*c < 0*/ {
+        level++;
+        idx = impl::lookup_relative(idx, Direction::LEFT);
+      }
+      goto Lstart;
+    } else {
+      current.value = ins;
+      current.balance = 0;
+      rebalance(level, idx);
+
+      return true;
+    }
+  }
+
   return false;
 }
 

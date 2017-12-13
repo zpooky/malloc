@@ -318,8 +318,7 @@ struct Search {
       if (cs == 2) {
         print_tree(base, prefix + ls, false, "lt", tree->left);
         print_tree(base, prefix + ls, true, "gt", tree->right);
-      }
-      if (cs == 1) {
+      } else {
         if (tree->left) {
           print_tree(base, prefix + ls, true, "lt", tree->left);
         } else if (tree->right) {
