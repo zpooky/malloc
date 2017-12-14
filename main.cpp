@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <iostream>
 #include <stdio.h>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -265,52 +266,66 @@ main() {
   //===================
   { // test rotate_left
     auto a = new sp::DNode<Data>(Data(1));
+    a->balance = 2;
     auto b = a->right = new sp::DNode<Data>(Data(2), a);
+    b->balance = 1;
     auto c = b->right = new sp::DNode<Data>(Data(3), b);
+    c->balance = 0;
 
     auto reb = sp::impl::dtree::rotate_left(a);
     assert(reb->value == b->value);
     assert(reb->parent == nullptr);
+    assert(reb->balance == 0);
 
     assert(reb->left->value == a->value);
     assert(reb->left->parent == b);
     assert(reb->left->left == nullptr);
     assert(reb->left->right == nullptr);
+    assert(reb->left->balance == 0);
 
     assert(reb->right->value == c->value);
     assert(reb->right->parent == b);
     assert(reb->right->left == nullptr);
     assert(reb->right->right == nullptr);
+    assert(reb->right->balance == 0);
   }
   { // test rotate_right
     auto c = new sp::DNode<Data>(Data(3));
+    c->balance = -2;
     auto b = c->left = new sp::DNode<Data>(Data(2), c);
+    b->balance = -1;
     auto a = b->left = new sp::DNode<Data>(Data(1), b);
+    a->balance = 0;
 
     auto reb = sp::impl::dtree::rotate_right(c);
     assert(reb->value == b->value);
     assert(reb->parent == nullptr);
+    assert(reb->balance == 0);
 
     assert(reb->left->value == a->value);
     assert(reb->left->parent == b);
     assert(reb->left->left == nullptr);
     assert(reb->left->right == nullptr);
+    assert(reb->left->balance == 0);
 
     assert(reb->right->value == c->value);
     assert(reb->right->parent == b);
     assert(reb->right->left == nullptr);
     assert(reb->right->right == nullptr);
+    assert(reb->right->balance == 0);
   }
   {
+      //
+  } {
     sp::DTree<Data> tree;
-    for (int i = 0; i < 10; ++i) {
-      printf("\n.%d\n", i);
-      dump(tree);//TODO include balance
-
+    int i = 0;
+    for (; i < 10; ++i) {
       Data ins(i);
       auto res = sp::insert(tree, ins);
       assert(std::get<1>(res));
       assert(std::get<0>(res) != nullptr);
+      printf("--------------\n.%d\n", i);
+      dump(tree);
     }
     sp::verify(tree);
   }
