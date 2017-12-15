@@ -1,3 +1,4 @@
+#include "crc.h"
 #include "dyn_tree.h"
 #include "global.h"
 #include "global_debug.h"
@@ -136,7 +137,7 @@ struct Data {
 int
 main() {
   // TODO the size calculations gives level+1 capacity which is wrong
-
+  sp::crc_test();
   {
     constexpr std::size_t levels = 10;
     using Type = sp::static_tree<Data, levels>;
@@ -321,7 +322,7 @@ main() {
     sp::DTree<Data> tree;
     int i = 0;
     for (; i < 10; ++i) {
-      printf(".%d\n",i);
+      printf(".%d\n", i);
       Data ins(i);
       auto res = sp::insert(tree, ins);
       assert(std::get<1>(res));
