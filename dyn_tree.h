@@ -6,6 +6,7 @@
 #include <tuple>
 #include <utility>
 
+#include <iostream>
 #include <string> //debug
 
 namespace sp {
@@ -122,6 +123,31 @@ direction(const DNode<T> *const child) noexcept {
 // }
 
 template <typename T>
+void
+dump(DNode<T> *tree, std::string prefix = "", bool isTail = true,
+     const char *ctx = "") noexcept {
+  if (tree) {
+    char name[256] = {0};
+    auto val = std::string(*tree);
+    sprintf(name, "%s%s", ctx, val.c_str());
+
+    printf("%s%s%s\n", prefix.c_str(), (isTail ? "└── " : "├── "), name);
+
+    const char *ls = (isTail ? "    " : "│   ");
+    if (tree->right && tree->left) {
+      dump(tree->right, prefix + ls, false, "gt:");
+      dump(tree->left, prefix + ls, true, "lt:");
+    } else {
+      if (tree->left) {
+        dump(tree->left, prefix + ls, true, "lt:");
+      } else if (tree->right) {
+        dump(tree->right, prefix + ls, true, "gt:");
+      }
+    }
+  }
+}
+
+template <typename T>
 static std::int8_t
 balance(const DNode<T> *const node) {
   return node ? node->balance : 0;
@@ -130,6 +156,7 @@ balance(const DNode<T> *const node) {
 template <typename T>
 static DNode<T> *
 rotate_left(DNode<T> *const A) noexcept {
+  printf("\trotate_left(%s)\n", std::string(*A).c_str());
   /*
    * <_
    *   \
@@ -159,16 +186,28 @@ rotate_left(DNode<T> *const A) noexcept {
   B->parent = A_parent;
   B->left = A;
 
+  // x =A
+  // y = B
   //#Update Balance
   /*We do not rebalance C since its children has not been altered*/
-  if (root_balance == 0) {
-    //?? since root balance is 0 we know all its children is the same??
-    A->balance = 1;
-    B->balance = -1;
-  } else {
-    A->balance = 0;
-    B->balance = 0;
+
+  A->balance -= 1;
+  if (B->balance > 0) {
+    A->balance -= B->balance;
   }
+  B->balance -= 1;
+  if (A->balance < 0) {
+    B->balance -= -A->balance;
+  }
+
+  // if (root_balance == 0) {
+  //   //?? since root balance is 0 we know all its children is the same??
+  //   A->balance = 1;
+  //   B->balance = -1;
+  // } else {
+  //   A->balance = 0;
+  //   B->balance = 0;
+  // }
 
   return B;
 }
@@ -176,6 +215,7 @@ rotate_left(DNode<T> *const A) noexcept {
 template <typename T>
 static DNode<T> *
 rotate_right(DNode<T> *const C) noexcept {
+  printf("\trotate_right(%s)\n", std::string(*C).c_str());
   /*
   * _.
   *   \
@@ -206,43 +246,54 @@ rotate_right(DNode<T> *const C) noexcept {
   B->right = C;
 
   //#Update Balance
-  if (root_balance == 0) {
-    B->balance = 1;
-    C->balance = -1;
-  } else {
-    B->balance = 0;
-    C->balance = 0;
+  // if (root_balance == 0) {
+  //   B->balance = 1;
+  //   C->balance = -1;
+  // } else {
+  //   B->balance = 0;
+  //   C->balance = 0;
+  // }
+
+  // x = C
+  // y = B
+  C->balance += 1;
+  if (B->balance < 0) {
+    C->balance += -B->balance;
+  }
+  B->balance += 1;
+  if (C->balance > 0) {
+    B->balance += C->balance;
   }
 
   return B;
 }
 
-template <typename T>
-static DNode<T> *
-rotate_right_left(DNode<T> *const C) noexcept {
-  /*
-  *   3                       3                    2
-  *  /         L(1)          /        R(3)        / \
-  * 1          ---->        2         ---->      1   3
-  *  \                     /
-  *   2                   1
-  */
-}
+// template <typename T>
+// static DNode<T> *
+// rotate_right_left(DNode<T> *const C) noexcept {
+//   #<{(|
+//   *   3                       3                    2
+//   *  /         L(1)          /        R(3)        / \
+//   * 1          ---->        2         ---->      1   3
+//   *  \                     /
+//   *   2                   1
+//   |)}>#
+// }
+//
+// template <typename T>
+// static DNode<T> *
+// rotate_left_right(DNode<T> *const C) noexcept {
+//   #<{(|
+//   * 1                   1                        2
+//   *  \       R(3)        \          L(1)        / \
+//   *   3      ---->        2         ---->      1   3
+//   *  /                     \
+//   * 2                       3
+//   |)}>#
+// }
 
 template <typename T>
-static DNode<T> *
-rotate_left_right(DNode<T> *const C) noexcept {
-  /*
-  * 1                   1                        2
-  *  \       R(3)        \          L(1)        / \
-  *   3      ---->        2         ---->      1   3
-  *  /                     \
-  * 2                       3
-  */
-}
-
-template <typename T>
-static void
+static std::size_t
 calc_parent_balance(const DNode<T> *child) noexcept {
   DNode<T> *parent = child->parent;
   if (parent) {
@@ -254,6 +305,7 @@ calc_parent_balance(const DNode<T> *child) noexcept {
       parent->balance++;
     }
   }
+  return parent ? parent->balance : 0;
 }
 
 template <typename T>
@@ -278,83 +330,84 @@ set(DNode<T> *const root, DNode<T> *&child) noexcept {
 // - If balance factor becomes -2 or +2 we need to repair
 template <typename T>
 static DNode<T> *
-retrace(DNode<T> *node) noexcept {
-  DNode<T> *root = nullptr;
-
+retrace(DNode<T> *it) noexcept {
+  DNode<T> *current = nullptr;
 Lstart:
-  if (node) {
-    root = node;
-    const std::int8_t b = balance(node);
+  if (it) {
+    current = it;
+    const std::int8_t b = balance(current);
+    printf("\t===============\n");
 
     // Left heavy
-    if (b < -1) {
-      if (balance(node->left) == 1) {
-        node->left = rotate_left(node->left);
+    if (b == -2) {
+      if (balance(current->left) == 1) {
+        current->left = rotate_left(current->left);
+        dump(current, "\t");
       }
 
-      set(node->parent, root) = rotate_right(node);
+      set(current->parent, current) = rotate_right(current);
     }
     // Right heavy
-    else if (b > 1) {
-      if (balance(node->right) == -1) {
-        node->right = rotate_right(node->right);
+    else if (b == 2) {
+      if (balance(current->right) == -1) {
+        current->right = rotate_right(current->right);
+        dump(current, "\t");
       }
 
-      set(node->parent, root) = rotate_left(node);
-    } else if (b == 0) {
-      // goto Learly;
+      set(current->parent, current) = rotate_left(current);
     }
 
-    calc_parent_balance(node);
-    node = node->parent;
+    if (calc_parent_balance(current) == 0) {
+
+      return nullptr;
+    }
+    dump(current->parent, "\t");
+
+    it = current->parent;
     goto Lstart;
   }
 
-  return root;
-
-Learly:
-  return nullptr;
+  return current;
 }
 
 template <typename T>
-void
-dump(DNode<T> *tree, std::string prefix = "", bool isTail = true,
-     const char *ctx = "") noexcept {
-  if (tree) {
-    char name[256] = {0};
-    auto val = std::string(*tree);
-    sprintf(name, "%s%s", ctx, val.c_str());
-
-    printf("%s%s%s\n", prefix.c_str(), (isTail ? "└── " : "├── "), name);
-
-    const char *ls = (isTail ? "    " : "│   ");
-    if (tree->right && tree->left) {
-      dump(tree->left, prefix + ls, false, "lt:");
-      dump(tree->right, prefix + ls, true, "gt:");
-    } else {
-      if (tree->left) {
-        dump(tree->left, prefix + ls, true, "lt:");
-      } else if (tree->right) {
-        dump(tree->right, prefix + ls, true, "gt:");
-      }
-    }
-  }
-}
-
-template <typename T>
-void
+std::uint32_t
 verify(DNode<T> *parent, DNode<T> *tree) noexcept {
+  std::uint32_t result = 0;
   if (tree) {
+    result += 1;
     assert(tree->parent == parent);
+
+    std::uint32_t left = 0;
     if (tree->left) {
       assert(tree->value > tree->left->value);
-      verify(tree, tree->left);
+      left += verify(tree, tree->left);
     }
+
+    std::uint32_t right = 0;
     if (tree->right) {
-      assert(tree->value < tree->left->value);
-      verify(tree, tree->right);
+      assert(tree->value < tree->right->value);
+      right += verify(tree, tree->right);
     }
+
+    std::int64_t bl = std::int64_t(right) - std::int64_t(left);
+    std::int8_t b = bl;
+    if (tree->balance != b) {
+      std::cout << "right: " << right << "|";
+      std::cout << "left: " << left << "|";
+      // std::cout << "bl: " << bl << "|";
+      std::cout << "b: " << int(b) << "|";
+      std::cout << "tree->balance: " << int(tree->balance) << "|";
+      std::cout << "\n";
+    }
+
+    assert(bl == b);
+    assert(tree->balance == b);
+
+    result += right;
+    result += left;
   }
+  return result;
 }
 
 } // namespace dtree
@@ -374,12 +427,18 @@ verify(DTree<T> &tree) noexcept {
 
 template <typename T, typename K>
 std::tuple<T *, bool>
-insert(DTree<T> &tree, K &&v) noexcept {
+insert(DTree<T> &tree, K &&ins) noexcept {
   /*Ordinary Binary Insert*/
+
+  auto set_root = [&](DNode<T> *n) {
+    if (n) {
+      tree.root = n;
+    }
+  };
 
   if (!tree.root) {
     /*Insert into empty tree*/
-    tree.root = new (std::nothrow) DNode<T>(std::forward<T>(v));
+    tree.root = new (std::nothrow) DNode<T>(std::forward<T>(ins));
     if (tree.root) {
       return std::make_tuple(&tree.root->value, true);
     }
@@ -390,29 +449,29 @@ insert(DTree<T> &tree, K &&v) noexcept {
   DNode<T> *it = tree.root;
 
 Lstart:
-  if (it->value < v) {
+  if (ins < it->value) {
     if (it->left) {
       it = it->left;
 
       goto Lstart;
     }
 
-    it->left = new (std::nothrow) DNode<T>(std::forward<T>(v), it);
+    it->left = new (std::nothrow) DNode<T>(std::forward<T>(ins), it);
     if (it->left) {
-      tree.root = impl::dtree::retrace(it->left);
+      set_root(impl::dtree::retrace(it->left));
 
       return std::make_tuple(&it->left->value, true);
     }
-  } else if (it->value > v) {
+  } else if (ins > it->value) {
     if (it->right) {
       it = it->right;
 
       goto Lstart;
     }
 
-    it->right = new (std::nothrow) DNode<T>(std::forward<T>(v), it);
+    it->right = new (std::nothrow) DNode<T>(std::forward<T>(ins), it);
     if (it->right) {
-      tree.root = impl::dtree::retrace(it->right);
+      set_root(impl::dtree::retrace(it->right));
 
       return std::make_tuple(&it->right->value, true);
     }

@@ -126,6 +126,7 @@ struct Data {
       return 0;
     }
     if (data > o.data) {
+      // TODO wrong?
       return -1;
     }
     return 1;
@@ -320,14 +321,15 @@ main() {
     sp::DTree<Data> tree;
     int i = 0;
     for (; i < 10; ++i) {
+      printf(".%d\n",i);
       Data ins(i);
       auto res = sp::insert(tree, ins);
       assert(std::get<1>(res));
       assert(std::get<0>(res) != nullptr);
-      printf("--------------\n.%d\n", i);
       dump(tree);
+      sp::verify(tree);
+      printf("--------------\n");
     }
-    sp::verify(tree);
   }
 
   // srand(0);
