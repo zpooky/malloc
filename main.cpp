@@ -276,7 +276,8 @@ main() {
 
 static void
 test_avl() {
-  { // test rotate_left
+  printf("#rotate left\n");
+  {
     auto a = new avl::Node<Data>(Data(1));
     a->balance = 2;
     auto b = a->right = new avl::Node<Data>(Data(2), a);
@@ -301,7 +302,8 @@ test_avl() {
     assert(reb->right->right == nullptr);
     assert(reb->right->balance == 0);
   }
-  { // test rotate_right
+  printf("#rotate right\n");
+  {
     auto c = new avl::Node<Data>(Data(3));
     c->balance = -2;
     auto b = c->left = new avl::Node<Data>(Data(2), c);
@@ -326,22 +328,108 @@ test_avl() {
     assert(reb->right->right == nullptr);
     assert(reb->right->balance == 0);
   }
+  printf("#Double right-left rotation\n");
   {
-      //
-  } //
+    auto c = new avl::Node<Data>(Data(3));
+    c->balance = -2;
+    auto b = c->left = new avl::Node<Data>(Data(1), c);
+    b->balance = 1;
+    auto a = b->right = new avl::Node<Data>(Data(2), b);
+    a->balance = 0;
 
+    c->left = avl::impl::avl::rotate_left(c->left);
+    auto reb = avl::impl::avl::rotate_right(c);
+    assert(reb->value == 2);
+    assert(reb->parent == nullptr);
+    assert(reb->balance == 0);
+
+    assert(reb->left->value == 1);
+    assert(reb->left->parent);
+    assert(reb->left->parent == a);
+    assert(reb->left->left == nullptr);
+    assert(reb->left->right == nullptr);
+    assert(reb->left->balance == 0);
+
+    assert(reb->right->value == 3);
+    assert(reb->right->parent);
+    assert(reb->right->parent == a);
+    assert(reb->right->left == nullptr);
+    assert(reb->right->right == nullptr);
+    assert(reb->right->balance == 0);
+  }
+  printf("#Double left-right rotation\n");
+  {
+    auto c = new avl::Node<Data>(Data(1));
+    c->balance = 2;
+    auto b = c->right = new avl::Node<Data>(Data(3), c);
+    b->balance = -1;
+    auto a = b->left = new avl::Node<Data>(Data(2), b);
+    a->balance = 0;
+
+    c->right = avl::impl::avl::rotate_right(c->right);
+    auto reb = avl::impl::avl::rotate_left(c);
+    assert(reb->value == 2);
+    assert(reb->parent == nullptr);
+    assert(reb->balance == 0);
+
+    assert(reb->left->value == 1);
+    assert(reb->left->parent);
+    assert(reb->left->parent == a);
+    assert(reb->left->left == nullptr);
+    assert(reb->left->right == nullptr);
+    assert(reb->left->balance == 0);
+
+    assert(reb->right->value == 3);
+    assert(reb->right->parent);
+    assert(reb->right->parent == a);
+    assert(reb->right->left == nullptr);
+    assert(reb->right->right == nullptr);
+    assert(reb->right->balance == 0);
+  }
+
+  /**/ {
+    // ├── gt:[v:2|b:2]
+    // │   └── gt:[v:3|b:1]
+    // │       └── gt:[v:4|b:0]
+
+    auto c = new avl::Node<Data>(Data(2));
+    c->balance = 2;
+    auto b = c->right = new avl::Node<Data>(Data(3), c);
+    b->balance = 1;
+    auto a = b->right = new avl::Node<Data>(Data(4), b);
+    a->balance = 0;
+    auto reb = avl::impl::avl::rotate_left(c);
+
+    assert(reb->value == 3);
+    assert(reb->parent == nullptr);
+    assert(reb->balance == 0);
+
+    assert(reb->left->value == 2);
+    assert(reb->left->parent);
+    assert(reb->left->parent == b);
+    assert(reb->left->left == nullptr);
+    assert(reb->left->right == nullptr);
+    assert(reb->left->balance == 0);
+
+    assert(reb->right->value == 4);
+    assert(reb->right->parent);
+    assert(reb->right->parent == b);
+    assert(reb->right->left == nullptr);
+    assert(reb->right->right == nullptr);
+    assert(reb->right->balance == 0);
+  }
   /*test increasing order*/ {
     avl::Tree<Data> tree;
     int i = 0;
     for (; i < 10; ++i) {
-      printf(".%d\n", i);
+      printf(".%d <- ", i);
       Data ins(i);
       auto res = avl::insert(tree, ins);
       assert(std::get<1>(res));
       assert(std::get<0>(res) != nullptr);
       dump(tree);
       avl::verify(tree);
-      printf("--------------\n");
+      printf("\n--------------\n");
     }
   }
   /*test 1a*/
@@ -452,13 +540,14 @@ test_avl() {
 
       std::shuffle(in, in + in_size, g);
       for (int i = 0; i < in_size; ++i) {
+        // printf(".%d <- ", i);
         auto res = avl::insert(tree, in[i]);
         assert(std::get<1>(res) == true);
         assert(std::get<0>(res) != nullptr);
+        // avl::dump(tree, "after|");
         avl::verify(tree);
       }
       counter++;
-      // avl::dump(tree);
     }
   }
 

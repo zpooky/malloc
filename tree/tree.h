@@ -1,6 +1,8 @@
 #ifndef SP_MALLOC_TREE_H
 #define SP_MALLOC_TREE_H
 
+#include <string>
+
 namespace sp {
 // template<
 //
@@ -31,12 +33,15 @@ struct Tree {
 
   ~Tree() {
     if (root) {
+      // TODO support non recursive delete
       delete root;
       root = nullptr;
     }
   }
 };
 
+// bfs_search
+// inorder_search
 template <typename T, typename F>
 typename Tree<T>::const_pointer
 search(const Tree<T> &tree, F predicate) {
@@ -47,12 +52,40 @@ search(const Tree<T> &tree, F predicate) {
 template <typename T>
 typename Tree<T>::const_pointer
 find(const Tree<T> &tree, typename Tree<T>::const_reference) {
+  auto *root = tree.root;
   // TODO
   return nullptr;
 }
 
 namespace impl {
-namespace tree {} // namespace tree
+namespace tree {
+
+template <typename T>
+void
+dump(T *tree, std::string prefix = "", bool isTail = true,
+     const char *ctx = "") noexcept {
+  if (tree) {
+    char name[256] = {0};
+    auto val = std::string(*tree);
+    sprintf(name, "%s%s", ctx, val.c_str());
+
+    printf("%s%s%s\n", prefix.c_str(), (isTail ? "└── " : "├── "), name);
+
+    const char *ls = (isTail ? "    " : "│   ");
+    if (tree->right && tree->left) {
+      dump(tree->right, prefix + ls, false, "gt:");
+      dump(tree->left, prefix + ls, true, "lt:");
+    } else {
+      if (tree->left) {
+        dump(tree->left, prefix + ls, true, "lt:");
+      } else if (tree->right) {
+        dump(tree->right, prefix + ls, true, "gt:");
+      }
+    }
+  }
+}
+
+} // namespace tree
 } // namesapce impl
 }
 #endif

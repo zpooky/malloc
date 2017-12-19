@@ -1,5 +1,5 @@
-#ifndef SP_MALLOC_AVL_H
-#define SP_MALLOC_AVL_H
+#ifndef SP_MALLOC_AVL_TREE_H
+#define SP_MALLOC_AVL_TREE_H
 
 #include "tree.h"
 #include <cassert>
@@ -87,27 +87,14 @@ direction(const Node<T> *const child) noexcept {
 
 template <typename T>
 void
-dump(Node<T> *tree, std::string prefix = "", bool isTail = true,
-     const char *ctx = "") noexcept {
-  if (tree) {
-    char name[256] = {0};
-    auto val = std::string(*tree);
-    sprintf(name, "%s%s", ctx, val.c_str());
-
-    printf("%s%s%s\n", prefix.c_str(), (isTail ? "└── " : "├── "), name);
-
-    const char *ls = (isTail ? "    " : "│   ");
-    if (tree->right && tree->left) {
-      dump(tree->right, prefix + ls, false, "gt:");
-      dump(tree->left, prefix + ls, true, "lt:");
-    } else {
-      if (tree->left) {
-        dump(tree->left, prefix + ls, true, "lt:");
-      } else if (tree->right) {
-        dump(tree->right, prefix + ls, true, "gt:");
-      }
-    }
+dump_root(Node<T> *tree, std::string prefix = "") noexcept {
+  Node<T> *root = tree;
+Lstart:
+  if (root->parent) {
+    root = root->parent;
+    goto Lstart;
   }
+  return sp::impl::tree::dump(root, prefix);
 }
 
 template <typename T>
@@ -120,6 +107,7 @@ template <typename T>
 static Node<T> *
 rotate_left(Node<T> *const A) noexcept {
   // printf("\trotate_left(%s)\n", std::string(*A).c_str());
+  // dump_root(A, "\t");
   /*
    * <_
    *   \
@@ -133,10 +121,9 @@ rotate_left(Node<T> *const A) noexcept {
    *  / \                       \
    * x1  C                       x1
    */
-  std::int8_t root_balance = A->balance;
   Node<T> *const A_parent = A->parent;
   Node<T> *const B = A->right;
-  Node<T> *const B_left = B->left;
+  Node<T> *const B_left = B ? B->left : nullptr; // nullptr
 
   //#Rotate
   A->parent = B;
@@ -146,8 +133,10 @@ rotate_left(Node<T> *const A) noexcept {
     B_left->parent = A;
   }
 
-  B->parent = A_parent;
-  B->left = A;
+  if (B) {
+    B->parent = A_parent;
+    B->left = A;
+  }
 
   // x =A
   // y = B
@@ -155,30 +144,24 @@ rotate_left(Node<T> *const A) noexcept {
   /*We do not rebalance C since its children has not been altered*/
 
   A->balance -= 1;
-  if (B->balance > 0) {
+  if (balance(B) > 0) {
     A->balance -= B->balance;
   }
-  B->balance -= 1;
-  if (A->balance < 0) {
-    B->balance -= -A->balance;
+  if (B) {
+    B->balance -= 1;
+    if (balance(A) < 0) {
+      B->balance -= -A->balance;
+    }
   }
 
-  // if (root_balance == 0) {
-  //   //?? since root balance is 0 we know all its children is the same??
-  //   A->balance = 1;
-  //   B->balance = -1;
-  // } else {
-  //   A->balance = 0;
-  //   B->balance = 0;
-  // }
-
-  return B;
+  return B ? B : A;
 }
 
 template <typename T>
 static Node<T> *
 rotate_right(Node<T> *const C) noexcept {
   // printf("\trotate_right(%s)\n", std::string(*C).c_str());
+  // dump_root(C, "\t");
   /*
   * _.
   *   \
@@ -192,10 +175,9 @@ rotate_right(Node<T> *const C) noexcept {
   *  / \                           /
   * A   x1                        x1
   */
-  std::int8_t root_balance = C->balance;
   Node<T> *const C_parent = C->parent;
   Node<T> *const B = C->left;
-  Node<T> *const B_right = B->right;
+  Node<T> *const B_right = B ? B->right : nullptr;
 
   //#Rotate
   C->parent = B;
@@ -205,130 +187,104 @@ rotate_right(Node<T> *const C) noexcept {
     B_right->parent = C;
   }
 
-  B->parent = C_parent;
-  B->right = C;
-
-  //#Update Balance
-  // if (root_balance == 0) {
-  //   B->balance = 1;
-  //   C->balance = -1;
-  // } else {
-  //   B->balance = 0;
-  //   C->balance = 0;
-  // }
+  if (B) {
+    B->parent = C_parent;
+    B->right = C;
+  }
 
   // x = C
   // y = B
   C->balance += 1;
-  if (B->balance < 0) {
+  if (balance(B) < 0) {
     C->balance += -B->balance;
   }
-  B->balance += 1;
-  if (C->balance > 0) {
-    B->balance += C->balance;
+
+  if (B) {
+    B->balance += 1;
+    if (balance(C) > 0) {
+      B->balance += C->balance;
+    }
   }
 
   return B;
 }
 
-// template <typename T>
-// static Node<T> *
-// rotate_right_left(Node<T> *const C) noexcept {
-//   #<{(|
-//   *   3                       3                    2
-//   *  /         L(1)          /        R(3)        / \
-//   * 1          ---->        2         ---->      1   3
-//   *  \                     /
-//   *   2                   1
-//   |)}>#
-// }
-//
-// template <typename T>
-// static Node<T> *
-// rotate_left_right(Node<T> *const C) noexcept {
-//   #<{(|
-//   * 1                   1                        2
-//   *  \       R(3)        \          L(1)        / \
-//   *   3      ---->        2         ---->      1   3
-//   *  /                     \
-//   * 2                       3
-//   |)}>#
-// }
-
 template <typename T>
 static std::size_t
-calc_parent_balance(const Node<T> *child) noexcept {
+calc_parent_balance(const Node<T> *const child) noexcept {
   Node<T> *parent = child->parent;
-  if (parent) {
-    Direction d = direction(child);
+  Direction d = direction(child);
 
-    if (d == Direction::LEFT) {
-      if (parent->right == nullptr) {
-        parent->balance--;
-      }
-    } else {
-      if (parent->left == nullptr) {
-        parent->balance++;
-      }
-    }
+  if (d == Direction::LEFT) {
+    parent->balance--;
+  } else {
+    parent->balance++;
   }
-  return parent ? parent->balance : 0;
+  return parent->balance;
 }
 
 template <typename T>
 static Node<T> *&
-set(Node<T> *const root, Node<T> *&child) noexcept {
+set(Node<T> *&child) noexcept {
   assert(child);
 
-  if (!root) {
+  Node<T> *const parent = child->parent;
+
+  if (!parent) {
     return child;
   }
 
-  if (root->left == child) {
-    return root->left;
+  if (parent->left == child) {
+    return parent->left;
   }
 
-  assert(root->right == child);
-  return root->right;
+  assert(parent->right == child);
+  return parent->right;
 }
 
 // - The retracing can stop if the balance factor becomes 0 implying that the
 //   height of that subtree remains unchanged.
-// - If balance factor becomes -1 or +2 continue retraceing
+// - If balance factor becomes -1 or +1 continue retraceing
 // - If balance factor becomes -2 or +2 we need to repair
 template <typename T>
 static Node<T> *
 retrace(Node<T> *it) noexcept {
+  // printf("%s\n", std::string(*it).c_str());
   Node<T> *current = nullptr;
 Lstart:
   if (it) {
     current = it;
-    const std::int8_t b = balance(current);
-    // printf("\t===============\n");
 
-    // Left heavy
-    if (b == -2) {
+    /* Left Heavy */
+    if (balance(current) == -2) {
       if (balance(current->left) == 1) {
         current->left = rotate_left(current->left);
-        // dump(current, "\t");
       }
 
-      set(current->parent, current) = rotate_right(current);
+      set(current) = rotate_right(current);
+
+      if (current->parent) {
+        return nullptr;
+      }
     }
-    // Right heavy
-    else if (b == 2) {
+    /* Right Heavy */
+    else if (balance(current) == 2) {
       if (balance(current->right) == -1) {
         current->right = rotate_right(current->right);
-        // dump(current, "\t");
       }
 
-      set(current->parent, current) = rotate_left(current);
+      set(current) = rotate_left(current);
+
+      if (current->parent) {
+        return nullptr;
+      }
     }
 
-    if (calc_parent_balance(current) == 0) {
-      // return nullptr;
+    if (current->parent) {
+      if (calc_parent_balance(current) == 0) {
+        return nullptr;
+      }
     }
-    // dump(current->parent, "\t");
 
     it = current->parent;
     goto Lstart;
@@ -358,20 +314,22 @@ verify(const Node<T> *parent, const Node<T> *tree) noexcept {
 
     result++;
 
-    // TODO make work
     std::int64_t bl = std::int64_t(right) - std::int64_t(left);
     std::int8_t b = bl;
-    // if (tree->balance != b) {
-    //   std::cout << "right: " << right << "|";
-    //   std::cout << "left: " << left << "|";
-    //   // std::cout << "bl: " << bl << "|";
-    //   std::cout << "b: " << int(b) << "|";
-    //   std::cout << "tree: " << std::string(*tree) << "|";
-    //   std::cout << "\n";
-    // }
+    if (tree->balance != b) {
+      std::cout << "right: " << right << "|";
+      std::cout << "left: " << left << "|";
+      // std::cout << "bl: " << bl << "|";
+      std::cout << "b: " << int(b) << "|";
+      std::cout << "tree: " << std::string(*tree) << "|";
+      std::cout << "\n";
+    }
 
-    // assert(bl == b);
-    // assert(tree->balance == b);
+    assert(bl == b);
+    assert(tree->balance == b);
+
+    assert(!(tree->balance > 1));
+    assert(!(tree->balance < -1));
 
     result += std::max(left, right);
   }
@@ -383,8 +341,8 @@ verify(const Node<T> *parent, const Node<T> *tree) noexcept {
 
 template <typename T>
 void
-dump(sp::Tree<avl::Node<T>> &tree) noexcept {
-  return impl::avl::dump(tree.root);
+dump(sp::Tree<avl::Node<T>> &tree, std::string prefix = "") noexcept {
+  return sp::impl::tree::dump(tree.root, prefix);
 }
 
 template <typename T>
