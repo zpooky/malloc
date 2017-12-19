@@ -10,6 +10,8 @@
 #include <iostream>
 #include <string> //debug
 
+// TODO noexcept operator
+
 namespace avl {
 template <typename T>
 struct Node {
@@ -40,6 +42,24 @@ struct Node {
     s.append(std::to_string(balance));
     s.append("]");
     return s;
+  }
+
+  template <typename O>
+  bool
+  operator<(const O &o) const noexcept {
+    return value < o;
+  }
+
+  template <typename O>
+  bool
+  operator>(const O &o) const noexcept {
+    return value > o;
+  }
+
+  template <typename O>
+  bool
+  operator==(const O &o) const noexcept {
+    return value == o;
   }
 
   ~Node() {
@@ -382,11 +402,11 @@ Lstart:
       goto Lstart;
     }
 
-    it->left = new (std::nothrow) Node<T>(std::forward<T>(ins), it);
+    auto res = it->left = new (std::nothrow) Node<T>(std::forward<T>(ins), it);
     if (it->left) {
       set_root(impl::avl::retrace(it->left));
 
-      return std::make_tuple(&it->left->value, true);
+      return std::make_tuple(&res->value, true);
     }
   } else if (ins > it->value) {
     if (it->right) {
@@ -395,11 +415,11 @@ Lstart:
       goto Lstart;
     }
 
-    it->right = new (std::nothrow) Node<T>(std::forward<T>(ins), it);
+    auto res = it->right = new (std::nothrow) Node<T>(std::forward<T>(ins), it);
     if (it->right) {
       set_root(impl::avl::retrace(it->right));
 
-      return std::make_tuple(&it->right->value, true);
+      return std::make_tuple(&res->value, true);
     }
   } else {
 

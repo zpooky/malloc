@@ -540,10 +540,21 @@ test_avl() {
 
       std::shuffle(in, in + in_size, g);
       for (int i = 0; i < in_size; ++i) {
+        for (int k = 0; k < i; ++k) {
+          assert(sp::find(tree, in[k]));
+        }
         // printf(".%d <- ", i);
         auto res = avl::insert(tree, in[i]);
+        int *const iptr = std::get<0>(res);
         assert(std::get<1>(res) == true);
-        assert(std::get<0>(res) != nullptr);
+        assert(iptr);
+        assert(*iptr == in[i]);
+
+        int *const fptr = sp::find(tree, in[i]);
+        assert(fptr);
+        assert(fptr == iptr);
+        assert(*fptr == *iptr);
+
         // avl::dump(tree, "after|");
         avl::verify(tree);
       }

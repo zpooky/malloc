@@ -1,6 +1,7 @@
 #ifndef SP_MALLOC_TREE_H
 #define SP_MALLOC_TREE_H
 
+#include <cassert>
 #include <string>
 
 namespace sp {
@@ -49,11 +50,23 @@ search(const Tree<T> &tree, F predicate) {
   return nullptr;
 }
 
-template <typename T>
+template <typename T, typename S>
 typename Tree<T>::const_pointer
-find(const Tree<T> &tree, typename Tree<T>::const_reference) {
+find(const Tree<T> &tree, const S &search) {
   auto *root = tree.root;
-  // TODO
+Lstart:
+  if (root) {
+    if (*root < search) {
+      root = root->right;
+      goto Lstart;
+    } else if (*root > search) {
+      root = root->left;
+      goto Lstart;
+    } else {
+      assert(*root == search);
+      return &root->value;
+    }
+  }
   return nullptr;
 }
 
