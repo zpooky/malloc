@@ -1,8 +1,11 @@
 #include "crc.h"
-#include "dyn_tree.h"
+#include "tree/avl.h"
+#include <algorithm>
+#include <random>
+// #include "dyn_tree.h"
 #include "global.h"
 #include "global_debug.h"
-#include "static_tree.h"
+#include "tree/static_tree.h"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -134,6 +137,9 @@ struct Data {
   }
 };
 
+static void
+test_avl();
+
 int
 main() {
   // TODO the size calculations gives level+1 capacity which is wrong
@@ -263,18 +269,22 @@ main() {
     Data d(1);
     insert(tree, d);
   }
-  //===================
-  //==DYN=TREE=========
-  //===================
+  test_avl();
+
+  return 0;
+}
+
+static void
+test_avl() {
   { // test rotate_left
-    auto a = new sp::DNode<Data>(Data(1));
+    auto a = new avl::Node<Data>(Data(1));
     a->balance = 2;
-    auto b = a->right = new sp::DNode<Data>(Data(2), a);
+    auto b = a->right = new avl::Node<Data>(Data(2), a);
     b->balance = 1;
-    auto c = b->right = new sp::DNode<Data>(Data(3), b);
+    auto c = b->right = new avl::Node<Data>(Data(3), b);
     c->balance = 0;
 
-    auto reb = sp::impl::dtree::rotate_left(a);
+    auto reb = avl::impl::avl::rotate_left(a);
     assert(reb->value == b->value);
     assert(reb->parent == nullptr);
     assert(reb->balance == 0);
@@ -292,14 +302,14 @@ main() {
     assert(reb->right->balance == 0);
   }
   { // test rotate_right
-    auto c = new sp::DNode<Data>(Data(3));
+    auto c = new avl::Node<Data>(Data(3));
     c->balance = -2;
-    auto b = c->left = new sp::DNode<Data>(Data(2), c);
+    auto b = c->left = new avl::Node<Data>(Data(2), c);
     b->balance = -1;
-    auto a = b->left = new sp::DNode<Data>(Data(1), b);
+    auto a = b->left = new avl::Node<Data>(Data(1), b);
     a->balance = 0;
 
-    auto reb = sp::impl::dtree::rotate_right(c);
+    auto reb = avl::impl::avl::rotate_right(c);
     assert(reb->value == b->value);
     assert(reb->parent == nullptr);
     assert(reb->balance == 0);
@@ -318,72 +328,139 @@ main() {
   }
   {
       //
-  } {
-    sp::DTree<Data> tree;
+  } //
+
+  /*test increasing order*/ {
+    avl::Tree<Data> tree;
     int i = 0;
     for (; i < 10; ++i) {
       printf(".%d\n", i);
       Data ins(i);
-      auto res = sp::insert(tree, ins);
+      auto res = avl::insert(tree, ins);
       assert(std::get<1>(res));
       assert(std::get<0>(res) != nullptr);
       dump(tree);
-      sp::verify(tree);
+      avl::verify(tree);
       printf("--------------\n");
     }
   }
+  /*test 1a*/
+  {
+    avl::Tree<int> tree;
+    {
+      avl::insert(tree, 20);
+      auto root = tree.root;
+      assert(root);
+      assert(root->value == 20);
+      assert(root->balance == 0);
 
-  // srand(0);
-  //
-  // while (true) {
-  //   printf("==============================\n");
-  //
-  //   std::vector<std::tuple<void *, std::size_t>> ptrs;
-  //   std::size_t alloc(0);
-  //
-  //   printf("free: %zu\n", debug::count_free(nullptr));
-  //
-  //   time("alloc", [&]() {
-  //     int i = 0;
-  //     while (i++ < 10000) {
-  //       std::size_t sz(((rand() % 100) + 1) * 4096);
-  //       // std::size_t sz(i * 4096);
-  //       // printf("%zu\n", sz);
-  //       void *ptr = global::alloc(sz);
-  //       assert(ptr);
-  //       alloc += sz;
-  //       ptrs.emplace_back(ptr, sz);
-  //     }
-  //   });
-  //   printf("total: %zu\n", alloc);
-  //   time("check_overlap", [&]() { //
-  //     check_overlap(ptrs);
-  //   });
-  //
-  //   printf("free: %zu\n", debug::count_free(nullptr));
-  //   // assert(debug::watch_free().size() == 0);
-  //
-  //   time("dealloc", [&]() {
-  //     for (auto &l : ptrs) {
-  //       //   printf("alloc: %zu\n", std::get<1>(l));
-  //       void *const ptr = std::get<0>(l);
-  //       std::size_t len = std::get<1>(l);
-  //       global::dealloc(ptr, len);
-  //     }
-  //   });
-  //   printf("free: %zu\n", debug::count_free(nullptr));
-  //
-  //   time("alloc2", [&]() {
-  //     int i = 0;
-  //     while (i++ < 10000) {
-  //       std::size_t sz(((rand() % 100) + 1) * 4096);
-  //       // std::size_t sz(i * 4096);
-  //       void *const ptr = global::alloc(sz);
-  //       global::dealloc(ptr, sz);
-  //     }
-  //   });
-  //   printf("free: %zu\n", debug::count_free(nullptr));
-  //   printf("done\n");
-  // }
-  return 0;
+      assert(root->right == nullptr);
+      assert(root->left == nullptr);
+    }
+
+    {
+      avl::insert(tree, 4);
+      auto root = tree.root;
+      assert(root);
+      assert(root->value == 20);
+      assert(root->balance == -1);
+
+      assert(root->right == nullptr);
+
+      assert(root->left);
+      assert(root->left->value == 4);
+      assert(root->left->balance == 0);
+      assert(root->left->left == nullptr);
+      assert(root->left->right == nullptr);
+    }
+
+    {
+      avl::insert(tree, 15);
+      auto root = tree.root;
+      assert(root);
+      assert(root->value == 15);
+      assert(root->balance == 0);
+
+      assert(root->right);
+      assert(root->right->value == 20);
+      assert(root->right->balance == 0);
+      assert(root->right->left == nullptr);
+      assert(root->right->right == nullptr);
+
+      assert(root->left);
+      assert(root->left->value == 4);
+      assert(root->left->balance == 0);
+      assert(root->left->left == nullptr);
+      assert(root->left->right == nullptr);
+    }
+  }
+
+  /*test 2a*/
+  /*test 3a*/
+  /*test 1b*/ {
+    avl::Tree<int> tree;
+    avl::insert(tree, 20);
+    {
+      avl::insert(tree, 8);
+      auto root = tree.root;
+      assert(root);
+      assert(root->value == 20);
+      assert(root->balance == -1);
+
+      assert(root->right == nullptr);
+
+      assert(root->left);
+      assert(root->left->value == 8);
+      assert(root->left->balance == 0);
+      assert(root->left->left == nullptr);
+      assert(root->left->right == nullptr);
+    }
+    {
+      avl::insert(tree, 4);
+      auto root = tree.root;
+      assert(root);
+      assert(root->value == 8);
+      assert(root->balance == 0);
+
+      assert(root->right);
+      assert(root->right->value == 20);
+      assert(root->right->balance == 0);
+      assert(root->right->left == nullptr);
+      assert(root->right->right == nullptr);
+
+      assert(root->left);
+      assert(root->left->value == 4);
+      assert(root->left->balance == 0);
+      assert(root->left->left == nullptr);
+      assert(root->left->right == nullptr);
+    }
+  }
+  /*test random*/ {
+    std::size_t counter = 0;
+    while (true) {
+      if (counter % 10000 == 0) {
+        printf("cnt: %zu\n", counter);
+      }
+      avl::Tree<int> tree;
+      constexpr int in_size = 1024;
+      int in[in_size];
+      for (int i = 0; i < in_size; ++i) {
+        in[i] = i;
+      }
+      std::random_device rd;
+      std::mt19937 g(rd());
+
+      std::shuffle(in, in + in_size, g);
+      for (int i = 0; i < in_size; ++i) {
+        auto res = avl::insert(tree, in[i]);
+        assert(std::get<1>(res) == true);
+        assert(std::get<0>(res) != nullptr);
+        avl::verify(tree);
+      }
+      counter++;
+      // avl::dump(tree);
+    }
+  }
+
+  printf("done\n");
 }

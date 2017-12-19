@@ -50,7 +50,7 @@ crc_reversed(const void *b, std::size_t length, crc_t polynomial) noexcept {
     //    End
     // The register now contains the remainder.
     for (std::size_t bit = 0; bit < bits; ++bit) {
-      // check if the bit being shifted is a 1
+      // check if the bit being shifted left is 1
       const bool popped = crc & high_bit == high_bit;
       crc = (crc << 1);
 
@@ -66,9 +66,10 @@ crc_reversed(const void *b, std::size_t length, crc_t polynomial) noexcept {
 template <typename crc_t>
 static crc_t
 crc(const void *b, std::size_t length, std::uint32_t polynomial) noexcept {
-  // This version of the algorithm is the faster implementation in hardware, by
-  // shifting bits right-to-left using a barrel shifter. As oposed to the
-  // reversed algorithm which is the faster software implementation.
+  // This version of the algorithm is the faster implementation in hardware,
+  // implemented by shifting bits right-to-left using a barrel shifter. As
+  // oposed to the reversed algorithm which is the faster software
+  // implementation.
 
   constexpr std::size_t bits = 8;
 
@@ -266,7 +267,7 @@ void
 crc_test() noexcept {
   crc32_test();
   crc32c_test();
-  dht_test();
+  // dht_test();
 }
 
 // void
