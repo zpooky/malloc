@@ -375,7 +375,6 @@ template <typename T, typename K>
 std::tuple<T *, bool>
 insert(sp::Tree<avl::Node<T>> &tree, K &&ins) noexcept {
   /*Ordinary Binary Insert*/
-
   auto set_root = [&](Node<T> *n) {
     if (n) {
       tree.root = n;
@@ -427,6 +426,37 @@ Lstart:
   }
 
   return std::make_tuple(nullptr, false);
+}
+
+/*
+ * Delete:
+ * - a node with no children: simply remove the node from the tree.
+ * - a node with one child: remove the node and replace it with its child.
+ * - a node with two children: call the node to be deleted D. Do not delete D.
+ *   Instead, choose either its in-order predecessor node or its in-order
+ *   successor node as replacement node E (s. figure). Copy the user values of E
+ *   to D.[note 2] If E does not have a child simply remove E from its previous
+ *   parent G. If E has a child, say F, it is a right child. Replace E with F at
+ *   E's parent.
+ */
+template <typename T, typename K>
+bool
+remove(sp::Tree<avl::Node<T>> &tree, const K &k) noexcept {
+  auto *root = tree.root;
+Lstart:
+  if (root) {
+    if (*root > k) {
+      root = root->left;
+      goto Lstart;
+    } else if (*root < k) {
+      root = root->right;
+      goto Lstart;
+    } else {
+      assert(*root == k);
+    }
+  }
+
+  return false;
 }
 
 } // namespace avl

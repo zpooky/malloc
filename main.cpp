@@ -541,7 +541,9 @@ test_avl() {
       std::shuffle(in, in + in_size, g);
       for (int i = 0; i < in_size; ++i) {
         for (int k = 0; k < i; ++k) {
-          assert(sp::find(tree, in[k]));
+          auto f = sp::find(tree, in[k]);
+          assert(f);
+          assert(*f == in[k]);
         }
         // printf(".%d <- ", i);
         auto res = avl::insert(tree, in[i]);
