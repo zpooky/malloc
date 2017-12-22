@@ -62,7 +62,7 @@ struct Node {
     return value == o;
   }
 
-  ~Node() {
+  ~Node() noexcept {
     // this is recursive
     if (left) {
       delete left;
@@ -119,7 +119,7 @@ Lstart:
 
 template <typename T>
 static std::int8_t
-balance(const Node<T> *const node) {
+balance(const Node<T> *const node) noexcept {
   return node ? node->balance : 0;
 }
 
@@ -357,7 +357,9 @@ verify(const Node<T> *parent, const Node<T> *tree) noexcept {
     }
 
     assert(bl == b);
-    assert(tree->balance == b);
+    if (tree->balance != b) {
+      assert(tree->balance == b);
+    }
 
     assert(!(tree->balance > 1));
     assert(!(tree->balance < -1));
@@ -365,6 +367,143 @@ verify(const Node<T> *parent, const Node<T> *tree) noexcept {
     result += std::max(left, right);
   }
   return result;
+}
+
+template <typename T>
+void
+exchange(Node<T> *node, Node<T> *n) noexcept {
+  auto *parent = node->parent;
+  if (parent) {
+    if (parent->left == node) {
+      parent->left = n;
+    }
+    if (parent->right != node) {
+      assert(parent->right == node);
+    }
+    parent->right = n;
+  }
+
+  if (n) {
+    n->parent = parent;
+
+    n->left = node->left;
+    if (n->left) {
+      n->left->parent = n;
+    }
+
+    n->right = node->right;
+    if (n->right) {
+      n->right->parent = n;
+    }
+  }
+}
+
+template <typename T>
+Node<T> *
+find_min(Node<T> *node) noexcept {
+  assert(node);
+
+Lstart:
+  if (node->left) {
+    node = node->left;
+    goto Lstart;
+  }
+  return node;
+}
+
+template <typename T, typename K>
+Node<T> *
+find_node(Node<T> *current, const K &k) noexcept {
+Lstart:
+  if (current) {
+    if (*current > k) {
+
+      current = current->left;
+      goto Lstart;
+    } else if (*current < k) {
+
+      current = current->right;
+      goto Lstart;
+    }
+    assert(*current == k);
+  }
+
+  return current;
+}
+
+/*
+ * Delete:
+ * - a node with no children: simply remove the node from the tree.
+ * - a node with one child: remove the node and replace it with its child.
+ * - a node with two children:
+ *   call the node to be deleted D.
+ *   Do not delete D. Instead, choose either its in-order predecessor node or
+ *   its in-order successor node as replacement node E (s. figure). Copy the
+ *   user values of E to D.[note 2] If E does not have a child simply remove E
+ *   from its previous parent G. If E has a child, say F, it is a right child.
+ *   Replace E with F at E's parent.
+ */
+
+template <typename T>
+void
+nop(Node<T> *) noexcept {
+}
+
+template <typename T>
+/*new root*/ Node<T> *
+remove(Node<T> *const current, void (*cleanup)(Node<T> *)) noexcept {
+  if (current->left && current->right) {
+
+    /*
+     * find the smallest value in the _right_ (greater) branch which will be
+     * the replacement for the removed node
+     */
+    Node<T> *const successor = find_min(current->right);
+    Node<T> *const new_root = remove(successor, nop);
+    exchange(current, successor);
+    cleanup(current);
+    /*     X
+     *    / \
+     * min   max
+     *    \
+     *    A
+     * take min and move it to current position
+     */
+    return new_root;
+  } else if (!current->left && !current->right) {
+
+    exchange(current, (Node<T> *)nullptr);
+    cleanup(current);
+    Node<T> *const parent = current->parent;
+    if (parent) {
+      parent->balance--;
+
+      return retrace(parent, [](Node<T> *child) { //
+        return remove_parent_balance(child);
+      });
+    }
+
+    // we removed the last node in the tree
+    return nullptr;
+  } else if (current->left) {
+
+    auto *const left = current->left;
+    exchange(current, left);
+    cleanup(current);
+
+    return retrace(left, [](Node<T> *child) { //
+      return remove_parent_balance(child);
+    });
+  } else if (/*current->right*/ true) {
+
+    auto *const right = current->right;
+    exchange(current, right);
+    cleanup(current);
+
+    return retrace(right, [](Node<T> *child) { //
+      return remove_parent_balance(child);
+    });
+  }
 }
 
 } // namespace avl
@@ -443,87 +582,30 @@ Lstart:
   return std::make_tuple(nullptr, false);
 }
 
-/*
- * Delete:
- * - a node with no children: simply remove the node from the tree.
- * - a node with one child: remove the node and replace it with its child.
- * - a node with two children:
- *   call the node to be deleted D.
- *   Do not delete D. Instead, choose either its in-order predecessor node or
- *   its in-order successor node as replacement node E (s. figure). Copy the
- *   user values of E to D.[note 2] If E does not have a child simply remove E
- *   from its previous parent G. If E has a child, say F, it is a right child.
- *   Replace E with F at E's parent.
- */
+template <typename T>
+static void
+clean(Node<T> *n) noexcept {
+  assert(n);
+  delete n;
+}
+
 template <typename T, typename K>
 bool
 remove(sp::Tree<avl::Node<T>> &tree, const K &k) noexcept {
-  auto exchange = [](Node<T> *node, Node<T> *n) {
-    auto *parent = node->parent;
-    if (parent) {
-      if (parent->left == node) {
-        parent->left = n;
-      }
-      assert(parent->right == node);
-      parent->right = n;
-    }
-  };
+  Node<T> *const node = impl::avl::find_node(tree.root, k);
+  if (node) {
+    // auto cleanup = [](Node<T> *n) {};
+    Node<T> *const new_root = impl::avl::remove(node, clean);
 
-  auto *current = tree.root;
-Lstart:
-  if (current) {
-    if (*current > k) {
-
-      current = current->left;
-      goto Lstart;
-    } else if (*current < k) {
-
-      current = current->right;
-      goto Lstart;
+    if (new_root) {
+      tree.root = new_root;
     } else {
-      assert(*current == k);
-      auto *const parent = current->parent;
-
-      if (current->left && current->right) {
-
-        // TODO
-      } else if (!current->left && !current->right) {
-
-        exchange(current, nullptr);
-        delete current;
-        if (parent) {
-          parent->balance--;
-          // TODO set_root
-          impl::avl::retrace(parent, [](Node<T> *child) {
-            return impl::avl::remove_parent_balance(child);
-          });
-        }
-      } else if (current->left) {
-
-        auto *const left = current->left;
-        left->parent = parent;
-        exchange(current, left);
-        delete current;
-        // TODO set_root
-        impl::avl::retrace(left, [](Node<T> *child) {
-          return impl::avl::remove_parent_balance(child);
-        });
-      } else if (current->right) {
-
-        auto *const right = current->right;
-        right->parent = parent;
-        exchange(current, right);
-        delete current;
-        // TODO set_root
-        impl::avl::retrace(right, [](Node<T> *child) {
-          return impl::avl::remove_parent_balance(child);
-        });
-      } else {
-        assert(false);
+      if (tree.root == node) {
+        tree.root = nullptr;
       }
-
-      return true;
     }
+
+    return true;
   }
 
   return false;
