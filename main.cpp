@@ -140,10 +140,21 @@ struct Data {
 static void
 test_avl();
 
+static void
+test_static_tree();
+
 int
 main() {
+  // sp::crc_test();
+  test_static_tree();
+  // test_avl();
+
+  return 0;
+}
+
+static void
+test_static_tree() {
   // TODO the size calculations gives level+1 capacity which is wrong
-  sp::crc_test();
   {
     constexpr std::size_t levels = 10;
     using Type = sp::static_tree<Data, levels>;
@@ -269,9 +280,35 @@ main() {
     Data d(1);
     insert(tree, d);
   }
-  test_avl();
-
-  return 0;
+  {
+    constexpr std::size_t levels = 9;
+    using Type = sp::static_tree<int, levels>;
+    Type tree;
+    int i = 0;
+    sp::in_order_for_each(tree, [&i](int &node) {
+      node = i++;
+      //
+    });
+    {
+      int cmp = 0;
+      sp::in_order_for_each(tree, [&cmp](int &node) {
+        assert(node == cmp);
+        cmp++;
+        //
+      });
+      assert(cmp == i);
+      assert(cmp == Type::capacity);
+      printf("cmp: %d\n", cmp);
+    }
+    for (int k = 0; k < i; ++k) {
+      int *r = sp::search(tree, k);
+      printf("k[%d] < i[%d]\n", k, i);
+      assert(r);
+      if (r) {
+        assert(*r == k);
+      }
+    }
+  }
 }
 
 static void

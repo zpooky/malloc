@@ -284,6 +284,17 @@ int
 cmp(const T &current, const Key &needle) noexcept {
   return current.cmp(needle);
 }
+template <>
+int
+cmp(const int &current, const int &needle) noexcept {
+  if (current > needle) {
+    return 1;
+  }
+  if (current < needle) {
+    return -1;
+  }
+  return 0;
+}
 
 } // namespace impl
 
@@ -405,7 +416,7 @@ insert(static_tree<SortedNode<T>, levels> &tree, const T &ins) {
 
   std::size_t level = 0;
   sp::relative_idx idx(0);
-// constexpr std::size_t capacity = static_tree<T, levels>::capacity;
+  // constexpr std::size_t capacity = static_tree<T, levels>::capacity;
 
 Lstart:
   if (level <= levels) {
