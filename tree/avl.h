@@ -63,7 +63,7 @@ struct Node {
   }
 
   ~Node() noexcept {
-    // this is recursive
+    // TODO this is recursive
     if (left) {
       delete left;
       left = nullptr;
@@ -77,6 +77,22 @@ struct Node {
 
 template <typename T>
 using Tree = sp::Tree<avl::Node<T>>;
+
+template <typename T>
+void
+dump(Tree<T> &tree, std::string prefix = "") noexcept;
+
+template <typename T>
+void
+verify(Tree<T> &tree) noexcept;
+
+template <typename T, typename K>
+std::tuple<T *, bool>
+insert(Tree<T> &, K &&) noexcept;
+
+template <typename T, typename K>
+bool
+remove(Tree<T> &, const K &) noexcept;
 
 namespace impl {
 namespace avl {
@@ -322,7 +338,7 @@ Lstart:
   }
 
   return current;
-}
+} // avl::impl::retrace()
 
 template <typename T>
 std::uint32_t
@@ -367,7 +383,7 @@ verify(const Node<T> *parent, const Node<T> *tree) noexcept {
     result += std::max(left, right);
   }
   return result;
-}
+} // avl::impl::verify
 
 template <typename T>
 void
@@ -396,40 +412,7 @@ exchange(Node<T> *node, Node<T> *n) noexcept {
       n->right->parent = n;
     }
   }
-}
-
-template <typename T>
-Node<T> *
-find_min(Node<T> *node) noexcept {
-  assert(node);
-
-Lstart:
-  if (node->left) {
-    node = node->left;
-    goto Lstart;
-  }
-  return node;
-}
-
-template <typename T, typename K>
-Node<T> *
-find_node(Node<T> *current, const K &k) noexcept {
-Lstart:
-  if (current) {
-    if (*current > k) {
-
-      current = current->left;
-      goto Lstart;
-    } else if (*current < k) {
-
-      current = current->right;
-      goto Lstart;
-    }
-    assert(*current == k);
-  }
-
-  return current;
-}
+} // avl::impl::exchange()
 
 /*
  * Delete:
@@ -447,18 +430,19 @@ Lstart:
 template <typename T>
 void
 nop(Node<T> *) noexcept {
-}
+} // avl::impl::nop()
 
 template <typename T>
 /*new root*/ Node<T> *
 remove(Node<T> *const current, void (*cleanup)(Node<T> *)) noexcept {
   if (current->left && current->right) {
+    // two children
 
     /*
      * find the smallest value in the _right_ (greater) branch which will be
      * the replacement for the removed node
      */
-    Node<T> *const successor = find_min(current->right);
+    Node<T> *const successor = sp::impl::tree::find_min(current->right);
     Node<T> *const new_root = remove(successor, nop);
     exchange(current, successor);
     cleanup(current);
@@ -471,6 +455,7 @@ remove(Node<T> *const current, void (*cleanup)(Node<T> *)) noexcept {
      */
     return new_root;
   } else if (!current->left && !current->right) {
+    // zero children
 
     exchange(current, (Node<T> *)nullptr);
     cleanup(current);
@@ -486,6 +471,7 @@ remove(Node<T> *const current, void (*cleanup)(Node<T> *)) noexcept {
     // we removed the last node in the tree
     return nullptr;
   } else if (current->left) {
+    // one child
 
     auto *const left = current->left;
     exchange(current, left);
@@ -495,6 +481,7 @@ remove(Node<T> *const current, void (*cleanup)(Node<T> *)) noexcept {
       return remove_parent_balance(child);
     });
   } else if (/*current->right*/ true) {
+    // one child
 
     auto *const right = current->right;
     exchange(current, right);
@@ -504,26 +491,26 @@ remove(Node<T> *const current, void (*cleanup)(Node<T> *)) noexcept {
       return remove_parent_balance(child);
     });
   }
-}
+} // avl::impl::remove()
 
 } // namespace avl
 } // namespace impl
 
 template <typename T>
 void
-dump(sp::Tree<avl::Node<T>> &tree, std::string prefix = "") noexcept {
+dump(Tree<T> &tree, std::string prefix) noexcept {
   return sp::impl::tree::dump(tree.root, prefix);
 }
 
 template <typename T>
 void
-verify(sp::Tree<avl::Node<T>> &tree) noexcept {
+verify(Tree<T> &tree) noexcept {
   impl::avl::verify((Node<T> *)nullptr, tree.root);
 }
 
 template <typename T, typename K>
 std::tuple<T *, bool>
-insert(sp::Tree<avl::Node<T>> &tree, K &&ins) noexcept {
+insert(Tree<T> &tree, K &&ins) noexcept {
   /*Ordinary Binary Insert*/
   auto set_root = [&tree](Node<T> *new_root) {
     if (new_root) {
@@ -541,6 +528,7 @@ insert(sp::Tree<avl::Node<T>> &tree, K &&ins) noexcept {
     return std::make_tuple(nullptr, false);
   }
 
+  // TODO share with bst
   Node<T> *it = tree.root;
 
 Lstart:
@@ -551,7 +539,7 @@ Lstart:
       goto Lstart;
     }
 
-    auto res = it->left = new (std::nothrow) Node<T>(std::forward<T>(ins), it);
+    auto res = it->left = new (std::nothrow) Node<T>(std::forward<K>(ins), it);
     if (it->left) {
       set_root(impl::avl::retrace(it->left, [](Node<T> *child) {
         return impl::avl::insert_parent_balance(child);
@@ -566,7 +554,7 @@ Lstart:
       goto Lstart;
     }
 
-    auto res = it->right = new (std::nothrow) Node<T>(std::forward<T>(ins), it);
+    auto res = it->right = new (std::nothrow) Node<T>(std::forward<K>(ins), it);
     if (it->right) {
       set_root(impl::avl::retrace(it->right, [](Node<T> *child) {
         return impl::avl::insert_parent_balance(child);
@@ -584,15 +572,15 @@ Lstart:
 
 template <typename T>
 static void
-clean(Node<T> *n) noexcept {
+clean(Node<T> *n) noexcept { // TODO move to impl
   assert(n);
   delete n;
 }
 
 template <typename T, typename K>
 bool
-remove(sp::Tree<avl::Node<T>> &tree, const K &k) noexcept {
-  Node<T> *const node = impl::avl::find_node(tree.root, k);
+remove(Tree<T> &tree, const K &k) noexcept {
+  Node<T> *const node = sp::impl::tree::find_node(tree.root, k);
   if (node) {
     // auto cleanup = [](Node<T> *n) {};
     Node<T> *const new_root = impl::avl::remove(node, clean);

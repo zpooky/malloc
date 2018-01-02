@@ -41,6 +41,52 @@ struct Tree {
   }
 };
 
+//===================================================
+namespace impl {
+namespace tree {
+/*
+ * Recursively search down in the left branch to find the minimum
+ * node in the tree.
+ */
+template <typename T>
+T *
+find_min(T *node) noexcept {
+  assert(node);
+
+Lstart:
+  if (node->left) {
+    node = node->left;
+    goto Lstart;
+  }
+  return node;
+} // tree::impl::find_min()
+
+/*
+ * Recursivly search in tree until matching node is found
+ */
+template <typename T, typename K>
+T *
+find_node(T *current, const K &k) noexcept {
+Lstart:
+  if (current) {
+    if (*current > k) {
+
+      current = current->left;
+      goto Lstart;
+    } else if (*current < k) {
+
+      current = current->right;
+      goto Lstart;
+    }
+    assert(*current == k);
+  }
+
+  return current;
+} // tree::impl::find_node()
+}
+}
+//===================================================
+
 // bfs_search
 // inorder_search
 template <typename T, typename F>

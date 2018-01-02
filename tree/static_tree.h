@@ -235,16 +235,16 @@ base(std::size_t l, sp::relative_idx old_idx) noexcept {
   return sp::absolute_idx(start + offset);
 }
 
-static sp::absolute_idx
-lookup(std::size_t new_lvl, sp::relative_idx old_idx, Direction dir) noexcept {
-
-  sp::absolute_idx idx = base(new_lvl, old_idx);
-  if (dir == Direction::RIGHT) {
-    idx = idx + 1;
-  }
-
-  return idx;
-}
+// static sp::absolute_idx
+// lookup(std::size_t new_lvl, sp::relative_idx old_idx, Direction dir) noexcept {
+//
+//   sp::absolute_idx idx = base(new_lvl, old_idx);
+//   if (dir == Direction::RIGHT) {
+//     idx = idx + 1;
+//   }
+//
+//   return idx;
+// }
 
 template <std::size_t CHILDREN = 2>
 static sp::relative_idx
