@@ -29,6 +29,18 @@ struct Node {
     return s;
   }
 
+  ~Node() noexcept {
+    // TODO this is recursive
+    if (left) {
+      delete left;
+      left = nullptr;
+    }
+    if (right) {
+      delete right;
+      right = nullptr;
+    }
+  }
+
   template <typename O>
   bool
   operator<(const O &o) const noexcept {
@@ -78,17 +90,25 @@ namespace bst {
 
 template <typename T>
 bool
-verify(Node<T> *tree) noexcept {
+verify(Node<T> *parent, Node<T> *tree) noexcept {
   if (tree) {
-    if (!verify(tree->left)) {
+    if (!verify(tree, tree->left)) {
+      printf("left-");
       return false;
     }
-    if (!verify(tree->right)) {
+    if (!verify(tree, tree->right)) {
+      printf("right-");
       return false;
     }
+
+    if (tree->parent != parent) {
+      return false;
+    }
+
     auto *left = tree->left;
     if (left) {
       if (!(tree->value > left->value)) {
+        printf("left-");
         return false;
       }
     }
@@ -96,6 +116,7 @@ verify(Node<T> *tree) noexcept {
     auto *right = tree->right;
     if (right) {
       if (!(tree->value < right->value)) {
+        printf("right-");
         return false;
       }
     }
@@ -103,10 +124,54 @@ verify(Node<T> *tree) noexcept {
   return true;
 } // impl::bst::verify()
 
+/*
+ * Unlinks from and replaces it with to
+ */
+// template <typename T>
+// void
+// replace(Node<T> *from, Node<T> *to) noexcept {
+//   auto parent_child_link = [](Node<T> *subject, Node<T> *nev) {
+//     // update parent -> child
+//     Node<T> *const parent = subject->parent;
+//     if (parent) {
+//       if (parent->left == subject) {
+//         parent->left = nev;
+//       } else {
+//         assert(parent->right == subject);
+//         parent->right = nev;
+//       }
+//     }
+//   };
+//
+//   Node<T> *const parent = from->parent;
+//   parent_child_link(from, to);
+//   assert(from->parent == parent);
+//
+//   if (to) {
+//     parent_child_link(#<{(|from|)}># to, #<{(|to|)}># nullptr);
+//     to->parent = parent;
+//   }
+//   from->parent = nullptr;
+// } // impl::bst::replace()
+
 template <typename T>
-void
-exchange(Node<T> *from, Node<T> *to) noexcept {
-  auto update_parent_to_child = [](Node<T> *subject, Node<T> *nev) {
+static bool
+doubly_linked(Node<T> *n) noexcept {
+  if (n) {
+    bool l = n->left != nullptr ? n == n->left->parent : true;
+    bool r = n->right != nullptr ? n == n->right->parent : true;
+
+    return l && r;
+  }
+  return true;
+}
+
+template <typename T>
+Node<T> *
+remove(Node<T> *current) noexcept {
+  assert(current);
+  auto parent_child_link = [](Node<T> *subject, Node<T> *nev) {
+    // update parent -> child
     Node<T> *const parent = subject->parent;
     if (parent) {
       if (parent->left == subject) {
@@ -118,61 +183,79 @@ exchange(Node<T> *from, Node<T> *to) noexcept {
     }
   };
 
-  update_parent_to_child(from, to);
-  if (to) {
-    update_parent_to_child(to, nullptr);
-    to->parent = parent;
+  assert(doubly_linked(current));
 
-    to->left = from->left;
-    if (to->left) {
-      to->left->parent = to;
-    }
-
-    to->right = from->right;
-    if (to->right) {
-      to->right->parent = to;
-    }
-  } else {
-    assert(!from->left);
-    assert(!from->right);
-  }
-} // impl::bst::exchange()
-
-template <typename T>
-Node<T> *
-remove(Node<T> *current) noexcept {
   if (current->left && current->right) {
     // two children
+
+    Node<T> *const parent = current->parent;
+    // Node<T> *const left = current->left;
+    // Node<T> *const right = current->right;
+
     // replace current with the smallest right child
-
     Node<T> *const successor = sp::impl::tree::find_min(current->right);
-    remove(successor);
+    {
+      remove(successor);
 
-    exchange(current, successor);
+      parent_child_link(current, successor);
+      successor->parent = parent;
+      successor->left = current->left;
+      successor->left->parent = successor;
+
+      if (current->right) {
+        successor->right = current->right;
+        successor->right->parent = successor;
+      }
+
+      assert(doubly_linked(successor));
+    }
+
+    current->parent = nullptr;
+    current->left = nullptr;
+    current->right = nullptr;
 
     return successor->parent ? nullptr : successor;
   } else if (!current->left && !current->right) {
     // zero children
 
-    exchange(current, (Node<T> *)nullptr);
+    parent_child_link(current, (Node<T> *)nullptr);
+    assert(doubly_linked(current->parent)); // x
+    current->parent = nullptr;
 
     return nullptr;
   } else if (current->left) {
     // one child
+
+    Node<T> *const parent = current->parent;
+
     auto *const left = current->left;
-    exchange(current, left);
+    parent_child_link(current, left);
+    left->parent = parent;
+    assert(doubly_linked(parent)); // x
+
+    current->parent = nullptr;
+    current->left = nullptr;
 
     return left->parent ? nullptr : left;
-  } else if (/*current->right*/ true) {
-    // one child
-    auto *const right = current->right;
-    exchange(current, right);
-
-    return right->parent ? nullptr : right;
   }
+  assert(current->right);
+  // one child
+
+  Node<T> *const parent = current->parent;
+
+  auto *const right = current->right;
+  parent_child_link(current, right);
+  right->parent = parent;
+  assert(doubly_linked(parent)); // x
+
+  current->parent = nullptr;
+  current->right = nullptr;
+
+  return right->parent ? nullptr : right;
 } // impl::bst::remove()
-}
-}
+
+} // namespace bst
+} // namespace impl
 //===================================================
 
 template <typename T>
@@ -184,7 +267,7 @@ dump(Tree<T> &tree, std::string prefix) noexcept {
 template <typename T>
 bool
 verify(Tree<T> &tree) noexcept {
-  return impl::bst::verify(tree.root);
+  return impl::bst::verify((Node<T> *)nullptr, tree.root);
 } // bst::verify()
 
 template <typename T, typename K>
@@ -245,10 +328,7 @@ remove(Tree<T> &tree, const K &k) noexcept {
       tree.root = new_root;
     } else {
       if (tree.root == node) {
-        assert(node->parent == nullptr);
         tree.root = nullptr;
-      } else {
-        assert(node->parent != nullptr);
       }
     }
     delete (node);

@@ -656,6 +656,24 @@ test_avl() {
   }
 }
 
+template <class Tree_t, typename T, std::size_t in_size>
+static void
+find_stuff(Tree_t &tree, std::size_t deleted, T (&in)[in_size]) {
+  for (int k = 0; k < in_size; ++k) {
+    auto *f = sp::find(tree, in[k]);
+    if (k < deleted) {
+      assert(f == nullptr);
+    } else {
+      if (!f) {
+        printf("%p = sp::find(tree, %d)\n", f, in[k]);
+        dump(tree, "find|");
+      }
+      assert(f);
+      assert(*f == in[k]);
+    }
+  }
+}
+
 template <template <typename> class Tree_t>
 static void
 test_tree() {
@@ -665,7 +683,7 @@ test_tree() {
       printf("cnt: %zu\n", counter);
     }
     Tree_t<int> tree;
-    constexpr int in_size = 10;
+    constexpr int in_size = 1000;
     int in[in_size];
     for (int i = 0; i < in_size; ++i) {
       in[i] = i;
@@ -701,24 +719,22 @@ test_tree() {
 
     std::shuffle(in, in + in_size, g);
     for (int i = 0; i < in_size; ++i) {
-      for (int k = 0; k < in_size; ++k) {
-        auto f = sp::find(tree, in[k]);
-        // printf("%p = sp::find(tree, %d)\n", f, in[k]);
-        if (k < i) {
-          assert(f == nullptr);
-        } else {
-          assert(f);
-          assert(*f == in[k]);
-        }
-      }
+      find_stuff(tree, i, in);
 
+      // dump(tree, "before|");
       bool rb = remove(tree, in[i]);
-      // printf("%d = remove(tree,%d)\n", rb, in[i]);
+      // printf("%s = remove(tree,%d)\n", rb ? "true" : "false", in[i]);
       assert(rb);
       if (!verify(tree)) {
+        printf("\n");
         dump(tree, "rem|");
         assert(false);
-      }
+      } 
+      // else {
+      //   dump(tree, "rem|");
+      // }
+
+      find_stuff(tree, i + 1, in);
     }
     counter++;
   }
