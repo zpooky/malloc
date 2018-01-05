@@ -236,7 +236,8 @@ base(std::size_t l, sp::relative_idx old_idx) noexcept {
 }
 
 // static sp::absolute_idx
-// lookup(std::size_t new_lvl, sp::relative_idx old_idx, Direction dir) noexcept {
+// lookup(std::size_t new_lvl, sp::relative_idx old_idx, Direction dir) noexcept
+// {
 //
 //   sp::absolute_idx idx = base(new_lvl, old_idx);
 //   if (dir == Direction::RIGHT) {
@@ -254,6 +255,9 @@ lookup_relative(sp::relative_idx old_idx, Direction dir) noexcept {
   if (dir == Direction::RIGHT) {
     idx = idx + 1;
   }
+  // printf("lookup_relative(old_idx[%zu], %s): %zu\n", //
+  //        std::size_t(old_idx), dir == Direction::RIGHT ? "right" : "left",
+  //        std::size_t(idx));
 
   return idx;
 }
@@ -284,16 +288,18 @@ int
 cmp(const T &current, const Key &needle) noexcept {
   return current.cmp(needle);
 }
+
 template <>
 int
-cmp(const int &current, const int &needle) noexcept {
-  if (current > needle) {
-    return 1;
+cmp(const int &data, const int &o) noexcept {
+  if (data == o) {
+    return 0;
   }
-  if (current < needle) {
+  if (data > o) {
+    // TODO wrong?
     return -1;
   }
-  return 0;
+  return 1;
 }
 
 } // namespace impl
@@ -416,7 +422,7 @@ insert(static_tree<SortedNode<T>, levels> &tree, const T &ins) {
 
   std::size_t level = 0;
   sp::relative_idx idx(0);
-  // constexpr std::size_t capacity = static_tree<T, levels>::capacity;
+// constexpr std::size_t capacity = static_tree<T, levels>::capacity;
 
 Lstart:
   if (level <= levels) {

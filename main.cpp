@@ -1,5 +1,9 @@
 #include "crc.h"
+
 #include "tree/avl.h"
+#include "tree/avl_insert.h"
+#include "tree/avl_remove.h"
+
 #include <algorithm>
 #include <random>
 // #include "dyn_tree.h"
@@ -92,13 +96,14 @@ pmath(T *v, ptrdiff_t diff) {
 //
 //
 struct Data {
+  using T = int;
   bool present;
-  int data;
+  T data;
   Data()
       : present(false)
       , data(0) {
   }
-  explicit Data(int d)
+  explicit Data(T d)
       : present(true)
       , data(d) {
   }
@@ -107,35 +112,62 @@ struct Data {
     return present;
   }
 
-  operator int() const noexcept {
+  Data &
+  operator=(const T &o) noexcept {
+    present = true;
+    data = o;
+    return *this;
+  }
+
+  operator T() const noexcept {
     return data;
   }
 
   bool
+  operator==(const T &o) const noexcept {
+    return data == o;
+  }
+
+  bool
   operator==(const Data &o) const noexcept {
-    return data == o.data;
+    return operator==(o.data);
+  }
+
+  bool
+  operator>(const T &o) const noexcept {
+    return data > o;
   }
 
   bool
   operator>(const Data &o) const noexcept {
-    return data > o.data;
+    return operator>(o.data);
+  }
+
+  bool
+  operator<(const T &o) const noexcept {
+    return data < o;
   }
 
   bool
   operator<(const Data &o) const noexcept {
-    return data < o.data;
+    return operator<(o.data);
   }
 
   int
-  cmp(const Data &o) const noexcept {
-    if (data == o.data) {
+  cmp(const int &o) const noexcept {
+    if (data == o) {
       return 0;
     }
-    if (data > o.data) {
+    if (data > o) {
       // TODO wrong?
       return -1;
     }
     return 1;
+  }
+
+  int
+  cmp(const Data &o) const noexcept {
+    return cmp(o.data);
   }
 };
 
@@ -153,9 +185,9 @@ int
 main() {
   // sp::crc_test();
   // test_static_tree();
-  test_avl();
+  test_avl();//TODO
   // test_tree<bst::Tree>();
-  test_tree<avl::Tree>();
+  // test_tree<avl::Tree>();
 
   return 0;
 }
@@ -163,7 +195,7 @@ main() {
 static void
 test_static_tree() {
   // TODO the size calculations gives level+1 capacity which is wrong
-  {
+  /*insert & search*/ {
     constexpr std::size_t levels = 10;
     using Type = sp::static_tree<Data, levels>;
     static_assert(Type::levels == levels, "");
@@ -246,6 +278,57 @@ test_static_tree() {
     printf("--------\n");
   }
   {
+    printf("in_order\n");
+    constexpr std::size_t levels = 2;
+    using Type = sp::static_tree<Data, levels>;
+    {
+      Type tree;
+      sp::insert(tree, Data(3));
+
+      sp::insert(tree, Data(1));
+      sp::insert(tree, Data(2));
+      sp::insert(tree, Data(0));
+
+      sp::insert(tree, Data(5));
+      sp::insert(tree, Data(4));
+      sp::insert(tree, Data(6));
+
+      printf("insert: ");
+      for (std::size_t i = 0; i < Type::capacity; ++i) {
+        printf("%d,", tree.storagex[i].data);
+      }
+      printf("\n");
+      for (std::size_t i = 0; i < Type::capacity; ++i) {
+        assert(sp::search(tree, i));
+      }
+    }
+    {
+      Type tree;
+      int i = 0;
+      sp::in_order_for_each(tree, [&i](Data &d) {
+        assert(!bool(d));
+        printf("in_order(%d)", i);
+        printf("in_order(%d)", d.data);
+        d = Data(i);
+        printf("in_order(%d)\n", d.data);
+        assert(bool(d));
+        ++i;
+      });
+      // printf("inserted[%d],capacity[%zu]\n", i, Type::capacity);
+      assert(i == Type::capacity);
+
+      printf("in_order: ");
+      for (std::size_t i = 0; i < Type::capacity; ++i) {
+        printf("%d,", tree.storagex[i].data);
+      }
+      printf("\n");
+      for (std::size_t i = 0; i < Type::capacity; ++i) {
+        assert(sp::search(tree, i));
+      }
+    }
+    printf("--------\n");
+  }
+  {
     constexpr std::size_t levels = 9;
     using Type = sp::static_tree<Data, levels>;
     static_assert(Type::levels == levels, "");
@@ -289,27 +372,33 @@ test_static_tree() {
     insert(tree, d);
   }
   {
-    constexpr std::size_t levels = 9;
-    using Type = sp::static_tree<int, levels>;
+    constexpr std::size_t levels = 2;
+    using Type = sp::static_tree<Data, levels>;
     Type tree;
     int i = 0;
-    sp::in_order_for_each(tree, [&i](int &node) {
+    sp::in_order_for_each(tree, [&i](auto &node) {
       node = i++;
       //
     });
     {
       int cmp = 0;
-      sp::in_order_for_each(tree, [&cmp](int &node) {
+      sp::in_order_for_each(tree, [&cmp](auto node) {
         assert(node == cmp);
         cmp++;
-        //
       });
       assert(cmp == i);
       assert(cmp == Type::capacity);
       printf("cmp: %d\n", cmp);
     }
-    for (int k = 0; k < i; ++k) {
-      int *r = sp::search(tree, k);
+    {
+      printf("in_order: ");
+      for (std::size_t i = 0; i < Type::capacity; ++i) {
+        printf("%d,", tree.storagex[i]);
+      }
+      printf("\n");
+    }
+    for (int k = 0; k < Type::capacity; ++k) {
+      auto *r = sp::search(tree, k);
       printf("k[%d] < i[%d]\n", k, i);
       assert(r);
       if (r) {
@@ -594,7 +683,7 @@ test_avl() {
   //   }
   // }
   {
-    for (int i = 5; i < 20; ++i) {
+    for (int i = 0; i < 20; ++i) {
       printf("##remove all[%d]\n", i);
       avl::Tree<int> tree;
       for (int d = 0; d <= i; ++d) {
@@ -616,11 +705,11 @@ test_avl() {
         auto res = avl::remove(tree, d);
         /*assert*/ {
           assert(res);
-          assert(sp::find(tree, d) == nullptr);
           if (!avl::verify(tree)) {
             avl::dump(tree, "\033[91mremove\033[0m|");
             assert(false);
           }
+          assert(sp::find(tree, d) == nullptr);
         }
       }
       assert(tree.root == nullptr);
@@ -699,15 +788,16 @@ template <template <typename> class Tree_t>
 static void
 test_tree() {
   std::size_t counter = 0;
-  std::random_device rd;
-  std::mt19937 g(rd());
+  // std::random_device rd;
+  // std::mt19937 g(rd());
+  std::mt19937 g(0);
 
   while (true) {
     if (counter % 10 == 0) {
       printf("cnt: %zu\n", counter);
     }
     Tree_t<int> tree;
-    constexpr int in_size = 1000;
+    constexpr int in_size = 10;
     int in[in_size];
     for (int i = 0; i < in_size; ++i) {
       in[i] = i;
