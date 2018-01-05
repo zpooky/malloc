@@ -83,7 +83,7 @@ void
 dump(Tree<T> &tree, std::string prefix = "") noexcept;
 
 template <typename T>
-void
+bool
 verify(Tree<T> &tree) noexcept;
 
 template <typename T, typename K>
@@ -341,22 +341,34 @@ Lstart:
 } // avl::impl::retrace()
 
 template <typename T>
-std::uint32_t
-verify(const Node<T> *parent, const Node<T> *tree) noexcept {
-  std::uint32_t result = 0;
+
+bool
+verify(const Node<T> *parent, const Node<T> *tree,
+       std::uint32_t &result) noexcept {
+  result = 0;
   if (tree) {
-    assert(tree->parent == parent);
+    if (tree->parent != parent) {
+      return false;
+    }
 
     std::uint32_t left = 0;
     if (tree->left) {
-      assert(tree->value > tree->left->value);
-      left = verify(tree, tree->left);
+      if (!(tree->value > tree->left->value)) {
+        return false;
+      }
+      if (!verify(tree, tree->left, left)) {
+        return false;
+      }
     }
 
     std::uint32_t right = 0;
     if (tree->right) {
-      assert(tree->value < tree->right->value);
-      right = verify(tree, tree->right);
+      if (!(tree->value < tree->right->value)) {
+        return false;
+      }
+      if (!verify(tree, tree->right, right)) {
+        return false;
+      }
     }
 
     result++;
@@ -374,15 +386,19 @@ verify(const Node<T> *parent, const Node<T> *tree) noexcept {
 
     assert(bl == b);
     if (tree->balance != b) {
-      assert(tree->balance == b);
+      return false;
     }
 
-    assert(!(tree->balance > 1));
-    assert(!(tree->balance < -1));
+    if ((tree->balance > 1)) {
+      return false;
+    }
+    if ((tree->balance < -1)) {
+      return false;
+    }
 
     result += std::max(left, right);
   }
-  return result;
+  return true;
 } // avl::impl::verify
 
 template <typename T>
@@ -428,69 +444,187 @@ exchange(Node<T> *node, Node<T> *n) noexcept {
  */
 
 template <typename T>
+static bool
+verify(Node<T> *const tree) {
+  if (!tree) {
+    return true;
+  }
+
+  std::uint32_t balance = 0;
+  return verify(tree->parent, tree, balance);
+}
+
+template <typename T>
+static bool
+verify_root(Node<T> *const tree) {
+  Node<T> *root = tree;
+Lstart:
+  if (root->parent) {
+    root = root->parent;
+    goto Lstart;
+  }
+
+  std::uint32_t balance = 0;
+  return verify((Node<T> *)nullptr, root, balance);
+}
+
+template <typename T>
 void
-nop(Node<T> *) noexcept {
+nop(Node<T> *node) noexcept {
+  node->parent = nullptr;
+  node->left = nullptr;
+  node->right = nullptr;
 } // avl::impl::nop()
 
 template <typename T>
 /*new root*/ Node<T> *
 remove(Node<T> *const current, void (*cleanup)(Node<T> *)) noexcept {
+  assert(current);
+  auto parent_child_link = [](Node<T> *subject, Node<T> *nev) {
+    // update parent -> child
+    Node<T> *const parent = subject->parent;
+    if (parent) {
+      if (parent->left == subject) {
+        parent->left = nev;
+      } else {
+        assert(parent->right == subject);
+        parent->right = nev;
+      }
+    }
+  };
+
+  // auto has_sibling = [](Node<T> *n) {
+  //   auto *parent = n->parent;
+  //   std::size_t children = 0;
+  //   if (parent) {
+  //     assert(parent->left == n || parent->right == n);
+  //     if (parent->left)
+  //       children++;
+  //     if (parent->right)
+  //       children++;
+  //     assert(children > 0);
+  //   }
+  //   return children == 2;
+  // };
+  //
+  auto parent_direction = [](Node<T> *n) {
+    if (n->parent) {
+      return direction(n);
+    }
+    return Direction::RIGHT;
+  };
+
+  // TODO update balance factor when replaceing current(the new should have the
+  // current balance since we only replace without changing balance)
+
+  printf("remove(%d)", current->value);
+  assert(sp::impl::tree::doubly_linked(current));
   if (current->left && current->right) {
+    printf(":2->");
     // two children
 
     /*
      * find the smallest value in the _right_ (greater) branch which will be
-     * the replacement for the removed node
+     * removed and inserted in the current position.
+     * Since we removed a node from the right branch we have to rebalance the
+     * tree, but beacuse we only swap out current with the removed node we do
+     * not change the balance of the second step.
      */
     Node<T> *const successor = sp::impl::tree::find_min(current->right);
+    assert(sp::impl::tree::doubly_linked(successor));
     Node<T> *const new_root = remove(successor, nop);
-    exchange(current, successor);
+    dump_root(current, "lr");
+    // assert(verify_root(current));
+    {
+      /*
+       * remove might run a retrace meaning that we can not assume that current
+       * have left and right pointers
+       */
+      parent_child_link(current, successor);
+      successor->parent = current->parent;
+      if (current->left) {
+        successor->left = current->left;
+        successor->left->parent = successor;
+      }
+
+      if (current->right) {
+        successor->right = current->right;
+        successor->right->parent = successor;
+      }
+      successor->balance = current->balance;
+
+      assert(sp::impl::tree::doubly_linked(successor));
+    }
     cleanup(current);
     /*     X
      *    / \
      * min   max
-     *    \
-     *    A
-     * take min and move it to current position
+     *      /
+     *     min in the max branch
      */
     return new_root;
   } else if (!current->left && !current->right) {
+    printf(":0\n");
     // zero children
 
-    exchange(current, (Node<T> *)nullptr);
-    cleanup(current);
     Node<T> *const parent = current->parent;
+    Direction d = parent_direction(current);
+    assert(verify(parent));
+    {
+      parent_child_link(current, (Node<T> *)nullptr);
+      assert(sp::impl::tree::doubly_linked(current->parent));
+    }
+    cleanup(current);
+
     if (parent) {
-      parent->balance--;
+      if (d == Direction::RIGHT) {
+        parent->balance--;
+      } else {
+        parent->balance++;
+      }
 
       return retrace(parent, [](Node<T> *child) { //
         return remove_parent_balance(child);
       });
     }
 
-    // we removed the last node in the tree
+    // We just removed the last node in the tree
     return nullptr;
   } else if (current->left) {
+    printf(":left\n");
     // one child
 
     auto *const left = current->left;
-    exchange(current, left);
+    {
+      parent_child_link(current, left);
+      Node<T> *const parent = current->parent;
+      left->parent = parent;
+
+      assert(sp::impl::tree::doubly_linked(parent));
+    }
     cleanup(current);
 
     return retrace(left, [](Node<T> *child) { //
       return remove_parent_balance(child);
     });
-  } else if (/*current->right*/ true) {
-    // one child
-
-    auto *const right = current->right;
-    exchange(current, right);
-    cleanup(current);
-
-    return retrace(right, [](Node<T> *child) { //
-      return remove_parent_balance(child);
-    });
   }
+  assert(current->right);
+  printf(":right\n");
+  // one child
+
+  auto *const right = current->right;
+  {
+    parent_child_link(current, right);
+    Node<T> *const parent = current->parent;
+    right->parent = parent;
+
+    assert(sp::impl::tree::doubly_linked(parent));
+  }
+  cleanup(current);
+
+  return retrace(right, [](Node<T> *child) { //
+    return remove_parent_balance(child);
+  });
 } // avl::impl::remove()
 
 } // namespace avl
@@ -503,9 +637,10 @@ dump(Tree<T> &tree, std::string prefix) noexcept {
 }
 
 template <typename T>
-void
+bool
 verify(Tree<T> &tree) noexcept {
-  impl::avl::verify((Node<T> *)nullptr, tree.root);
+  std::uint32_t balance = 0;
+  return impl::avl::verify((Node<T> *)nullptr, tree.root, balance);
 }
 
 template <typename T, typename K>
@@ -574,7 +709,8 @@ template <typename T>
 static void
 clean(Node<T> *n) noexcept { // TODO move to impl
   assert(n);
-  delete n;
+  printf("delete node(%p)\n", n);
+  // delete n;
 }
 
 template <typename T, typename K>

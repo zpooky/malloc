@@ -84,6 +84,11 @@ template <typename T>
 bool
 balance(Tree<T> &) noexcept;
 
+//??
+template <typename T>
+bool
+reverse(Tree<T> &) noexcept;
+
 //===================================================
 namespace impl {
 namespace bst {
@@ -143,28 +148,21 @@ verify(Node<T> *parent, Node<T> *tree) noexcept {
 //     }
 //   };
 //
-//   Node<T> *const parent = from->parent;
 //   parent_child_link(from, to);
-//   assert(from->parent == parent);
 //
 //   if (to) {
 //     parent_child_link(#<{(|from|)}># to, #<{(|to|)}># nullptr);
-//     to->parent = parent;
+//     to->parent = from->parent;
+//
+//     to->left = from->left;
+//     if (to->left)
+//       to->left->parent = to;
+//
+//     to->right = from->right;
+//     if (to->right)
+//       to->right->parent = to;
 //   }
-//   from->parent = nullptr;
 // } // impl::bst::replace()
-
-template <typename T>
-static bool
-doubly_linked(Node<T> *n) noexcept {
-  if (n) {
-    bool l = n->left != nullptr ? n == n->left->parent : true;
-    bool r = n->right != nullptr ? n == n->right->parent : true;
-
-    return l && r;
-  }
-  return true;
-}
 
 template <typename T>
 Node<T> *
@@ -183,22 +181,18 @@ remove(Node<T> *current) noexcept {
     }
   };
 
-  assert(doubly_linked(current));
+  assert(sp::impl::tree::doubly_linked(current));
 
   if (current->left && current->right) {
     // two children
 
-    Node<T> *const parent = current->parent;
-    // Node<T> *const left = current->left;
-    // Node<T> *const right = current->right;
-
-    // replace current with the smallest right child
+    // Replace current with the smallest right child
     Node<T> *const successor = sp::impl::tree::find_min(current->right);
     {
       remove(successor);
 
       parent_child_link(current, successor);
-      successor->parent = parent;
+      successor->parent = current->parent;
       successor->left = current->left;
       successor->left->parent = successor;
 
@@ -207,7 +201,7 @@ remove(Node<T> *current) noexcept {
         successor->right->parent = successor;
       }
 
-      assert(doubly_linked(successor));
+      assert(sp::impl::tree::doubly_linked(successor));
     }
 
     current->parent = nullptr;
@@ -219,7 +213,7 @@ remove(Node<T> *current) noexcept {
     // zero children
 
     parent_child_link(current, (Node<T> *)nullptr);
-    assert(doubly_linked(current->parent)); // x
+    assert(sp::impl::tree::doubly_linked(current->parent)); // x
     current->parent = nullptr;
 
     return nullptr;
@@ -231,7 +225,7 @@ remove(Node<T> *current) noexcept {
     auto *const left = current->left;
     parent_child_link(current, left);
     left->parent = parent;
-    assert(doubly_linked(parent)); // x
+    assert(sp::impl::tree::doubly_linked(parent)); // x
 
     current->parent = nullptr;
     current->left = nullptr;
@@ -246,7 +240,7 @@ remove(Node<T> *current) noexcept {
   auto *const right = current->right;
   parent_child_link(current, right);
   right->parent = parent;
-  assert(doubly_linked(parent)); // x
+  assert(sp::impl::tree::doubly_linked(parent)); // x
 
   current->parent = nullptr;
   current->right = nullptr;

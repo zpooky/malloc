@@ -153,8 +153,9 @@ int
 main() {
   // sp::crc_test();
   // test_static_tree();
-  // test_avl();
-  test_tree<bst::Tree>();
+  test_avl();
+  // test_tree<bst::Tree>();
+  test_tree<avl::Tree>();
 
   return 0;
 }
@@ -471,8 +472,10 @@ test_avl() {
       auto res = avl::insert(tree, ins);
       assert(std::get<1>(res));
       assert(std::get<0>(res) != nullptr);
-      dump(tree);
-      avl::verify(tree);
+      if (!avl::verify(tree)) {
+        dump(tree);
+        assert(false);
+      }
       printf("\n--------------\n");
     }
   }
@@ -567,43 +570,77 @@ test_avl() {
       assert(root->left->right == nullptr);
     }
   }
-  /*test inc insert dec remove*/ {
-    avl::Tree<int> tree;
-    int i = 0;
-    for (; i < 10; ++i) {
-      printf(".%d <- \n", i);
-      auto res = avl::insert(tree, i);
-      assert(std::get<1>(res));
-      assert(std::get<0>(res) != nullptr);
-      dump(tree);
-      avl::verify(tree);
-      printf("\n--------------\n");
-    }
-    --i;
-    for (; i > 0; --i) {
-      printf(".%d -> \n", i);
-      auto res = avl::remove(tree, i);
-      printf("%d = av::remove(tree, %d)\n", res, i);
-      assert(res);
-      dump(tree);
-      avl::verify(tree);
-      printf("\n--------------\n");
+  // #<{(|test inc insert dec remove|)}># {
+  //   avl::Tree<int> tree;
+  //   int i = 0;
+  //   for (; i < 10; ++i) {
+  //     printf(".%d <- \n", i);
+  //     auto res = avl::insert(tree, i);
+  //     assert(std::get<1>(res));
+  //     assert(std::get<0>(res) != nullptr);
+  //     dump(tree);
+  //     avl::verify(tree);
+  //     printf("\n--------------\n");
+  //   }
+  //   --i;
+  //   for (; i > 0; --i) {
+  //     printf(".%d -> \n", i);
+  //     auto res = avl::remove(tree, i);
+  //     printf("%d = av::remove(tree, %d)\n", res, i);
+  //     assert(res);
+  //     dump(tree);
+  //     avl::verify(tree);
+  //     printf("\n--------------\n");
+  //   }
+  // }
+  {
+    for (int i = 5; i < 20; ++i) {
+      printf("##remove all[%d]\n", i);
+      avl::Tree<int> tree;
+      for (int d = 0; d <= i; ++d) {
+        auto res = avl::insert(tree, d);
+        /*assert*/ {
+          int *const iptr = std::get<0>(res);
+          assert(std::get<1>(res) == true);
+          assert(iptr);
+          assert(*iptr == d);
+          if (!avl::verify(tree)) {
+            avl::dump(tree, "\033[92minsert\033[0m|");
+            assert(false);
+          }
+        }
+      }
+      avl::dump(tree, "\033[92mbefore\033[0m|");
+
+      for (int d = 0; d <= i; ++d) {
+        auto res = avl::remove(tree, d);
+        /*assert*/ {
+          assert(res);
+          assert(sp::find(tree, d) == nullptr);
+          if (!avl::verify(tree)) {
+            avl::dump(tree, "\033[91mremove\033[0m|");
+            assert(false);
+          }
+        }
+      }
+      assert(tree.root == nullptr);
+      printf("------\n\n");
     }
   }
   /*test random*/ {
+    std::random_device rd;
+    std::mt19937 g(rd());
     std::size_t counter = 0;
-    while (true) {
-      if (counter % 10000 == 0) {
+    while (counter < 10) {
+      if (counter % 100 == 0) {
         printf("cnt: %zu\n", counter);
       }
       avl::Tree<int> tree;
-      constexpr int in_size = 10;
+      constexpr int in_size = 1000;
       int in[in_size];
       for (int i = 0; i < in_size; ++i) {
         in[i] = i;
       }
-      std::random_device rd;
-      std::mt19937 g(rd());
 
       std::shuffle(in, in + in_size, g);
       for (int i = 0; i < in_size; ++i) {
@@ -624,29 +661,12 @@ test_avl() {
         assert(fptr == iptr);
         assert(*fptr == *iptr);
 
-        // avl::dump(tree, "after|");
-        avl::verify(tree);
-      }
-
-      std::shuffle(in, in + in_size, g);
-      for (int i = 0; i < in_size; ++i) {
-        for (int k = 0; k < in_size; ++k) {
-          auto f = sp::find(tree, in[k]);
-          printf("%p = sp::find(tree, %d)\n", f, in[k]);
-          if (k < i) {
-            assert(f == nullptr);
-          } else {
-            assert(f);
-            assert(*f == in[k]);
-          }
-
-          bool rb = avl::remove(tree, in[i]);
-          printf("%d = avl::remove(tree,%d)\n", rb, in[i]);
-          assert(rb);
+        if (!avl::verify(tree)) {
           avl::dump(tree, "after|");
-          avl::verify(tree);
+          assert(false);
         }
       }
+
       counter++;
     }
     // TODO insert duplicate
@@ -654,6 +674,7 @@ test_avl() {
 
     printf("done\n");
   }
+  printf("==========\n");
 }
 
 template <class Tree_t, typename T, std::size_t in_size>
@@ -678,8 +699,11 @@ template <template <typename> class Tree_t>
 static void
 test_tree() {
   std::size_t counter = 0;
+  std::random_device rd;
+  std::mt19937 g(rd());
+
   while (true) {
-    if (counter % 10000 == 0) {
+    if (counter % 10 == 0) {
       printf("cnt: %zu\n", counter);
     }
     Tree_t<int> tree;
@@ -688,8 +712,6 @@ test_tree() {
     for (int i = 0; i < in_size; ++i) {
       in[i] = i;
     }
-    std::random_device rd;
-    std::mt19937 g(rd());
 
     std::shuffle(in, in + in_size, g);
     for (int i = 0; i < in_size; ++i) {
@@ -721,18 +743,19 @@ test_tree() {
     for (int i = 0; i < in_size; ++i) {
       find_stuff(tree, i, in);
 
-      // dump(tree, "before|");
+      dump(tree, "before|");
+      printf("--\n");
+      printf("remove(tree,%d)\n", in[i]);
       bool rb = remove(tree, in[i]);
-      // printf("%s = remove(tree,%d)\n", rb ? "true" : "false", in[i]);
+      printf(" = %s\n", rb ? "true" : "false");
       assert(rb);
       if (!verify(tree)) {
         printf("\n");
         dump(tree, "rem|");
         assert(false);
-      } 
-      // else {
-      //   dump(tree, "rem|");
-      // }
+      } else {
+        dump(tree, "rem|");
+      }
 
       find_stuff(tree, i + 1, in);
     }

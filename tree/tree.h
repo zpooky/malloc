@@ -120,6 +120,18 @@ namespace impl {
 namespace tree {
 
 template <typename T>
+static bool
+doubly_linked(T *n) noexcept {
+  if (n) {
+    bool l = n->left != nullptr ? n == n->left->parent : true;
+    bool r = n->right != nullptr ? n == n->right->parent : true;
+
+    return l && r;
+  }
+  return true;
+}
+
+template <typename T>
 void
 dump(T *tree, std::string prefix = "", bool isTail = true,
      const char *ctx = "") noexcept {
