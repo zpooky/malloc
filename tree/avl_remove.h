@@ -16,21 +16,22 @@ namespace rem {
 template <typename T, typename F>
 static Node<T> *
 retrace(Node<T> *it, F update_parent_balance) noexcept {
-  Node<T> *current = nullptr;
-Lstart:
-  if (it) {
-    current = it;
-    {
-      printf("---%s\n", std::string(*it).c_str());
-      dump_root(it, "retrace|");
-    }
-    // https://www.geeksforgeeks.org/avl-tree-set-2-deletion/
-
-    it = current->parent;
-    goto Lstart;
-  }
-  // TODO
-  return current;
+  return impl::avl::ins::retrace(it, update_parent_balance);
+  //   Node<T> *current = nullptr;
+  // Lstart:
+  //   if (it) {
+  //     current = it;
+  //     {
+  //       printf("---%s\n", std::string(*it).c_str());
+  //       dump_root(it, "retrace|");
+  //     }
+  //     // https://www.geeksforgeeks.org/avl-tree-set-2-deletion/
+  //
+  //     it = current->parent;
+  //     goto Lstart;
+  //   }
+  //   // TODO
+  //   return current;
 } // avl::impl::retrace()
 
 } // namespace rem
