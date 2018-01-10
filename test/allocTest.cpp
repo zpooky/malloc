@@ -1,6 +1,7 @@
-#include "Barrier.h"
-#include "Util.h"
 #include "gtest/gtest.h"
+
+#include <concurrent/Barrier.h>
+#include "Util.h"
 #include <LocalFreeList.h>
 #include <LocalFreeList_debug.h>
 #include <alloc.h>

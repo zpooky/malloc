@@ -7,7 +7,7 @@ HEADER_DIRS = -Iexternal -Iexternal/sputil/include
 override CXXFLAGS += $(HEADER_DIRS) -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow
 
 LDFLAGS =
-LDLIBS = -lpthread -lsputil -Lexternal/sputil/build
+LDLIBS = -lpthread -Lexternal/sputil/build -lsputil
 PREFIX = /usr/local
 BUILD = build
 

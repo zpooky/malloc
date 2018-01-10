@@ -33,7 +33,9 @@ alloc(local::PoolsRAII &pool, sp::node_size search) noexcept {
 Lstart:
   LocalFree *best = nullptr;
   LocalFree *const start = &pool.free_list;
+  assert(start);
   LocalFree *current = start;
+
 Lnext:
   if (current->size == search) {
     list::unlist(current);
@@ -57,7 +59,7 @@ Lnext:
     }
 
     if (merge_stack(pool)) {
-      // TODO make better
+      // XXX make better
       goto Lstart;
     }
   }

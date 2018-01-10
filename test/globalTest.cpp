@@ -1,6 +1,7 @@
-#include "Barrier.h"
-#include "Util.h"
 #include "gtest/gtest.h"
+
+#include <concurrent/Barrier.h>
+#include "Util.h"
 #include <global.h>
 #include <global_debug.h>
 #include <pthread.h>

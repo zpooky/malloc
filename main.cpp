@@ -1,10 +1,7 @@
 #include <algorithm>
 #include <random>
-// #include "dyn_tree.h"
 #include "global.h"
 #include "global_debug.h"
-#include "tree/bst.h"
-#include "tree/static_tree.h"
 
 #include <algorithm>
 #include <cassert>

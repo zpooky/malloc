@@ -1,7 +1,8 @@
-#include "Barrier.h"
+#include "gtest/gtest.h"
+
+#include <concurrent/Barrier.h>
 #include "Util.h"
 #include "shared.h"
-#include "gtest/gtest.h"
 #include <global_debug.h>
 #include <initializer_list>
 #include <malloc.h>

@@ -2,7 +2,7 @@
 #define SP_MALLOC_TEST_UTIL_H
 
 #include "gtest/gtest.h"
-#include <ReadWriteLock.h>
+#include <concurrent/ReadWriteLock.h>
 #include <cassert>
 #include <chrono>
 #include <cstddef>
@@ -82,7 +82,7 @@ enqueue(MemStack<Stack> &s, void *data, std::size_t length) {
 }
 
 template <typename Stack>
-util::maybe<std::tuple<void *, std::size_t>>
+sp::maybe<std::tuple<void *, std::size_t>>
 dequeue(MemStack<Stack> &s) {
   sp::EagerExclusiveLock guard(s.lock);
   if (guard) {
@@ -91,7 +91,7 @@ dequeue(MemStack<Stack> &s) {
       s.head = head->next;
 
       std::tuple<void *, std::size_t> r(head, head->get_length());
-      return util::maybe<std::tuple<void *, std::size_t>>(r);
+      return sp::maybe<std::tuple<void *, std::size_t>>(r);
     }
   }
   return {};
