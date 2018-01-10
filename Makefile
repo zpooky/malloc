@@ -2,12 +2,12 @@
 #http://www.puxan.com/web/howto-write-generic-makefiles/
 # Declaration of variables
 CXX = g++
-HEADER_DIRS = -Iexternal
+HEADER_DIRS = -Iexternal -Iexternal/sputil/include
 # ovrrides makes it possible to externaly append extra flags
 override CXXFLAGS += $(HEADER_DIRS) -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow
 
 LDFLAGS =
-LDLIBS = -lpthread
+LDLIBS = -lpthread -lsputil -Lexternal/sputil/build
 PREFIX = /usr/local
 BUILD = build
 
@@ -19,7 +19,7 @@ OBJECTS = $(patsubst %.cpp, $(BUILD)/%.o, $(SOURCES))
 DEPENDS = $(OBJECTS:.o=.d)
 
 # PHONY targets is not file backed targets
-.PHONY: test all clean install uninstall bear
+.PHONY: test all clean install uninstall bear libraries
 
 # all {{{
 # The "all" target. runs by default since it the first target
@@ -28,7 +28,7 @@ all: ${EXEC}
 
 # $(EXEC) {{{
 # depends on the targets for all the object files
-$(EXEC): $(OBJECTS)
+$(EXEC): $(OBJECTS) libraries
 	$(CXX) $(OBJECTS) -o $(EXEC) $(LDLIBS)
 # }}}
 
@@ -48,6 +48,7 @@ clean:
 	rm -f $(DEPENDS)
 	rm -f $(EXEC) $(BUILD)/$(LIB).a $(BUILD)/$(LIB).so
 	$(MAKE) -C test clean
+	$(MAKE) -C external/sputil clean
 # }}}
 
 # test {{{
@@ -62,6 +63,9 @@ staticlib: $(OBJECTS)
 # 's' means to write an index
 	$(AR) rcs $(BUILD)/$(LIB).a $(OBJECTS)
 # }}}
+
+libraries:
+	$(MAKE) -C external/sputil staticlib
 
 # bear {{{
 # Creates compilation_database.json

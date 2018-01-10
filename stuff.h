@@ -10,13 +10,13 @@ namespace global {
 shared::FreeCode
 free(global::State &, local::Pools &tl, void *) noexcept;
 
-util::maybe<sp::bucket_size>
+sp::maybe<sp::bucket_size>
 usable_size(void *) noexcept;
 
-util::maybe<void *>
+sp::maybe<void *>
 realloc(global::State &, local::PoolsRAII &, void *, std::size_t) noexcept;
 
-util::maybe<void *>
+sp::maybe<void *>
 realloc(global::State &, local::Pools &, void *, std::size_t) noexcept;
 
 local::PoolsRAII *

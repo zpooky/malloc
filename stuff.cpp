@@ -194,7 +194,7 @@ free(global::State &global, local::Pools &tl, void *const ptr) noexcept {
   return FreeCode::NOT_FOUND;
 } // global::free()
 
-util::maybe<sp::bucket_size>
+sp::maybe<sp::bucket_size>
 usable_size(void *const ptr) noexcept {
   sp::SharedLock shared_guard{internal_a.lock};
   if (shared_guard) {
@@ -212,7 +212,7 @@ usable_size(void *const ptr) noexcept {
   return {};
 } // global::usuable_size()
 
-util::maybe<void *>
+sp::maybe<void *>
 realloc(global::State &global, local::PoolsRAII &tl, void *const ptr,
         std::size_t length) noexcept {
   sp::SharedLock shared_guard{internal_a.lock};
@@ -239,7 +239,7 @@ realloc(global::State &global, local::PoolsRAII &tl, void *const ptr,
   return {};
 } // global::realloc()
 
-util::maybe<void *>
+sp::maybe<void *>
 realloc(global::State &global, local::Pools &tl, void *const ptr,
         std::size_t length) noexcept {
   assert(tl.pools);

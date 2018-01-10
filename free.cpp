@@ -24,7 +24,7 @@ node_in_range(const header::Node *const node, void *const ptr) noexcept {
 } // ::node_in_range()
 
 template <typename Res, typename Arg>
-static util::maybe<Res>
+static sp::maybe<Res>
 node_for(local::Pool &pool, void *search, NodeFor<Res, Arg> f,
          Arg &a) noexcept {
   sp::SharedLock guard(pool.lock);
@@ -33,7 +33,7 @@ node_for(local::Pool &pool, void *search, NodeFor<Res, Arg> f,
   start:
     if (current) {
       if (node_in_range(current, search)) {
-        return util::maybe<Res>(f(current, a));
+        return sp::maybe<Res>(f(current, a));
       }
       current = current->next.load(std::memory_order_acquire);
       goto start;
@@ -42,7 +42,7 @@ node_for(local::Pool &pool, void *search, NodeFor<Res, Arg> f,
   return {};
 } // ::node_for()
 
-static util::maybe<std::size_t>
+static sp::maybe<std::size_t>
 node_index_of(header::Node *const node, void *const ptr) noexcept {
   const sp::node_size data_size = header::node_data_size(node);
   const std::uintptr_t data_start = header::node_data_start(node);
@@ -57,7 +57,7 @@ node_index_of(header::Node *const node, void *const ptr) noexcept {
     while (it < data_end) {
       if (it == search) {
         // TODO assert index < int32_t::max
-        return util::maybe<std::size_t>(index);
+        return sp::maybe<std::size_t>(index);
       }
       ++index;
       it += std::size_t(node->bucket_size);
@@ -82,7 +82,7 @@ template <typename Res, typename Arg>
 using ExtFor = Res (*)(header::Node *, sp::index, Arg &);
 
 template <typename Res, typename Arg>
-static util::maybe<Res>
+static sp::maybe<Res>
 extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
            Arg &arg) noexcept {
   sp::SharedLock guard(pool.lock);
@@ -103,7 +103,7 @@ extent_for(local::Pool &pool, void *const search, ExtFor<Res, Arg> f,
         index = index + nodeIdx.get();
         assert(index < header::Extent::max_buckets);
 
-        return util::maybe<Res>(f(extent, index, arg));
+        return sp::maybe<Res>(f(extent, index, arg));
       }
       index = index + node_buckets(current);
 
@@ -308,13 +308,13 @@ free(shared::State &state, void *const ptr) noexcept {
   header::Node *recycledExtent = nullptr;
 
   auto logic = [](local::Pool &p, void *search,
-                  header::Node *&recycled) -> util::maybe<FreeCode> {
+                  header::Node *&recycled) -> sp::maybe<FreeCode> {
     auto result = free_logic(p, search, recycled);
     if (result == FreeCode::NOT_FOUND) {
       return {};
     }
 
-    return util::maybe<FreeCode>(result);
+    return sp::maybe<FreeCode>(result);
   };
   auto res = local::pools_find<FreeCode, header::Node *>(state.pool, ptr, logic,
                                                          recycledExtent);
@@ -327,7 +327,7 @@ free(shared::State &state, void *const ptr) noexcept {
   return free_reclaim(state, result, recycledExtent);
 } // shared::free()
 
-util::maybe<sp::bucket_size>
+sp::maybe<sp::bucket_size>
 usable_size(local::PoolsRAII &pools, void *const ptr) noexcept {
   using Arg = std::nullptr_t;
   Arg arg = nullptr;
@@ -335,7 +335,7 @@ usable_size(local::PoolsRAII &pools, void *const ptr) noexcept {
   auto res = local::pools_find<sp::bucket_size, Arg>(
       pools, ptr, //
       [](local::Pool &pool, void *search,
-         Arg &a) -> util::maybe<sp::bucket_size> { //
+         Arg &a) -> sp::maybe<sp::bucket_size> { //
         return node_for<sp::bucket_size, Arg>(
             pool, search, //
             [](header::Node *current, Arg &) -> sp::bucket_size {
@@ -347,13 +347,13 @@ usable_size(local::PoolsRAII &pools, void *const ptr) noexcept {
   return res;
 } // shared::usable_size()
 
-util::maybe<sp::bucket_size>
+sp::maybe<sp::bucket_size>
 usable_size(local::Pools &pools, void *const ptr) noexcept {
   assert(pools.pools);
   return usable_size(*pools.pools, ptr);
 } // shared::usable_size()
 
-util::maybe<void *>
+sp::maybe<void *>
 realloc(shared::State &state, void *ptr, std::size_t length,
         /*OUT*/ FreeCode &code) noexcept {
   auto maybeMemSz = usable_size(state.pool, ptr);
@@ -372,7 +372,7 @@ realloc(shared::State &state, void *ptr, std::size_t length,
 
       ptr = nptr;
     }
-    return util::maybe<void *>(ptr);
+    return sp::maybe<void *>(ptr);
   }
 
   code = FreeCode::NOT_FOUND;

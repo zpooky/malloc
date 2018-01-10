@@ -23,9 +23,9 @@ free(shared::State &, void *) noexcept;
  * @param[in] ptr     The pointer to find its size
  * @return            Maybe the size of the bucket referred to by @ptr
  */
-util::maybe<sp::bucket_size>
+sp::maybe<sp::bucket_size>
 usable_size(local::PoolsRAII &, void *) noexcept;
-util::maybe<sp::bucket_size>
+sp::maybe<sp::bucket_size>
 usable_size(local::Pools &, void *) noexcept;
 
 /*
@@ -44,7 +44,7 @@ usable_size(local::Pools &, void *) noexcept;
  * @param[out]code    The state of the free operation
  * @return            Maybe a pointer to a memory location if sufficient size
  */
-util::maybe<void *>
+sp::maybe<void *>
 realloc(shared::State &, void *, std::size_t,
         /*OUT*/ shared::FreeCode &) noexcept;
 } // namespace shared

@@ -1,7 +1,9 @@
 #ifndef SP_MALLOC_SHARED_H
 #define SP_MALLOC_SHARED_H
 
-#include "ReadWriteLock.h"
+#include <concurrent/ReadWriteLock.h>
+#include <util/typed.h>
+#include <util/maybe.h>
 #include "util.h"
 #include <atomic>
 #include <bitset/Bitset.h>
@@ -274,10 +276,10 @@ public:
 }; // struct Pool
 
 template <typename Res, typename Arg>
-using PFind = util::maybe<Res> (*)(Pool &, void *, Arg &);
+using PFind = sp::maybe<Res> (*)(Pool &, void *, Arg &);
 
 template <typename Res, typename Arg>
-util::maybe<Res>
+sp::maybe<Res>
 pools_find(PoolsRAII &pools, void *const search, PFind<Res, Arg> f,
            Arg &arg) noexcept {
   std::uintptr_t rawSearch = reinterpret_cast<std::uintptr_t>(search);
@@ -303,7 +305,7 @@ pools_find(PoolsRAII &pools, void *const search, PFind<Res, Arg> f,
 } // local::pools_find()
 
 template <typename Res, typename Arg>
-util::maybe<Res>
+sp::maybe<Res>
 pools_find(Pools &pools, void *search, PFind<Res, Arg> f, Arg &arg) noexcept {
   return pools_find<Res, Arg>(*pools.pools, search, f, arg);
 }
