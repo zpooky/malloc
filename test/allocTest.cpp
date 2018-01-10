@@ -11,6 +11,7 @@
 #include <global_debug.h>
 #include <shared.h>
 #include <string>
+#include <functional>
 
 using header::LocalFree;
 
