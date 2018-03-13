@@ -68,8 +68,11 @@ libraries:
 	$(MAKE) -C external/sputil staticlib
 
 # bear {{{
-# Creates compilation_database.json
+# Creates compilation database
 bear: clean
 	bear make
+	compdb list > tmp_compile_commands.json
+	mv tmp_compile_commands.json compile_commands.json
+	make clean
 # }}}
 

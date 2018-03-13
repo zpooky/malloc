@@ -1,47 +1,217 @@
 [
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/global.o global.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/global.cpp"
-    },
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/ReadWriteLock.o ReadWriteLock.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/ReadWriteLock.cpp"
-    },
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/alloc.o alloc.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/alloc.cpp"
-    },
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/stuff.o stuff.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/stuff.cpp"
-    },
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/shared.o shared.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/shared.cpp"
-    },
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/free.o free.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/free.cpp"
-    },
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/main.o main.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/main.cpp"
-    },
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/malloc.o malloc.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/malloc.cpp"
-    },
-    {
-        "command": "c++ -c -Iexternal -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/util.o util.cpp",
-        "directory": "/home/spooky/development/repos/malloc",
-        "file": "/home/spooky/development/repos/malloc/util.cpp"
-    }
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/global.o global.cpp",
+  "file": "global.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -c -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -o build/main.o src/main.cpp",
+  "file": "src/main.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/stuff.o stuff.cpp",
+  "file": "stuff.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -c -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -o build/concurrent/Barrier.o src/concurrent/Barrier.cpp",
+  "file": "src/concurrent/Barrier.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -c -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -o build/concurrent/ReadWriteLock.o src/concurrent/ReadWriteLock.cpp",
+  "file": "src/concurrent/ReadWriteLock.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/shared.o shared.cpp",
+  "file": "shared.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/LocalFreeList.o LocalFreeList.cpp",
+  "file": "LocalFreeList.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/util.o util.cpp",
+  "file": "util.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/malloc.o malloc.cpp",
+  "file": "malloc.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/alloc.o alloc.cpp",
+  "file": "alloc.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/free.o free.cpp",
+  "file": "free.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -c -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -o build/hash/crc.o src/hash/crc.cpp",
+  "file": "src/hash/crc.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -c -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -o build/main.o main.cpp",
+  "file": "main.cpp"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c malloc.h",
+  "file": "malloc.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -c src/tree/static_tree.h",
+  "file": "src/tree/static_tree.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c external/sputil/include/util/maybe.h",
+  "file": "external/sputil/include/util/maybe.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c external/sputil/include/concurrent/ReadWriteLock.h",
+  "file": "external/sputil/include/concurrent/ReadWriteLock.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c global_debug.h",
+  "file": "global_debug.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c LocalFreeList.h",
+  "file": "LocalFreeList.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c alloc_debug.h",
+  "file": "alloc_debug.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c external/bitset/Bitset.h",
+  "file": "external/bitset/Bitset.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c util.h",
+  "file": "util.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -c src/concurrent/Barrier.h",
+  "file": "src/concurrent/Barrier.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c LocalFreeList_debug.h",
+  "file": "LocalFreeList_debug.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -c src/tree/tree.h",
+  "file": "src/tree/tree.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c free.h",
+  "file": "free.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -c src/concurrent/ReadWriteLock.h",
+  "file": "src/concurrent/ReadWriteLock.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -c src/tree/bst.h",
+  "file": "src/tree/bst.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c external/sputil/include/util/typed.h",
+  "file": "external/sputil/include/util/typed.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c stuff.h",
+  "file": "stuff.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c global.h",
+  "file": "global.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c shared.h",
+  "file": "shared.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc/external/sputil",
+  "command": "c++ -Iinclude -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -Wconversion -Wshadow -c src/hash/crc.h",
+  "file": "src/hash/crc.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c malloc_debug.h",
+  "file": "malloc_debug.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c alloc.h",
+  "file": "alloc.h"
+},
+
+{
+  "directory": "/home/spooky/development/repos/malloc",
+  "command": "c++ -Iexternal -Iexternal/sputil/include -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow -c stuff_debug.h",
+  "file": "stuff_debug.h"
+}
 ]
