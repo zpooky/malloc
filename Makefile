@@ -7,7 +7,7 @@ HEADER_DIRS = -Iexternal -Iexternal/sputil/include
 override CXXFLAGS += $(HEADER_DIRS) -enable-frame-pointers -std=c++14 -Wall -Wextra -Wpedantic -Wpointer-arith -ggdb -fno-strict-aliasing -Wconversion -Wshadow
 
 LDFLAGS =
-LDLIBS = -lpthread -Lexternal/sputil/build -lsputil
+LDLIBS = -lpthread -Lexternal/sputil/build/malloc -lsputil
 PREFIX = /usr/local
 BUILD = build
 
@@ -24,6 +24,7 @@ DEPENDS = $(OBJECTS:.o=.d)
 # all {{{
 # The "all" target. runs by default since it the first target
 all: ${EXEC}
+	$(AR) rcs $(BUILD)/$(LIB).a $(OBJECTS)
 # }}}
 
 # $(EXEC) {{{
@@ -56,16 +57,8 @@ test:
 	$(MAKE) -C test test
 # }}}
 
-# staticlib {{{
-staticlib: $(OBJECTS)
-# 'r' means to insert with replacement
-# 'c' means to create a new archive
-# 's' means to write an index
-	$(AR) rcs $(BUILD)/$(LIB).a $(OBJECTS)
-# }}}
-
 libraries:
-	$(MAKE) -C external/sputil staticlib
+	$(MAKE) -C external/sputil BUILD_DIR=build/malloc
 
 # bear {{{
 # Creates compilation database

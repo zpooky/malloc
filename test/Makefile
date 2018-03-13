@@ -5,7 +5,7 @@ PROJECT_ROOT = ..
 SUT_DIR = build_test
 GTEST_ROOT = $(PROJECT_ROOT)/external/googletest/googletest
 HEADER_DIRS = -I$(GTEST_ROOT)/include -I$(PROJECT_ROOT) -I$(PROJECT_ROOT)/external -I$(PROJECT_ROOT)/external/sputil/include
-LDLIBS = -L$(GTEST_ROOT)/make -lgtest_main -lpthread -L$(PROJECT_ROOT)/$(SUT_DIR) -lsut -L$(PROJECT_ROOT)/external/sputil/build -lsputil
+LDLIBS = -L$(GTEST_ROOT)/make -lgtest_main -lpthread -L$(PROJECT_ROOT)/$(SUT_DIR) -lsut -L$(PROJECT_ROOT)/external/sputil/build/malloc -lsputil
 override CXXFLAGS += $(HEADER_DIRS) -enable-frame-pointers -std=gnu++14 -Wall -Wextra -ggdb -fno-strict-aliasing -Wpointer-arith -DSP_TEST
 BUILD = build
 
@@ -56,7 +56,7 @@ sut:
 # Build sut binaries and put result in $(SUT_DIR) directory to differentiate the build for test binaries with regular binaries.
 # Define the SP_TEST preprocessor macro
 # The resulting static library will be called libsut
-	$(MAKE) BUILD=$(SUT_DIR) LIB=libsut CXXFLAGS+=-DSP_TEST -C $(PROJECT_ROOT) staticlib
+	$(MAKE) BUILD=$(SUT_DIR) LIB=libsut CXXFLAGS+=-DSP_TEST -C $(PROJECT_ROOT)
 # }}}
 
 # test {{{
